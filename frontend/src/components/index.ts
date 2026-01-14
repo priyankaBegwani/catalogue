@@ -1,0 +1,11 @@
+// Component exports for cleaner imports
+export { Sidebar } from './Sidebar';
+export { TopBar } from './TopBar';
+export { Navbar } from './Navbar';
+export { AddDesignModal } from './AddDesignModal';
+export { ViewDesignModal } from './ViewDesignModal';
+export { CartModal } from './CartModal';
+export { CheckoutModal } from './CheckoutModal';
+export { default as OrderDetails } from './OrderDetails';
+export { Wishlist } from './Wishlist';
+export { TawkToChat } from './TawkToChat';

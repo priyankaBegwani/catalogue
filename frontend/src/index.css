@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent cursor on non-editable elements */
+* {
+  caret-color: auto;
+}
+
+div:not([contenteditable="true"]),
+span:not([contenteditable="true"]),
+p:not([contenteditable="true"]) {
+  caret-color: transparent;
+}
+
+/* Ensure cursor shows on actual input elements */
+input,
+textarea,
+[contenteditable="true"] {
+  caret-color: auto;
+}
+
+/* React Grid Layout Custom Styles */
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.react-grid-item > div {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  caret-color: transparent;
+  overflow: hidden;
+}
+.react-grid-item > div .widget-header {
+  flex: none;
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+}
+
+.react-grid-item * {
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+.react-grid-item.cssTransforms {
+  transition-property: transform, width, height;
+}
+
+.react-grid-item.resizing {
+  transition: none;
+  z-index: 100;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 100;
+}
+
+/* Ensure widget content areas scroll properly */
+.widget-content {
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Custom scrollbar for widget content */
+.widget-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.widget-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.widget-content::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
+
+.widget-content::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

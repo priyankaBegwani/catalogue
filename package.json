@@ -1,0 +1,15 @@
+{
+  "name": "ethnic-wear-platform",
+  "version": "1.0.0",
+  "description": "Ethnic Wear E-commerce Platform",
+  "scripts": {
+    "dev": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "preview": "npm run preview --prefix frontend",
+    "backend": "npm run dev --prefix backend",
+    "install:all": "npm install --prefix frontend && npm install --prefix backend"
+  },
+  "dependencies": {
+    "vite": "^7.1.9"
+  }
+}

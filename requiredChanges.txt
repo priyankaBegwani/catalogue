@@ -1,0 +1,15 @@
+errors while testing
+* while editing design, selected style is not populating.
+* while editing design, photos are not populating.
+* improve design list page design view.
+
+
+
+*category list 
+*style list e.g a-line, pathani for kurta category
+*fabric type list
+*
+
+
+
+
