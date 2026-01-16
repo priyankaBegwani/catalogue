@@ -1,18 +1,187 @@
 import { useState, useEffect, useRef } from 'react';
 import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile } from '../lib/api';
-import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, Download, MessageCircle, CheckSquare, Square } from 'lucide-react';
+import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, Phone, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+
+export type DesignTag = 'new-arrival' | 'trending' | 'best-seller' | 'fast-repeat' | 'ready-to-ship' | 'low-stock';
 
 interface FilterState {
   categories: string[];
   priceRange: { min: number; max: number };
   colors: string[];
   designNo: string;
-  stockStatus: 'all' | 'in_stock' | 'out_of_stock';
   sortBy: 'name' | 'price_low' | 'price_high' | 'newest';
+  tags: DesignTag[];
 }
+
+// Utility function to calculate design tags
+function getDesignTags(design: Design): DesignTag[] {
+  const tags: DesignTag[] = [];
+  const now = new Date();
+  const createdDate = new Date(design.created_at);
+  const daysSinceCreated = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  // New Arrival: Created within last 30 days
+  if (daysSinceCreated <= 30) {
+    tags.push('new-arrival');
+  }
+
+  // Best Seller: High order count (>= 20 orders)
+  if (design.order_count && design.order_count >= 20) {
+    tags.push('best-seller');
+  }
+
+  // Trending: Recent orders and good order count (>= 10 orders in last 60 days)
+  if (design.order_count && design.order_count >= 10 && design.last_ordered_at) {
+    const lastOrderDate = new Date(design.last_ordered_at);
+    const daysSinceLastOrder = Math.floor((now.getTime() - lastOrderDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceLastOrder <= 60) {
+      tags.push('trending');
+    }
+  }
+
+  // Fast Repeat: Frequently reordered (>= 15 orders)
+  if (design.order_count && design.order_count >= 15) {
+    tags.push('fast-repeat');
+  }
+
+  // Ready to Ship: Marked as ready to ship or high stock
+  if (design.is_ready_to_ship) {
+    tags.push('ready-to-ship');
+  } else if (design.design_colors) {
+    const totalStock = design.design_colors.reduce((sum, color) => {
+      if (typeof color.size_quantities === 'object' && color.size_quantities) {
+        return sum + Object.values(color.size_quantities).reduce((s: number, qty: any) => s + (Number(qty) || 0), 0);
+      }
+      return sum + (color.stock_quantity || 0);
+    }, 0);
+    
+    if (totalStock >= 100) {
+      tags.push('ready-to-ship');
+    }
+    
+    // Low Stock: Total stock < 20
+    if (totalStock > 0 && totalStock < 20) {
+      tags.push('low-stock');
+    }
+  }
+
+  return tags;
+}
+
+// Tag configuration with colors and icons
+const tagConfig: Record<DesignTag, { label: string; color: string; bgColor: string; icon: any }> = {
+  'new-arrival': { 
+    label: 'New Arrival', 
+    color: 'text-blue-700', 
+    bgColor: 'bg-blue-100 border-blue-300',
+    icon: Sparkles
+  },
+  'trending': { 
+    label: 'Trending', 
+    color: 'text-purple-700', 
+    bgColor: 'bg-purple-100 border-purple-300',
+    icon: TrendingUp
+  },
+  'best-seller': { 
+    label: 'Best Seller', 
+    color: 'text-amber-700', 
+    bgColor: 'bg-amber-100 border-amber-300',
+    icon: Award
+  },
+  'fast-repeat': { 
+    label: 'Fast Repeat', 
+    color: 'text-green-700', 
+    bgColor: 'bg-green-100 border-green-300',
+    icon: Zap
+  },
+  'ready-to-ship': { 
+    label: 'Ready to Ship', 
+    color: 'text-teal-700', 
+    bgColor: 'bg-teal-100 border-teal-300',
+    icon: Truck
+  },
+  'low-stock': { 
+    label: 'Low Stock', 
+    color: 'text-red-700', 
+    bgColor: 'bg-red-100 border-red-300',
+    icon: Package
+  }
+};
+
+// Highlight tag presets - maps to existing filter logic
+interface HighlightTag {
+  id: string;
+  label: string;
+  icon: any;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  filterPreset: Partial<FilterState>;
+}
+
+const highlightTags: HighlightTag[] = [
+  {
+    id: 'new-arrivals',
+    label: 'New Arrivals',
+    icon: Sparkles,
+    color: 'text-blue-700',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-200',
+    filterPreset: {
+      tags: ['new-arrival'],
+      sortBy: 'newest'
+    }
+  },
+  {
+    id: 'best-sellers',
+    label: 'Best Sellers',
+    icon: Award,
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-50',
+    borderColor: 'border-amber-200',
+    filterPreset: {
+      tags: ['best-seller'],
+      sortBy: 'newest'
+    }
+  },
+  {
+    id: 'trending',
+    label: 'Trending Now',
+    icon: TrendingUp,
+    color: 'text-purple-700',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-200',
+    filterPreset: {
+      tags: ['trending'],
+      sortBy: 'newest'
+    }
+  },
+  {
+    id: 'ready-stock',
+    label: 'Ready to Ship',
+    icon: Truck,
+    color: 'text-teal-700',
+    bgColor: 'bg-teal-50',
+    borderColor: 'border-teal-200',
+    filterPreset: {
+      tags: ['ready-to-ship'],
+      sortBy: 'newest'
+    }
+  },
+  {
+    id: 'popular',
+    label: 'Popular Picks',
+    icon: Zap,
+    color: 'text-emerald-700',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-200',
+    filterPreset: {
+      tags: ['fast-repeat'],
+      sortBy: 'newest'
+    }
+  }
+];
 
 export function Catalogue() {
   const [designs, setDesigns] = useState<Design[]>([]);
@@ -26,17 +195,20 @@ export function Catalogue() {
   const [error, setError] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [availableColors, setAvailableColors] = useState<string[]>([]);
-  const [generatingPDF, setGeneratingPDF] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     categories: [],
     priceRange: { min: 0, max: 100000 },
     colors: [],
     designNo: '',
-    stockStatus: 'all',
-    sortBy: 'newest'
+    sortBy: 'newest',
+    tags: []
   });
   const [selectedDesigns, setSelectedDesigns] = useState<Set<string>>(new Set());
   const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareUserMessage, setShareUserMessage] = useState('');
+  const [shareType, setShareType] = useState<'catalogue' | 'design' | null>(null);
+  const [pendingShareDesign, setPendingShareDesign] = useState<Design | null>(null);
 
   useEffect(() => {
     loadCategories();
@@ -149,11 +321,11 @@ export function Catalogue() {
       );
     }
 
-    // Filter by stock status
-    if (filters.stockStatus !== 'all') {
+    // Filter by tags
+    if (filters.tags.length > 0) {
       filtered = filtered.filter(d => {
-        const stock = getTotalStock(d);
-        return filters.stockStatus === 'in_stock' ? stock > 0 : stock === 0;
+        const designTags = getDesignTags(d);
+        return filters.tags.some(tag => designTags.includes(tag));
       });
     }
 
@@ -194,22 +366,52 @@ export function Catalogue() {
     }));
   };
 
+  const toggleTagFilter = (tag: DesignTag) => {
+    setFilters(prev => ({
+      ...prev,
+      tags: prev.tags.includes(tag)
+        ? prev.tags.filter(t => t !== tag)
+        : [...prev.tags, tag]
+    }));
+  };
+
   const clearFilters = () => {
     setFilters({
       categories: [],
       priceRange: { min: 0, max: 100000 },
       colors: [],
       designNo: '',
-      stockStatus: 'all',
-      sortBy: 'newest'
+      sortBy: 'newest',
+      tags: []
     });
+  };
+
+  // Toggle highlight tag preset - allows multiple selection
+  const toggleHighlightPreset = (highlightTag: HighlightTag) => {
+    const presetTags = highlightTag.filterPreset.tags || [];
+    const isCurrentlyActive = presetTags.some(tag => filters.tags.includes(tag));
+    
+    if (isCurrentlyActive) {
+      // Remove the preset tags
+      setFilters(prev => ({
+        ...prev,
+        tags: prev.tags.filter(tag => !presetTags.includes(tag))
+      }));
+    } else {
+      // Add the preset tags
+      setFilters(prev => ({
+        ...prev,
+        tags: [...prev.tags, ...presetTags],
+        sortBy: highlightTag.filterPreset.sortBy || prev.sortBy
+      }));
+    }
   };
 
   const activeFilterCount = 
     filters.categories.length + 
     filters.colors.length + 
-    (filters.designNo ? 1 : 0) + 
-    (filters.stockStatus !== 'all' ? 1 : 0) +
+    filters.tags.length + 
+    (filters.designNo ? 1 : 0) +
     (filters.priceRange.min > 0 || filters.priceRange.max < 100000 ? 1 : 0);
 
   const toggleDesignSelection = (designId: string) => {
@@ -227,6 +429,228 @@ export function Catalogue() {
   const selectAllDesigns = () => {
     const allIds = filteredDesigns.map(d => d.id);
     setSelectedDesigns(new Set(allIds));
+  };
+
+  // Generate shareable URL with current filter parameters
+  const generateShareableUrl = () => {
+    const params = new URLSearchParams();
+    
+    if (filters.categories.length > 0) {
+      params.set('categories', filters.categories.join(','));
+    }
+    if (filters.colors.length > 0) {
+      params.set('colors', filters.colors.join(','));
+    }
+    if (filters.tags.length > 0) {
+      params.set('tags', filters.tags.join(','));
+    }
+    if (filters.priceRange.min > 0) {
+      params.set('minPrice', filters.priceRange.min.toString());
+    }
+    if (filters.priceRange.max < 100000) {
+      params.set('maxPrice', filters.priceRange.max.toString());
+    }
+    if (filters.designNo) {
+      params.set('designNo', filters.designNo);
+    }
+    if (filters.sortBy !== 'newest') {
+      params.set('sortBy', filters.sortBy);
+    }
+    
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    return params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+  };
+
+  // Generate filter summary for WhatsApp message (excluding internal data)
+  const generateFilterSummary = () => {
+    const summary: string[] = [];
+    
+    // Categories
+    if (filters.categories.length > 0) {
+      const categoryNames = categories
+        .filter(c => filters.categories.includes(c.id))
+        .map(c => c.name)
+        .join(', ');
+      if (categoryNames) {
+        summary.push(`📁 *Categories:* ${categoryNames}`);
+      }
+    }
+    
+    // Fabric Types
+    if (selectedFabricType) {
+      const fabric = fabricTypes.find(f => f.id === selectedFabricType);
+      if (fabric) {
+        summary.push(`🧵 *Fabric:* ${fabric.name}`);
+      }
+    }
+    
+    // Price Range
+    if (filters.priceRange.min > 0 || filters.priceRange.max < 100000) {
+      summary.push(`💰 *Price Range:* ₹${filters.priceRange.min.toLocaleString()} - ₹${filters.priceRange.max.toLocaleString()}`);
+    }
+    
+    // Colors
+    if (filters.colors.length > 0) {
+      summary.push(`🎨 *Colors:* ${filters.colors.join(', ')}`);
+    }
+    
+    // Tags
+    if (filters.tags.length > 0) {
+      const tagLabels = filters.tags.map(tag => {
+        const config = tagConfig[tag];
+        return config ? config.label : tag;
+      }).join(', ');
+      summary.push(`✨ *Collections:* ${tagLabels}`);
+    }
+    
+    // Design Number Search
+    if (filters.designNo) {
+      summary.push(`🔍 *Design Search:* ${filters.designNo}`);
+    }
+    
+    return summary;
+  };
+
+  // Open share dialog for filtered catalogue
+  const shareFilteredCatalogue = () => {
+    setShareType('catalogue');
+    setShareUserMessage('');
+    setShowShareDialog(true);
+  };
+
+  // Execute catalogue share with optional user message
+  const executeFilteredCatalogueShare = () => {
+    const shareableUrl = generateShareableUrl();
+    const filterSummary = generateFilterSummary();
+    
+    let message = `🛍️ *Curated Catalogue Selection*\n\n`;
+    
+    if (filterSummary.length > 0) {
+      message += `*Filter Criteria:*\n${filterSummary.join('\n')}\n\n`;
+    }
+    
+    message += `📊 *Results:* ${filteredDesigns.length} design${filteredDesigns.length !== 1 ? 's' : ''} found\n\n`;
+    message += `🔗 *View Filtered Catalogue:*\n${shareableUrl}\n\n`;
+    
+    // Add user's optional message/query
+    if (shareUserMessage.trim()) {
+      message += `💬 *Message:*\n${shareUserMessage.trim()}\n\n`;
+    }
+    
+    message += `📱 *Contact us for inquiries and orders!*`;
+    
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+    
+    // Close dialog and reset
+    setShowShareDialog(false);
+    setShareUserMessage('');
+    setShareType(null);
+  };
+
+  // Execute design share with optional user message
+  const executeDesignShare = async () => {
+    if (!pendingShareDesign) return;
+    
+    const design = pendingShareDesign;
+    const selectedColor = design.design_colors?.[0];
+    const colorCount = design.design_colors?.length || 0;
+    const selectedColorImages = selectedColor?.image_urls || [];
+    
+    try {
+      const productLink = `${window.location.origin}/catalogue?design=${design.id}`;
+      
+      let message = `✨ *${design.name}*\n\n`;
+      message += `📋 *Design Code:* ${design.design_no}\n`;
+      
+      if (design.fabric_type) {
+        message += `🧵 *Fabric:* ${design.fabric_type.name}\n`;
+      }
+      
+      if (design.category) {
+        message += `📁 *Category:* ${design.category.name}\n`;
+      }
+      
+      if (selectedColor) {
+        message += `💰 *Price:* ₹${selectedColor.price.toLocaleString()}/piece\n`;
+      }
+      
+      message += `🎨 *Colors Available:* ${colorCount} variant${colorCount > 1 ? 's' : ''}\n`;
+      message += `📦 *MOQ:* Contact for details\n`;
+      
+      if (design.description) {
+        message += `\n📝 ${design.description}\n`;
+      }
+      
+      message += `\n🔗 *View Product:*\n${productLink}\n`;
+      
+      // Add user's optional message/query
+      if (shareUserMessage.trim()) {
+        message += `\n💬 *My Query:*\n${shareUserMessage.trim()}\n`;
+      }
+      
+      message += `\n📱 *Interested? Contact us for more details!*`;
+      
+      // Try Web Share API with image
+      if (navigator.share && selectedColorImages.length > 0) {
+        try {
+          const imageUrl = selectedColorImages[0];
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          const file = new File([blob], `${design.design_no}.jpg`, { type: 'image/jpeg' });
+          
+          await navigator.share({
+            title: `${design.name} - ${design.design_no}`,
+            text: message,
+            files: [file]
+          });
+          
+          // Close dialog and reset
+          setShowShareDialog(false);
+          setShareUserMessage('');
+          setShareType(null);
+          setPendingShareDesign(null);
+          return;
+        } catch (shareError) {
+          console.warn('Web Share API failed, falling back to WhatsApp URL:', shareError);
+        }
+      }
+      
+      // Fallback to WhatsApp URL
+      if (selectedColorImages.length > 0) {
+        message += `\n\n📸 *Product Image:*\n${selectedColorImages[0]}`;
+      }
+      
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+      
+    } catch (error) {
+      console.error('Error sharing:', error);
+      
+      const productLink = `${window.location.origin}/catalogue?design=${design.id}`;
+      let fallbackMessage = `✨ *${design.name}*\n\n`;
+      fallbackMessage += `📋 Design Code: ${design.design_no}\n`;
+      if (design.fabric_type) {
+        fallbackMessage += `🧵 Fabric: ${design.fabric_type.name}\n`;
+      }
+      if (selectedColor) {
+        fallbackMessage += `💰 Price: ₹${selectedColor.price.toLocaleString()}/piece\n`;
+      }
+      if (shareUserMessage.trim()) {
+        fallbackMessage += `\n💬 My Query:\n${shareUserMessage.trim()}\n`;
+      }
+      fallbackMessage += `\n🔗 View: ${productLink}\n`;
+      fallbackMessage += `\n💬 Contact us for more details!`;
+      
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(fallbackMessage)}`;
+      window.open(whatsappUrl, '_blank');
+    }
+    
+    // Close dialog and reset
+    setShowShareDialog(false);
+    setShareUserMessage('');
+    setShareType(null);
+    setPendingShareDesign(null);
   };
 
   const clearSelection = () => {
@@ -264,187 +688,50 @@ export function Catalogue() {
     }
   };
 
-  const generatePDF = async () => {
-    try {
-      setGeneratingPDF(true);
-      
-      // Create a new PDF document
-      const doc = new jsPDF();
-      let currentPage = 1;
-      
-      // Add title page
-      doc.setFontSize(24);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Indie Craft Collection - Catalogue', 105, 40, { align: 'center' });
-      
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, 55, { align: 'center' });
-      doc.text(`Total Designs: ${filteredDesigns.length}`, 105, 65, { align: 'center' });
-      
-      // Add a new page for first design
-      doc.addPage();
-      currentPage++;
-      
-      // Process each design
-      for (let designIndex = 0; designIndex < filteredDesigns.length; designIndex++) {
-        const design = filteredDesigns[designIndex];
-        
-        // Skip if no colors
-        if (!design.design_colors || design.design_colors.length === 0) {
-          continue;
-        }
-        
-        // Process each color of the design
-        for (let colorIndex = 0; colorIndex < design.design_colors.length; colorIndex++) {
-          const color = design.design_colors[colorIndex];
-          
-          // Add new page for each color (except first color of first design)
-          if (designIndex > 0 || colorIndex > 0) {
-            doc.addPage();
-            currentPage++;
-          }
-          
-          // Compact professional catalogue layout
-          // Header section with design info
-          doc.setFontSize(22);
-          doc.setFont('helvetica', 'bold');
-          doc.text(design.name, 105, 20, { align: 'center' });
-          
-          // Design number in top right
-          doc.setFontSize(9);
-          doc.setFont('helvetica', 'normal');
-          doc.text(`Design No: ${design.design_no}`, 190, 15, { align: 'right' });
-          
-          // Add elegant divider
-          doc.setDrawColor(150, 150, 150);
-          doc.setLineWidth(1);
-          doc.line(30, 30, 180, 30);
-          
-          // Compact product info section
-          let yPos = 40;
-          
-          // Color name and price in same line
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(14);
-          doc.text(`Color: ${color.color_name}`, 25, yPos);
-          doc.text(`₹${color.price.toLocaleString()}`, 175, yPos, { align: 'right' });
-          
-          yPos += 12;
-          
-          // Product details in single line
-          doc.setFontSize(10);
-          doc.setFont('helvetica', 'normal');
-          const detailsLine = `${design.category?.name || 'N/A'} | ${design.style?.name || 'N/A'} | ${design.fabric_type?.name || 'N/A'}`;
-          doc.text(detailsLine, 25, yPos);
-          
-          yPos += 15;
-          
-          // Description in a highlighted box
-          if (design.description) {
-            // Draw subtle background for description
-            doc.setFillColor(250, 250, 250);
-            doc.setDrawColor(220, 220, 220);
-            doc.rect(25, yPos, 160, 40, 'FD');
-            
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(10);
-            doc.setTextColor(60, 60, 60);
-            doc.text('Description:', 30, yPos + 8);
-            
-            doc.setFont('helvetica', 'normal');
-            const lines = doc.splitTextToSize(design.description, 150);
-            doc.text(lines, 30, yPos + 18);
-            
-            yPos += 50;
-            doc.setTextColor(0, 0, 0);
-          } else {
-            yPos += 20;
-          }
-          
-          // Images - Load and add actual images
-          if (color.image_urls && color.image_urls.length > 0) {
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(12);
-            doc.text('Product Images:', 20, yPos);
-            yPos += 15;
-            
-            // Load images and add them to PDF
-            const maxImagesPerPage = 4;
-            const imageSize = 80; // Increased from 60 to 80
-            const spacing = 20; // Increased spacing for larger images
-            const cols = 2;
-            
-            for (let imgIndex = 0; imgIndex < Math.min(color.image_urls.length, maxImagesPerPage); imgIndex++) {
-              const row = Math.floor(imgIndex / cols);
-              const col = imgIndex % cols;
-              const x = 20 + col * (imageSize + spacing);
-              const y = yPos + row * (imageSize + spacing);
-              
-              try {
-                // Load image from URL
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                
-                await new Promise((resolve, reject) => {
-                  img.onload = resolve;
-                  img.onerror = reject;
-                  img.src = color.image_urls[imgIndex];
-                });
-                
-                // Add image to PDF
-                if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
-                  const canvas = document.createElement('canvas');
-                  const ctx = canvas.getContext('2d');
-                  canvas.width = img.naturalWidth;
-                  canvas.height = img.naturalHeight;
-                  ctx?.drawImage(img, 0, 0);
-                  
-                  const imgData = canvas.toDataURL('image/jpeg', 0.8);
-                  doc.addImage(imgData, 'JPEG', x, y, imageSize, imageSize);
-                } else {
-                  // Fallback to placeholder
-                  doc.setDrawColor(200, 200, 200);
-                  doc.rect(x, y, imageSize, imageSize, 'D');
-                  doc.setFontSize(8);
-                  doc.text(`Image ${imgIndex + 1}`, x + 2, y + imageSize - 5);
-                }
-              } catch (error) {
-                console.warn('Failed to load image:', color.image_urls[imgIndex], error);
-                // Fallback to placeholder
-                doc.setDrawColor(200, 200, 200);
-                doc.rect(x, y, imageSize, imageSize, 'D');
-                doc.setFontSize(8);
-                doc.text(`Image ${imgIndex + 1}`, x + 2, y + imageSize - 5);
-              }
-            }
-            
-            // If more images than can fit, add note
-            if (color.image_urls.length > maxImagesPerPage) {
-              doc.setFontSize(10);
-              doc.text(`... and ${color.image_urls.length - maxImagesPerPage} more images`, 20, yPos + 140);
-            }
-          }
-          
-          // Add footer
-          doc.setFontSize(8);
-          doc.setFont('helvetica', 'italic');
-          doc.text(`Page ${currentPage} - ${design.name} (${color.color_name})`, 105, 280, { align: 'center' });
-        }
-      }
-      
-      // Save PDF
-      doc.save(`catalogue_${new Date().toISOString().split('T')[0]}.pdf`);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-    } finally {
-      setGeneratingPDF(false);
-    }
-  };
-
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
+      {/* Floating WhatsApp Button for Mobile */}
+      <div className="fixed bottom-6 right-6 z-50 lg:hidden">
+        <button
+          onClick={() => {
+            // Share first visible design or selected designs
+            if (selectedDesigns.size > 0) {
+              shareBulkOnWhatsApp();
+            } else if (filteredDesigns.length > 0) {
+              const firstDesign = filteredDesigns[0];
+              const shareEvent = { stopPropagation: () => {} } as React.MouseEvent;
+              const mockShareFunc = async (e: React.MouseEvent) => {
+                e.stopPropagation();
+                try {
+                  const selectedColor = firstDesign.design_colors?.[0];
+                  const selectedColorImages = selectedColor?.image_urls || [];
+                  let message = `*${firstDesign.name}* (${firstDesign.design_no})\n\n` +
+                    `${firstDesign.description || 'Beautiful design from our collection!'}\n\n` +
+                    `🎨 Colors: ${firstDesign.design_colors?.length || 0} variants\n\n`;
+                  
+                  if (selectedColorImages.length > 0) {
+                    const imageList = selectedColorImages.slice(0, 3).join('\n');
+                    message += `📸 Images:\n${imageList}\n\n`;
+                  }
+                  
+                  message += `Check out our catalogue for more designs!`;
+                  
+                  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+                  window.open(whatsappUrl, '_blank');
+                } catch (error) {
+                  console.error('Error sharing:', error);
+                }
+              };
+              mockShareFunc(shareEvent);
+            }
+          }}
+          className="bg-green-500 text-white w-14 h-14 rounded-full shadow-lg hover:bg-green-600 transition-all hover:scale-110 flex items-center justify-center min-w-[56px] min-h-[56px]"
+          title="Quick share"
+        >
+          <MessageCircle className="w-6 h-6" />
+        </button>
+      </div>
+
       <div className="mb-6 sm:mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -462,14 +749,6 @@ export function Catalogue() {
             >
               {bulkSelectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
               {bulkSelectionMode ? 'Selection Mode' : 'Select Designs'}
-            </button>
-            <button
-              onClick={generatePDF}
-              disabled={generatingPDF || filteredDesigns.length === 0}
-              className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-semibold hover:bg-opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="w-4 h-4" />
-              {generatingPDF ? 'Generating...' : 'Download PDF'}
             </button>
           </div>
         </div>
@@ -503,7 +782,7 @@ export function Catalogue() {
                 disabled={selectedDesigns.size === 0}
                 className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <MessageCircle className="w-4 h-4" />
+                <MessageSquare className="w-4 h-4" />
                 Share Selected ({selectedDesigns.size})
               </button>
             </div>
@@ -636,6 +915,31 @@ export function Catalogue() {
                 </div>
               )}
 
+              {/* Tags */}
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Tags</h3>
+                <div className="space-y-2">
+                  {(Object.keys(tagConfig) as DesignTag[]).map((tag) => {
+                    const config = tagConfig[tag];
+                    const Icon = config.icon;
+                    return (
+                      <label key={tag} className="flex items-center space-x-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={filters.tags.includes(tag)}
+                          onChange={() => toggleTagFilter(tag)}
+                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                        />
+                        <span className={`inline-flex items-center gap-1.5 text-sm ${config.color} group-hover:opacity-80 transition`}>
+                          <Icon className="w-3.5 h-3.5" />
+                          {config.label}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Fabric Type */}
               {fabricTypes.length > 0 && (
                 <div className="border-t border-gray-200 pt-4">
@@ -675,76 +979,63 @@ export function Catalogue() {
                   placeholder="Search by design no..."
                 />
               </div>
-
-              {/* Stock Status */}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Stock Status</h3>
-                <div className="space-y-2">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={filters.stockStatus === 'all'}
-                      onChange={() => setFilters({ ...filters, stockStatus: 'all' })}
-                      className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
-                    />
-                    <span className="text-sm text-gray-700">All Items</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={filters.stockStatus === 'in_stock'}
-                      onChange={() => setFilters({ ...filters, stockStatus: 'in_stock' })}
-                      className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
-                    />
-                    <span className="text-sm text-gray-700">In Stock</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={filters.stockStatus === 'out_of_stock'}
-                      onChange={() => setFilters({ ...filters, stockStatus: 'out_of_stock' })}
-                      className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
-                    />
-                    <span className="text-sm text-gray-700">Out of Stock</span>
-                  </label>
-                </div>
-              </div>
             </div>
           </div>
         </aside>
 
         {/* Main Content */}
         <main className="flex-1">
-          {/* Quick Category Filters */}
-          <div className="flex flex-wrap gap-2 sm:gap-3 mb-6">
-            <button
-              onClick={() => setSelectedCategory('')}
-              className={`px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base rounded-full font-medium transition ${
-                selectedCategory === ''
-                  ? 'bg-primary text-white shadow-lg'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:border-primary hover:text-primary'
-              }`}
-            >
-              All Designs
-            </button>
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
-                className={`px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base rounded-full font-medium transition ${
-                  selectedCategory === category.id
-                    ? 'bg-primary text-white shadow-lg'
-                    : 'bg-white border border-gray-300 text-gray-700 hover:border-primary hover:text-primary'
-                }`}
-              >
-                {category.name}
-              </button>
-            ))}
+          {/* Highlight Strip - Tag Pills */}
+          <div className="mb-5">
+            <div className="flex flex-wrap items-center gap-2">
+              {highlightTags.map((tag) => {
+                const Icon = tag.icon;
+                const isActive = filters.tags.some(t => tag.filterPreset.tags?.includes(t));
+                
+                return (
+                  <button
+                    key={tag.id}
+                    onClick={() => toggleHighlightPreset(tag)}
+                    className={`group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                      isActive
+                        ? `${tag.color} ${tag.bgColor} ${tag.borderColor} border shadow-md`
+                        : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{tag.label}</span>
+                  </button>
+                );
+              })}
+              {filters.tags.length > 0 && (
+                <button
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium bg-gray-900 text-white hover:bg-gray-800 transition-all duration-200"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Clear</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Results Count */}
-          <div className="mb-4 text-sm text-gray-600">
-            Showing {filteredDesigns.length} of {designs.length} designs
+        
+
+          {/* Results Count & Share Button */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div className="text-sm text-gray-600">
+              Showing {filteredDesigns.length} of {designs.length} designs
+            </div>
+            
+            {(activeFilterCount > 0 || filteredDesigns.length < designs.length) && (
+              <button
+                onClick={shareFilteredCatalogue}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-all duration-200 shadow-md hover:shadow-lg"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Share Selection</span>
+              </button>
+            )}
           </div>
 
           {error && (
@@ -779,6 +1070,12 @@ export function Catalogue() {
                   bulkSelectionMode={bulkSelectionMode}
                   isSelected={selectedDesigns.has(design.id)}
                   onToggleSelection={() => toggleDesignSelection(design.id)}
+                  onShareClick={(design) => {
+                    setPendingShareDesign(design);
+                    setShareType('design');
+                    setShareUserMessage('');
+                    setShowShareDialog(true);
+                  }}
                 />
               ))}
             </div>
@@ -792,6 +1089,84 @@ export function Catalogue() {
           onClose={() => setSelectedDesign(null)}
         />
       )}
+
+      {/* Share Dialog with Optional Message */}
+      {showShareDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">
+                  {shareType === 'catalogue' ? 'Share Catalogue Selection' : 'Share Design'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowShareDialog(false);
+                    setShareUserMessage('');
+                    setShareType(null);
+                    setPendingShareDesign(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition"
+                  aria-label="Close dialog"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-3">
+                  {shareType === 'catalogue' 
+                    ? 'Add an optional message or query before sharing the filtered catalogue.'
+                    : 'Add an optional message or query before sharing this design.'}
+                </p>
+                
+                <label htmlFor="shareMessage" className="block text-sm font-medium text-gray-700 mb-2">
+                  Your Message (Optional)
+                </label>
+                <textarea
+                  id="shareMessage"
+                  value={shareUserMessage}
+                  onChange={(e) => setShareUserMessage(e.target.value)}
+                  placeholder="e.g., I'm interested in bulk orders, What's the delivery time?, Looking for custom colors..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                  rows={4}
+                  maxLength={500}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {shareUserMessage.length}/500 characters
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowShareDialog(false);
+                    setShareUserMessage('');
+                    setShareType(null);
+                    setPendingShareDesign(null);
+                  }}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (shareType === 'catalogue') {
+                      executeFilteredCatalogueShare();
+                    } else if (shareType === 'design') {
+                      executeDesignShare();
+                    }
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Share on WhatsApp</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -802,73 +1177,108 @@ interface DesignCardProps {
   bulkSelectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: () => void;
+  onShareClick?: (design: Design) => void;
 }
 
 function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection }: DesignCardProps) {
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const slideshowIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number; time: number } | null>(null);
   const colorCount = design.design_colors?.length || 0;
   const selectedColor = design.design_colors?.[selectedColorIndex];
   const selectedColorImages = selectedColor?.image_urls || [];
   const firstImage = selectedColorImages[currentImageIndex] || selectedColorImages[0];
 
-  // WhatsApp share function
-  const shareOnWhatsApp = async (e: React.MouseEvent) => {
+  // WhatsApp share function - opens dialog for user message
+  const shareOnWhatsApp = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onShareClick?.(design);
+  };
+
+  // Legacy fallback for direct share (not used with dialog)
+  const directShareOnWhatsApp = async (e: React.MouseEvent) => {
     e.stopPropagation();
     
     try {
+      // Generate product link (adjust domain as needed)
+      const productLink = `${window.location.origin}/catalogue?design=${design.id}`;
+      
+      // Build comprehensive message
+      let message = `✨ *${design.name}*\n\n`;
+      message += `📋 *Design Code:* ${design.design_no}\n`;
+      
+      if (design.fabric_type) {
+        message += `🧵 *Fabric:* ${design.fabric_type.name}\n`;
+      }
+      
+      if (design.category) {
+        message += `📁 *Category:* ${design.category.name}\n`;
+      }
+      
+      if (selectedColor) {
+        message += `💰 *Price:* ₹${selectedColor.price.toLocaleString()}/piece\n`;
+      }
+      
+      message += `🎨 *Colors Available:* ${colorCount} variant${colorCount > 1 ? 's' : ''}\n`;
+      
+      // MOQ (Minimum Order Quantity) - you can adjust this based on your business logic
+      message += `📦 *MOQ:* Contact for details\n`;
+      
+      if (design.description) {
+        message += `\n📝 ${design.description}\n`;
+      }
+      
+      message += `\n🔗 *View Product:*\n${productLink}\n`;
+      message += `\n💬 *Interested? Contact us for more details!*`;
+      
       // Check if Web Share API is available and we have images
       if (navigator.share && selectedColorImages.length > 0) {
-        // Try to load and share actual images
-        const imagePromises = selectedColorImages.slice(0, 2).map(async (url) => {
-          try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            const file = new File([blob], `design-${design.design_no}.jpg`, { type: 'image/jpeg' });
-            return file;
-          } catch (error) {
-            console.warn('Failed to load image:', url);
-            return null;
-          }
-        });
-        
-        const imageFiles = (await Promise.all(imagePromises)).filter(file => file !== null);
-        
-        if (imageFiles.length > 0) {
-          // Use Web Share API with actual images
+        // Try to load and share actual images with the message
+        try {
+          const imageUrl = selectedColorImages[0];
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          const file = new File([blob], `${design.design_no}.jpg`, { type: 'image/jpeg' });
+          
+          // Use Web Share API with image and text
           await navigator.share({
-            title: `${design.name} (${design.design_no})`,
-            text: `${design.description || 'Beautiful design from our collection!'}\n\n🎨 Colors: ${colorCount} variants\n\nCheck out our catalogue for more designs!`,
-            files: imageFiles
+            title: `${design.name} - ${design.design_no}`,
+            text: message,
+            files: [file]
           });
           return;
+        } catch (shareError) {
+          console.warn('Web Share API failed, falling back to WhatsApp URL:', shareError);
         }
       }
       
-      // Fallback to WhatsApp with image URLs
-      let message = `*${design.name}* (${design.design_no})\n\n` +
-        `${design.description || 'Beautiful design from our collection!'}\n\n` +
-        `🎨 Colors: ${colorCount} variants\n\n`;
-      
+      // Fallback to WhatsApp Web/App with image URL
       if (selectedColorImages.length > 0) {
-        const imageList = selectedColorImages.slice(0, 3).join('\n');
-        message += `📸 Images:\n${imageList}\n\n`;
+        // Include first image URL in the message
+        message += `\n\n📸 *Product Image:*\n${selectedColorImages[0]}`;
       }
-      
-      message += `Check out our catalogue for more designs!`;
       
       const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
+      
     } catch (error) {
       console.error('Error sharing:', error);
-      // Final fallback to text-only WhatsApp
-      const message = `*${design.name}* (${design.design_no})\n\n` +
-        `${design.description || 'Beautiful design from our collection!'}\n\n` +
-        `🎨 Colors: ${colorCount} variants\n\n` +
-        `Check out our catalogue for more designs!`;
       
-      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      // Final fallback - simple message with essential info
+      const productLink = `${window.location.origin}/catalogue?design=${design.id}`;
+      let fallbackMessage = `✨ *${design.name}*\n\n`;
+      fallbackMessage += `📋 Design Code: ${design.design_no}\n`;
+      if (design.fabric_type) {
+        fallbackMessage += `🧵 Fabric: ${design.fabric_type.name}\n`;
+      }
+      if (selectedColor) {
+        fallbackMessage += `💰 Price: ₹${selectedColor.price.toLocaleString()}/piece\n`;
+      }
+      fallbackMessage += `\n🔗 View: ${productLink}\n`;
+      fallbackMessage += `\n💬 Contact us for more details!`;
+      
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(fallbackMessage)}`;
       window.open(whatsappUrl, '_blank');
     }
   };
@@ -892,6 +1302,38 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
   useEffect(() => {
     setCurrentImageIndex(0);
   }, [selectedColorIndex]);
+
+  // Handle swipe gestures
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    const touch = e.touches[0];
+    if (touch) {
+      setTouchStart({ x: touch.clientX, y: touch.clientY, time: Date.now() });
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStart) return;
+    
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    
+    const deltaX = touch.clientX - touchStart.x;
+    const deltaY = Math.abs(touch.clientY - touchStart.y);
+    const deltaTime = Date.now() - touchStart.time;
+    
+    // Check if it's a swipe (fast movement, mostly horizontal)
+    if (deltaTime < 300 && Math.abs(deltaX) > 50 && deltaY < 50) {
+      if (deltaX > 0) {
+        // Swipe right - Quick View
+        onQuickView();
+      } else {
+        // Swipe left - Share
+        shareOnWhatsApp(e as any);
+      }
+    }
+    
+    setTouchStart(null);
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-xl transition duration-300 group cursor-pointer relative">
@@ -921,6 +1363,8 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
       <div
         className="relative aspect-w-3 aspect-h-4 bg-secondary overflow-hidden"
         onClick={onQuickView}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
         {firstImage ? (
           <img
@@ -934,6 +1378,30 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
             <span className="text-sm sm:text-base text-gray-500 font-medium">{design.design_no}</span>
           </div>
         )}
+
+        {/* Design Tags - Myntra Style Badges */}
+        {(() => {
+          const designTags = getDesignTags(design);
+          const priorityOrder: DesignTag[] = ['best-seller', 'trending', 'new-arrival', 'fast-repeat', 'ready-to-ship', 'low-stock'];
+          const sortedTags = designTags.sort((a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b));
+          const displayTags = sortedTags.slice(0, 2);
+          
+          return displayTags.length > 0 ? (
+            <div className="absolute bottom-2 right-2 z-10 flex flex-wrap gap-1">
+              {displayTags.map((tag) => {
+                const config = tagConfig[tag];
+                return (
+                  <span
+                    key={tag}
+                    className="px-1.5 py-0.5 bg-white text-gray-800 text-[10px] font-semibold rounded shadow-sm border border-gray-200"
+                  >
+                    {config.label}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null;
+        })()}
 
         {/* Slideshow Indicators */}
         {selectedColorImages.length > 1 && (
@@ -951,88 +1419,110 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
           </div>
         )}
 
-        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition duration-300 flex items-center justify-center">
-          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition duration-300">
+        <div className="absolute inset-0 bg-black bg-opacity-0 sm:group-hover:bg-opacity-20 transition duration-300 flex items-center justify-center">
+          <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition duration-300">
             <button
               onClick={shareOnWhatsApp}
-              className="bg-green-500 text-white px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-full font-semibold flex items-center space-x-2 shadow-lg hover:bg-green-600 transition"
+              className="bg-green-500 text-white w-11 h-11 sm:w-12 sm:h-12 sm:px-4 sm:py-3 text-sm sm:text-base rounded-full font-semibold flex items-center justify-center shadow-lg hover:bg-green-600 transition min-w-[44px] min-h-[44px]"
+              title="Swipe left or tap to share"
             >
-              <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="hidden sm:inline">Share</span>
+              <MessageCircle className="w-5 h-5 sm:w-5 sm:h-5" />
+              
             </button>
             <button
               onClick={onQuickView}
-              className="bg-white text-primary px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-full font-semibold flex items-center space-x-2 shadow-lg hover:bg-primary hover:text-white transition"
+              className="bg-white text-primary w-11 h-11 sm:w-12 sm:h-12 sm:px-4 sm:py-3 text-sm sm:text-base rounded-full font-semibold flex items-center justify-center shadow-lg hover:bg-primary hover:text-white transition min-w-[44px] min-h-[44px]"
+              title="Swipe right or tap to view"
             >
-              <Eye className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="hidden sm:inline">Quick View</span>
-              <span className="sm:hidden">View</span>
+              <Eye className="w-5 h-5 sm:w-5 sm:h-5" />
+             
             </button>
           </div>
         </div>
       </div>
 
-      <div className="p-3 sm:p-4 lg:p-5" onClick={onQuickView}>
-        <div className="mb-2 sm:mb-3">
-          <h3 className="text-base sm:text-lg font-bold text-gray-900 mt-1 line-clamp-1">{design.name}</h3>
-          {design.description && (
-            <p className="text-xs sm:text-sm text-gray-600 mt-1 line-clamp-2">{design.description}</p>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between mb-3 sm:mb-4">
-          <div>
-            <span className="text-lg sm:text-xl lg:text-2xl font-bold text-primary">
-              ₹{selectedColor?.price.toLocaleString() || '0'}
-            </span>
+      <div className="p-3 sm:p-4" onClick={onQuickView}>
+        {/* Design Code (Left) + Color Selection (Right) - Highest Priority */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          {/* Design Code - Visually Dominant */}
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight leading-tight">
+              {design.design_no}
+            </h3>
           </div>
-        </div>
 
-        <div className="space-y-1.5 sm:space-y-2">
-          {/* Color Swatches */}
+          {/* Color Swatches - Compact, Right Aligned */}
           {colorCount > 0 && (
-            <div className="mb-2">
-              <div className="flex flex-wrap gap-1">
-                {design.design_colors?.slice(0, 6).map((color, index) => (
+            <div className="flex-shrink-0">
+              <div className="flex items-center gap-1">
+                {design.design_colors?.slice(0, 5).map((color, index) => (
                   <button
                     key={color.id}
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedColorIndex(index);
                     }}
-                    className={`relative group/color ${
+                    className={`relative rounded-full transition-all ${
                       index === selectedColorIndex
-                        ? 'scale-110 shadow-lg'
-                        : 'hover:scale-105'
-                    } rounded-full transition-all duration-200`}
+                        ? 'ring-2 ring-gray-900 ring-offset-1'
+                        : 'hover:ring-1 hover:ring-gray-400'
+                    }`}
                     title={color.color_name}
+                    aria-label={`Select ${color.color_name} color`}
                   >
                     <div
-                      className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-white shadow-sm"
+                      className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-gray-200"
                       style={{ backgroundColor: color.color_code || '#cccccc' }}
                     />
-                    {/* Selection Indicator */}
-                    {index === selectedColorIndex && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-white rounded-full shadow-sm" />
-                      </div>
-                    )}
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-1.5 py-0.5 bg-gray-900 text-white text-[9px] rounded whitespace-nowrap opacity-0 group-hover/color:opacity-100 transition-opacity pointer-events-none z-10">
-                      {color.color_name}
-                    </div>
                   </button>
                 ))}
-                {colorCount > 6 && (
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] sm:text-[10px] text-gray-600 font-medium">
-                    +{colorCount - 6}
+                {colorCount > 5 && (
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-[10px] text-gray-600 font-medium">
+                    +{colorCount - 5}
                   </div>
                 )}
               </div>
             </div>
           )}
+        </div>
 
-         
+        {/* Product Name / Category - Secondary */}
+        <div className="mb-2">
+          <p className="text-sm font-medium text-gray-700 line-clamp-1">
+            {design.name}
+          </p>
+          {design.category && (
+            <p className="text-xs text-gray-500 mt-0.5">
+              {design.category.name}
+            </p>
+          )}
+        </div>
+
+        {/* Key Attributes - Single Line with Bullet Separators */}
+        <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-600 mb-3">
+          {design.fabric_type && (
+            <span>{design.fabric_type.name}</span>
+          )}
+          {design.fabric_type && design.style && (
+            <span className="text-gray-400">•</span>
+          )}
+          {design.style && (
+            <span>{design.style.name}</span>
+          )}
+          {(design.fabric_type || design.style) && design.work_type && (
+            <span className="text-gray-400">•</span>
+          )}
+          {design.work_type && (
+            <span>{design.work_type}</span>
+          )}
+        </div>
+
+        {/* Price */}
+        <div className="flex items-baseline justify-between">
+          <span className="text-lg sm:text-xl font-bold text-primary">
+            ₹{selectedColor?.price.toLocaleString() || '0'}
+          </span>
+          <span className="text-xs text-gray-500">MOQ: Contact</span>
         </div>
       </div>
     </div>
@@ -1059,6 +1549,8 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
   const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [touchDistance, setTouchDistance] = useState(0);
+  const [isTouchZooming, setIsTouchZooming] = useState(false);
   const [viewMode, setViewMode] = useState<'individual' | 'sets'>('individual'); // Admin toggle state
   const selectedColor = design.design_colors?.[selectedColorIndex];
   const selectedImage = selectedColor?.image_urls?.[selectedImageIndex];
@@ -1122,13 +1614,76 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
   useEffect(() => {
     setZoomLevel(1);
     setPanPosition({ x: 0, y: 0 });
+    setIsTouchZooming(false);
+    setTouchDistance(0);
   }, [selectedImageIndex, selectedColorIndex]);
+
+  // Calculate distance between two touch points
+  const getTouchDistance = (touches: React.TouchList) => {
+    if (touches.length < 2) return 0;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  // Handle touch start for pinch zoom
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (e.touches.length === 2) {
+      setIsTouchZooming(true);
+      setTouchDistance(getTouchDistance(e.touches));
+    } else if (e.touches.length === 1 && zoomLevel > 1) {
+      setIsDragging(true);
+      setDragStart({ 
+        x: e.touches[0].clientX - panPosition.x, 
+        y: e.touches[0].clientY - panPosition.y 
+      });
+    }
+  };
+
+  // Handle touch move for pinch zoom and pan
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (e.touches.length === 2 && isTouchZooming) {
+      const currentDistance = getTouchDistance(e.touches);
+      const scale = currentDistance / touchDistance;
+      const newZoom = Math.max(1, Math.min(3, zoomLevel * scale));
+      setZoomLevel(newZoom);
+      setTouchDistance(currentDistance);
+    } else if (e.touches.length === 1 && isDragging && zoomLevel > 1) {
+      setPanPosition({
+        x: e.touches[0].clientX - dragStart.x,
+        y: e.touches[0].clientY - dragStart.y
+      });
+    }
+  };
+
+  // Handle touch end
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    setIsTouchZooming(false);
+    setTouchDistance(0);
+  };
 
   // Handle mouse wheel zoom
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoomLevel(prev => Math.max(1, Math.min(3, prev + delta)));
+    e.stopPropagation();
+    
+    // Check if it's a trackpad pinch gesture (ctrlKey or metaKey + wheel)
+    if (e.ctrlKey || e.metaKey) {
+      // Trackpad pinch zoom - treat as zoom
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoomLevel(prev => Math.max(1, Math.min(3, prev + delta)));
+    } else {
+      // Regular mouse wheel zoom
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoomLevel(prev => Math.max(1, Math.min(3, prev + delta)));
+    }
   };
 
   // Handle mouse drag for panning
@@ -1152,13 +1707,14 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
     setIsDragging(false);
   };
 
+  // Simplified zoom controls
   const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(3, prev + 0.25));
+    setZoomLevel(prev => Math.min(3, prev + 0.5));
   };
 
   const handleZoomOut = () => {
     setZoomLevel(prev => {
-      const newZoom = Math.max(1, prev - 0.25);
+      const newZoom = Math.max(1, prev - 0.5);
       if (newZoom === 1) {
         setPanPosition({ x: 0, y: 0 });
       }
@@ -1287,93 +1843,103 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl sm:rounded-2xl shadow-xl w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[96vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-4 sm:p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-primary truncate">{design.name}</h2>
-              <div className="flex items-center flex-wrap gap-2 sm:gap-4 mt-1 sm:mt-2">
-                <p className="text-xs sm:text-sm text-gray-600">Design No: {design.design_no}</p>
-                {design.category && (
-                  <span className="text-xs font-medium px-2 sm:px-3 py-1 bg-primary bg-opacity-10 text-primary rounded-full">
-                    {design.category.name}
-                  </span>
-                )}
-                {design.fabric_type && (
-                  <span className="text-xs font-medium px-2 sm:px-3 py-1 bg-blue-100 text-blue-700 rounded-full">
-                    {design.fabric_type.name}
-                  </span>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition text-2xl sm:text-3xl leading-none ml-2 flex-shrink-0"
-            >
-              ×
-            </button>
+        {/* Compact Header */}
+        <div className="px-3 py-2 sm:px-4 sm:py-3 border-b border-gray-200 bg-gradient-to-r from-primary to-blue-600 text-white flex items-center justify-between">
+          <div className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3">
+            <h2 className="text-base sm:text-lg font-bold truncate">{design.name}</h2>
+            <span className="text-xs sm:text-sm opacity-90 hidden sm:inline">#{design.design_no}</span>
+            {design.category && (
+              <span className="text-xs px-2 py-0.5 bg-white bg-opacity-20 rounded-full hidden md:inline">
+                {design.category.name}
+              </span>
+            )}
           </div>
-          {message && (
-            <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${
-              message.includes('Failed') || message.includes('Error')
-                ? 'bg-red-50 text-red-700 border border-red-200'
-                : 'bg-green-50 text-green-700 border border-green-200'
-            }`}>
-              {message}
-            </div>
-          )}
+          <button
+            onClick={onClose}
+            className="text-white hover:bg-white hover:bg-opacity-20 rounded-full w-8 h-8 flex items-center justify-center transition flex-shrink-0 ml-2"
+            title="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
+        
+        {/* Message Toast */}
+        {message && (
+          <div className={`mx-3 mt-2 p-2 rounded-lg text-xs sm:text-sm font-medium ${
+            message.includes('Failed') || message.includes('Error')
+              ? 'bg-red-50 text-red-700 border border-red-200'
+              : 'bg-green-50 text-green-700 border border-green-200'
+          }`}>
+            {message}
+          </div>
+        )}
 
-        <div className="p-4 sm:p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
-            {/* Left Column - Images and Color Variants */}
-            <div className="space-y-4">
-              {/* Main Image with Inline Zoom */}
-              {selectedImage ? (
+        {/* Main Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-3 sm:p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+              {/* Left Column - Images */}
+              <div className="space-y-2 sm:space-y-3">
+                {/* Main Image with Inline Zoom */}
+                {selectedImage ? (
                 <div className="relative bg-secondary rounded-xl border border-gray-200">
                   {/* Zoom Controls */}
                   <div className="absolute top-2 right-2 flex flex-col gap-1 bg-white bg-opacity-90 p-1 rounded-lg shadow-lg z-10">
                     <button
                       onClick={handleZoomIn}
                       disabled={zoomLevel >= 3}
-                      className="p-2 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Zoom in (or use mouse wheel)"
+                      className="p-2 sm:p-3 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Zoom in (or use mouse wheel/pinch)"
                     >
-                      <ZoomIn className="w-4 h-4 text-gray-700" />
+                      <ZoomIn className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
                     </button>
-                    <div className="text-[10px] font-medium text-gray-700 text-center px-1">
+                    <div className="text-[10px] sm:text-xs font-medium text-gray-700 text-center px-1">
                       {Math.round(zoomLevel * 100)}%
                     </div>
                     <button
                       onClick={handleZoomOut}
                       disabled={zoomLevel <= 1}
-                      className="p-2 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Zoom out"
+                      className="p-2 sm:p-3 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Zoom out (or use pinch)"
                     >
-                      <ZoomOut className="w-4 h-4 text-gray-700" />
+                      <ZoomOut className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
                     </button>
                     {zoomLevel > 1 && (
                       <button
                         onClick={handleResetZoom}
-                        className="p-2 hover:bg-gray-100 rounded transition border-t border-gray-200"
+                        className="p-2 sm:p-3 hover:bg-gray-100 rounded transition border-t border-gray-200"
                         title="Reset zoom"
                       >
-                        <Maximize2 className="w-4 h-4 text-gray-700" />
+                        <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
                       </button>
                     )}
                   </div>
                   
                   {/* Image Container */}
                   <div 
-                    className="h-[350px] sm:h-[450px] overflow-hidden rounded-xl"
+                    className="h-[280px] sm:h-[320px] lg:h-[380px] overflow-hidden rounded-xl touch-none"
                     onWheel={handleWheel}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseUp}
-                    style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                    onContextMenu={(e) => e.preventDefault()}
+                    style={{ 
+                      cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                      touchAction: 'none',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none',
+                      WebkitTouchCallout: 'none',
+                      KhtmlUserSelect: 'none'
+                    }}
                   >
                     <img
                       src={selectedImage}
@@ -1389,196 +1955,182 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                   
                   {zoomLevel > 1 && (
                     <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-60 text-white text-xs px-3 py-1 rounded-full">
-                      Scroll to zoom • Drag to pan
+                      <span className="hidden sm:inline">Scroll to zoom • Drag to pan</span>
+                      <span className="sm:hidden">Pinch to zoom • Drag to pan</span>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="aspect-w-3 aspect-h-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex flex-col items-center justify-center h-[350px] sm:h-[450px] border border-gray-200">
+                <div className="aspect-w-3 aspect-h-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex flex-col items-center justify-center h-[280px] sm:h-[320px] lg:h-[380px] border border-gray-200">
                   <ImageIcon className="w-20 h-20 sm:w-24 sm:h-24 text-gray-400 mb-4" />
                   <span className="text-base sm:text-lg text-gray-500 font-medium">{design.design_no}</span>
                 </div>
-              )}
+                )}
 
-              {/* Image Thumbnails */}
-              {selectedColor && selectedColor.image_urls.length > 1 && (
-                <div className="grid grid-cols-5 gap-2">
-                  {selectedColor.image_urls.map((img, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setSelectedImageIndex(idx)}
-                      className={`aspect-square rounded-lg overflow-hidden border-2 transition ${
-                        selectedImageIndex === idx
-                          ? 'border-primary ring-2 ring-primary ring-opacity-30'
-                          : 'border-gray-200 hover:border-gray-400'
-                      }`}
-                    >
-                      <img src={img} alt={`View ${idx + 1}`} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Color Variants */}
-              {design.design_colors && design.design_colors.length > 0 && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Available Colors</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {design.design_colors.map((color, index) => {
-                      let colorSizeQuantities = color.size_quantities;
-                      if (typeof colorSizeQuantities === 'string') {
-                        try {
-                          colorSizeQuantities = JSON.parse(colorSizeQuantities);
-                        } catch (e) {
-                          colorSizeQuantities = undefined;
-                        }
-                      }
-                      const colorTotalStock = colorSizeQuantities 
-                        ? Object.values(colorSizeQuantities).reduce((sum: number, qty: any) => sum + (Number(qty) || 0), 0)
-                        : 0;
-
-                      return (
-                        <button
-                          key={color.id}
-                          onClick={() => {
-                            setSelectedColorIndex(index);
-                            setSelectedImageIndex(0);
-                          }}
-                          className={`p-3 rounded-lg border-2 transition text-left ${
-                            selectedColorIndex === index
-                              ? 'border-primary bg-primary bg-opacity-5'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            {color.color_code && (
-                              <div
-                                className="w-5 h-5 rounded-full border-2 border-white shadow-sm ring-1 ring-gray-300"
-                                style={{ backgroundColor: color.color_code }}
-                              />
-                            )}
-                            <span className="text-sm font-semibold text-gray-900 truncate">{color.color_name}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs">
-                            <span className={colorTotalStock > 0 ? 'text-green-600' : 'text-red-600'}>
-                              {colorTotalStock > 0 ? `${colorTotalStock} in stock` : 'Out of stock'}
-                            </span>
-                            <span className="font-bold text-primary">₹{color.price.toLocaleString()}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                {/* Image Thumbnails - Horizontal Scroll */}
+                {selectedColor && selectedColor.image_urls.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {selectedColor.image_urls.map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedImageIndex(idx)}
+                        className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 transition ${
+                          selectedImageIndex === idx
+                            ? 'border-primary ring-2 ring-primary ring-opacity-30'
+                            : 'border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        <img src={img} alt={`View ${idx + 1}`} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+
+                {/* Color Variants - Compact */}
+                {design.design_colors && design.design_colors.length > 0 && (
+                  <div className="border-t border-gray-200 pt-2 sm:pt-3">
+                    <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-2">Colors ({design.design_colors.length})</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {design.design_colors.map((color, index) => {
+                        let colorSizeQuantities = color.size_quantities;
+                        if (typeof colorSizeQuantities === 'string') {
+                          try {
+                            colorSizeQuantities = JSON.parse(colorSizeQuantities);
+                          } catch (e) {
+                            colorSizeQuantities = undefined;
+                          }
+                        }
+                        const colorTotalStock = colorSizeQuantities 
+                          ? Object.values(colorSizeQuantities).reduce((sum: number, qty: any) => sum + (Number(qty) || 0), 0)
+                          : 0;
+
+                        return (
+                          <button
+                            key={color.id}
+                            onClick={() => {
+                              setSelectedColorIndex(index);
+                              setSelectedImageIndex(0);
+                            }}
+                            className={`p-2 rounded-lg border-2 transition text-left ${
+                              selectedColorIndex === index
+                                ? 'border-primary bg-primary bg-opacity-5'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1">
+                              {color.color_code && (
+                                <div
+                                  className="w-4 h-4 rounded-full border-2 border-white shadow-sm ring-1 ring-gray-300 flex-shrink-0"
+                                  style={{ backgroundColor: color.color_code }}
+                                />
+                              )}
+                              <span className="text-xs sm:text-sm font-semibold text-gray-900 truncate">{color.color_name}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className={colorTotalStock > 0 ? 'text-green-600' : 'text-red-600'}>
+                                {colorTotalStock > 0 ? `${colorTotalStock}` : 'Out'}
+                              </span>
+                              <span className="font-bold text-primary">₹{color.price.toLocaleString()}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
 
             {/* Right Column - Product Details */}
-            <div>
-              {/* Price */}
-              {selectedColor && (
-                <div className="mb-6">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-primary">₹{selectedColor.price.toLocaleString()}</span>
-                    <span className="text-sm text-gray-500">per piece</span>
+            <div className="space-y-3">
+              {/* Price & Description Combined */}
+              <div className="bg-gradient-to-br from-primary/5 to-blue-50 rounded-lg p-3 border border-primary/20">
+                {selectedColor && (
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className="text-2xl sm:text-3xl font-bold text-primary">₹{selectedColor.price.toLocaleString()}</span>
+                    <span className="text-xs text-gray-600">per piece</span>
                   </div>
-                </div>
-              )}
+                )}
+                {design.description && (
+                  <p className="text-xs sm:text-sm text-gray-700 leading-relaxed line-clamp-2">{design.description}</p>
+                )}
+              </div>
 
-              {/* Description */}
-              {design.description && (
-                <div className="mb-6 pb-6 border-b border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2">Description</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">{design.description}</p>
-                </div>
-              )}
-
-              {/* Size Selection */}
-              {/* Admin Toggle for View Mode */}
+              {/* Admin Toggle for View Mode - Compact */}
               {isAdmin && sizeSets.length > 0 && effectiveAvailableSizes && effectiveAvailableSizes.length > 0 && (
-                <div className="mb-4 pb-4 border-b border-gray-200">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-700">View Mode:</span>
-                    <button
-                      onClick={() => {
-                        setViewMode(viewMode === 'individual' ? 'sets' : 'individual');
-                        // Reset quantities when switching modes
-                        setSizeQuantities({});
-                        setSetQuantities({});
-                      }}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${
-                        viewMode === 'sets'
-                          ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
-                          : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-primary'
-                      }`}
-                    >
-                      {viewMode === 'sets' ? (
-                        <>
-                          <ToggleRight className="w-5 h-5" />
-                          <span>Sets Mode</span>
-                        </>
-                      ) : (
-                        <>
-                          <ToggleLeft className="w-5 h-5" />
-                          <span>Individual Sizes</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-200">
+                  <span className="text-xs font-medium text-gray-700">View:</span>
+                  <button
+                    onClick={() => {
+                      setViewMode(viewMode === 'individual' ? 'sets' : 'individual');
+                      setSizeQuantities({});
+                      setSetQuantities({});
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                      viewMode === 'sets'
+                        ? 'bg-primary text-white'
+                        : 'bg-white border border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    {viewMode === 'sets' ? (
+                      <>
+                        <ToggleRight className="w-4 h-4" />
+                        <span>Sets</span>
+                      </>
+                    ) : (
+                      <>
+                        <ToggleLeft className="w-4 h-4" />
+                        <span>Individual</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
 
               {(isAdmin && viewMode === 'sets') || (isRetailer && !isAdmin) ? (
                 /* Retailer: Size Set Selection */
                 sizeSets.length > 0 && (
-                  <div className="mb-4 sm:mb-6">
-                    <div className="flex items-center justify-between mb-2 sm:mb-3">
-                      <div className="flex items-center space-x-2">
-                        <Package className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-                        <h3 className="text-sm sm:text-base font-semibold text-gray-900">Select Size Sets</h3>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <Package className="w-4 h-4 text-primary" />
+                        <h3 className="text-xs sm:text-sm font-semibold text-gray-900">Size Sets</h3>
                       </div>
                       {totalItemsToAdd > 0 && (
-                        <span className="text-xs sm:text-sm font-medium text-primary bg-primary bg-opacity-10 px-2 py-1 rounded">
-                          {totalItemsToAdd} set(s) selected
+                        <span className="text-xs font-medium text-white bg-primary px-2 py-0.5 rounded-full">
+                          {totalItemsToAdd}
                         </span>
                       )}
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
                       {sizeSets.map((sizeSet) => {
                         const currentQty = setQuantities[sizeSet.id] || 0;
                         
                         return (
                           <div
                             key={sizeSet.id}
-                            className={`flex items-center justify-between p-3 rounded-lg border-2 transition ${
+                            className={`flex items-center justify-between p-2 rounded-lg border transition ${
                               currentQty > 0
-                                ? 'border-primary bg-primary bg-opacity-5'
+                                ? 'border-primary bg-primary/5'
                                 : 'border-gray-200 hover:border-gray-300'
                             }`}
                           >
-                            <div className="flex items-center space-x-3 flex-1">
-                              <div className="min-w-0">
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-sm sm:text-base font-semibold text-gray-900">{sizeSet.name}</span>
-                                  <span className="text-xs text-gray-500">
-                                    ({sizeSet.sizes.join(', ')})
-                                  </span>
-                                </div>
-                              </div>
+                            <div className="flex-1 min-w-0 mr-2">
+                              <div className="text-xs sm:text-sm font-semibold text-gray-900 truncate">{sizeSet.name}</div>
+                              <div className="text-xs text-gray-500 truncate">{sizeSet.sizes.join(', ')}</div>
                             </div>
                             
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => updateSetQuantity(sizeSet.id, currentQty - 1)}
                                 disabled={currentQty === 0}
-                                className="w-8 h-8 rounded-lg bg-secondary hover:bg-gray-300 transition disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-center font-bold text-lg"
+                                className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 transition disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-center font-bold"
                               >
                                 −
                               </button>
-                              <span className="text-base font-semibold w-8 text-center">{currentQty}</span>
+                              <span className="text-sm font-semibold w-6 text-center">{currentQty}</span>
                               <button
                                 onClick={() => updateSetQuantity(sizeSet.id, currentQty + 1)}
-                                className="w-8 h-8 rounded-lg bg-secondary hover:bg-gray-300 transition flex items-center justify-center font-bold text-lg"
+                                className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 transition flex items-center justify-center font-bold"
                               >
                                 +
                               </button>
@@ -1592,19 +2144,19 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
               ) : (
                 /* Guest: Per-Size Selection */
                 effectiveAvailableSizes && effectiveAvailableSizes.length > 0 ? (
-                  <div className="mb-4 sm:mb-6">
-                    <div className="flex items-center justify-between mb-2 sm:mb-3">
-                      <div className="flex items-center space-x-2">
-                        <Package className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-                        <h3 className="text-sm sm:text-base font-semibold text-gray-900">Select Size & Quantity</h3>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <Package className="w-4 h-4 text-primary" />
+                        <h3 className="text-xs sm:text-sm font-semibold text-gray-900">Sizes</h3>
                       </div>
                       {totalItemsToAdd > 0 && (
-                        <span className="text-xs sm:text-sm font-medium text-primary bg-primary bg-opacity-10 px-2 py-1 rounded">
-                          {totalItemsToAdd} item(s) selected
+                        <span className="text-xs font-medium text-white bg-primary px-2 py-0.5 rounded-full">
+                          {totalItemsToAdd}
                         </span>
                       )}
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
                       {effectiveAvailableSizes.map((size) => {
                         const stockForSize = getStockForSize(size);
                         const currentQty = sizeQuantities[size] || 0;
@@ -1612,15 +2164,15 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                         return (
                           <div
                             key={size}
-                            className={`flex items-center justify-between p-3 rounded-lg border-2 transition ${
+                            className={`flex items-center justify-between p-2 rounded-lg border transition ${
                               currentQty > 0
-                                ? 'border-primary bg-primary bg-opacity-5'
+                                ? 'border-primary bg-primary/5'
                                 : 'border-gray-200 hover:border-gray-300'
                             }`}
                           >
-                            <div className="flex items-center space-x-3 flex-1">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
                               <div className="min-w-0">
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center gap-1.5">
                                   <span className="text-sm sm:text-base font-semibold text-gray-900">{size}</span>
                                   <span className={`text-xs ${stockForSize > 0 ? 'text-green-600' : 'text-gray-500'}`}>
                                     {stockForSize > 0 ? `${stockForSize} in stock` : 'Available on order'}
@@ -1629,18 +2181,18 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                               </div>
                             </div>
                             
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => updateSizeQuantity(size, currentQty - 1)}
                                 disabled={currentQty === 0}
-                                className="w-8 h-8 rounded-lg bg-secondary hover:bg-gray-300 transition disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-center font-bold text-lg"
+                                className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 transition disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-center font-bold"
                               >
                                 −
                               </button>
-                              <span className="text-base font-semibold w-8 text-center">{currentQty}</span>
+                              <span className="text-sm font-semibold w-6 text-center">{currentQty}</span>
                               <button
                                 onClick={() => updateSizeQuantity(size, currentQty + 1)}
-                                className="w-8 h-8 rounded-lg bg-secondary hover:bg-gray-300 transition flex items-center justify-center font-bold text-lg"
+                                className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 transition flex items-center justify-center font-bold"
                               >
                                 +
                               </button>
@@ -1651,37 +2203,38 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                     </div>
                   </div>
                 ) : (
-                  <div className="mb-4 sm:mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-sm text-yellow-800">
-                      No sizes available for this design. Please contact support or check back later.
+                  <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-xs text-yellow-800">
+                      No sizes available. Contact support.
                     </p>
                   </div>
                 )
               )}
 
+              {/* Action Buttons - Compact */}
               {selectedColor && (
-                <div className="mb-4 sm:mb-6 space-y-2 sm:space-y-3">
+                <div className="space-y-2 pt-2 border-t border-gray-200">
                   <button
                     onClick={handleAddToCart}
                     disabled={addingToCart || totalItemsToAdd === 0}
-                    className="w-full bg-primary text-white py-3 sm:py-4 text-sm sm:text-base rounded-lg font-semibold hover:bg-opacity-90 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                    className="w-full bg-gradient-to-r from-primary to-blue-600 text-white py-2.5 sm:py-3 text-sm rounded-lg font-semibold hover:shadow-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <ShoppingCart className="w-4 h-4" />
                     <span>
                       {addingToCart 
                         ? 'Adding...' 
                         : totalItemsToAdd === 0 
-                        ? 'Select Size & Quantity' 
-                        : `Add ${totalItemsToAdd} Item(s) to Cart`}
+                        ? 'Select Size' 
+                        : `Add ${totalItemsToAdd} to Cart`}
                     </span>
                   </button>
                   <button
                     onClick={handleAddToWishlist}
                     disabled={addingToWishlist}
-                    className="w-full bg-white border-2 border-primary text-primary py-3 sm:py-4 text-sm sm:text-base rounded-lg font-semibold hover:bg-primary hover:text-white transition flex items-center justify-center space-x-2"
+                    className="w-full bg-white border border-gray-300 text-gray-700 py-2 sm:py-2.5 text-sm rounded-lg font-medium hover:border-primary hover:text-primary transition flex items-center justify-center gap-2"
                   >
-                    <Heart className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>{addingToWishlist ? 'Adding...' : 'Add to Wishlist'}</span>
+                    <Heart className="w-4 h-4" />
+                    <span>{addingToWishlist ? 'Adding...' : 'Wishlist'}</span>
                   </button>
                 </div>
               )}
@@ -1689,6 +2242,8 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
           </div>
         </div>
       </div>
+      </div>
     </div>
+    
   );
 }

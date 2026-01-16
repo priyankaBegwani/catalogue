@@ -70,6 +70,10 @@ export interface Design {
   category?: DesignCategory;
   style?: DesignStyle;
   fabric_type?: FabricType;
+  order_count?: number;
+  last_ordered_at?: string;
+  total_quantity_sold?: number;
+  is_ready_to_ship?: boolean;
 }
 
 export interface DesignColor {

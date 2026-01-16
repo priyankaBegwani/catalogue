@@ -13,7 +13,8 @@ import {
   PinOff,
   ShoppingBag,
   Phone,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Info
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,10 +32,10 @@ export function Sidebar({ isOpen, isPinned, onTogglePin, onClose }: SidebarProps
 
   const navigationItems = [
     ...(isAdmin ? [{
-      id: 'dashboard',
-      label: 'Dashboard',
+      id: 'admin',
+      label: 'Admin Dashboard',
       icon: BarChart3,
-      path: '/dashboard',
+      path: '/admin',
       adminOnly: true,
     }] : []),
     {
@@ -93,6 +94,13 @@ export function Sidebar({ isOpen, isPinned, onTogglePin, onClose }: SidebarProps
       label: 'Contact Us',
       icon: Phone,
       path: '/contact',
+      adminOnly: false,
+    },
+    {
+      id: 'about',
+      label: 'About Us',
+      icon: Info,
+      path: '/about',
       adminOnly: false,
     },
   ];

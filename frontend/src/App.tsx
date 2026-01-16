@@ -12,8 +12,10 @@ import {
   Orders,
   ProfilePage,
   Dashboard,
+  AdminDashboard,
   ContactUs,
   Settings,
+  AboutUs,
 } from './pages';
 import { Sidebar, TopBar, TawkToChat } from './components';
 
@@ -68,10 +70,14 @@ function AppContent() {
         }`}
       >
         <Routes>
-        <Route path="/" element={<Navigate to={isAdmin ? '/dashboard' : '/catalogue'} replace />} />
+        <Route path="/" element={<Navigate to={isAdmin ? '/admin' : '/catalogue'} replace />} />
         <Route
           path="/dashboard"
           element={isAdmin ? <Dashboard /> : <Navigate to="/catalogue" replace />}
+        />
+        <Route
+          path="/admin"
+          element={isAdmin ? <AdminDashboard /> : <Navigate to="/catalogue" replace />}
         />
         <Route path="/catalogue" element={<Catalogue />} />
         <Route path="/designs" element={<DesignManagement />} />
@@ -81,6 +87,7 @@ function AppContent() {
         <Route path="/orders" element={<Orders />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/contact" element={<ContactUs />} />
+        <Route path="/about" element={<AboutUs />} />
         <Route
           path="/settings"
           element={isAdmin ? <Settings /> : <Navigate to="/catalogue" replace />}

@@ -111,4 +111,70 @@ router.patch('/:id', authenticateUser, requireAdmin, async (req, res) => {
   }
 });
 
+router.delete('/:id', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Prevent admin from deleting themselves
+    if (id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+
+    // Check if user exists
+    const { data: userProfile, error: fetchError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchError) {
+      return res.status(400).json({ error: fetchError.message });
+    }
+
+    if (!userProfile) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Delete user from authentication system (this will cascade to user_profiles via trigger)
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(id);
+
+    if (authDeleteError) {
+      console.error('Auth delete error:', authDeleteError);
+      return res.status(400).json({ error: authDeleteError.message });
+    }
+
+    // Verify deletion from user_profiles
+    const { data: deletedProfile, error: profileDeleteError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    // If profile still exists, manually delete it
+    if (deletedProfile) {
+      const { error: manualDeleteError } = await supabase
+        .from('user_profiles')
+        .delete()
+        .eq('id', id);
+
+      if (manualDeleteError) {
+        console.error('Manual profile delete error:', manualDeleteError);
+        return res.status(400).json({ error: 'User deleted from auth but profile cleanup failed' });
+      }
+    }
+
+    res.json({ 
+      message: 'User deleted successfully',
+      deletedUser: {
+        id: userProfile.id,
+        email: userProfile.email,
+        full_name: userProfile.full_name
+      }
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
 export default router;

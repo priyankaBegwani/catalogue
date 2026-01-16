@@ -14,6 +14,7 @@ import partyRoutes from './routes/parties.js';
 import transportRoutes from './routes/transport.js';
 import locationRoutes from './routes/locations.js';
 import ordersRoutes from './routes/orders.js';
+import adminRoutes from './routes/admin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -38,6 +39,7 @@ app.use('/api/parties', partyRoutes);
 app.use('/api/transport', transportRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/orders', ordersRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
