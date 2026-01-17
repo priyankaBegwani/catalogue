@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api, Party } from '../lib/api';
 import * as XLSX from 'xlsx';
-import { Plus, Search, Edit2, Trash2, Users, MapPin, Phone, Upload, Download, Building } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Users, MapPin, Phone, Upload, Download, Building, Award } from 'lucide-react';
+import { PartyTierSelector } from '../components/PartyTierSelector';
+import { getPricingConfig } from '../utils/pricingTiers';
 
 
 const PartyEntry: React.FC = () => {
@@ -27,7 +29,13 @@ const PartyEntry: React.FC = () => {
     state: '',
     pincode: '',
     phone_number: '',
-    gst_number: ''
+    gst_number: '',
+    volume_tier_id: '',
+    relationship_tier_id: '',
+    hybrid_auto_tier_id: '',
+    hybrid_manual_override: false,
+    hybrid_override_tier_id: '',
+    monthly_order_count: 0
   });
   const [gstError, setGstError] = useState('');
   const [phoneError, setPhoneError] = useState('');
@@ -136,7 +144,13 @@ const PartyEntry: React.FC = () => {
       state: party.state,
       pincode: party.pincode,
       phone_number: party.phone_number,
-      gst_number: party.gst_number
+      gst_number: party.gst_number,
+      volume_tier_id: party.volume_tier_id || '',
+      relationship_tier_id: party.relationship_tier_id || '',
+      hybrid_auto_tier_id: party.hybrid_auto_tier_id || '',
+      hybrid_manual_override: party.hybrid_manual_override || false,
+      hybrid_override_tier_id: party.hybrid_override_tier_id || '',
+      monthly_order_count: party.monthly_order_count || 0
     });
     
     // Load districts and cities for editing
@@ -288,7 +302,13 @@ const PartyEntry: React.FC = () => {
       state: '',
       pincode: '',
       phone_number: '',
-      gst_number: ''
+      gst_number: '',
+      volume_tier_id: '',
+      relationship_tier_id: '',
+      hybrid_auto_tier_id: '',
+      hybrid_manual_override: false,
+      hybrid_override_tier_id: '',
+      monthly_order_count: 0
     });
     setSelectedDistrict('');
     setDistricts([]);
@@ -810,6 +830,33 @@ const PartyEntry: React.FC = () => {
                 {gstError && (
                   <p className="mt-1 text-sm text-red-600">{gstError}</p>
                 )}
+              </div>
+
+              {/* Pricing Tier Section */}
+              <div className="border-t pt-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Award className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Pricing Tier</h3>
+                </div>
+                <PartyTierSelector
+                  partyId={editingParty?.id}
+                  volumeTierId={formData.volume_tier_id}
+                  relationshipTierId={formData.relationship_tier_id}
+                  hybridAutoTierId={formData.hybrid_auto_tier_id}
+                  hybridManualOverride={formData.hybrid_manual_override}
+                  hybridOverrideTierId={formData.hybrid_override_tier_id}
+                  monthlyOrderCount={formData.monthly_order_count}
+                  onTierChange={(tierData) => {
+                    setFormData({
+                      ...formData,
+                      volume_tier_id: tierData.volumeTierId || formData.volume_tier_id,
+                      relationship_tier_id: tierData.relationshipTierId || formData.relationship_tier_id,
+                      hybrid_auto_tier_id: tierData.hybridAutoTierId || formData.hybrid_auto_tier_id,
+                      hybrid_manual_override: tierData.hybridManualOverride !== undefined ? tierData.hybridManualOverride : formData.hybrid_manual_override,
+                      hybrid_override_tier_id: tierData.hybridOverrideTierId || formData.hybrid_override_tier_id
+                    });
+                  }}
+                />
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">

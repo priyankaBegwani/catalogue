@@ -11,5 +11,6 @@ export { ProfilePage } from './ProfilePage';
 export { ContactUs } from './ContactUs';
 export { AboutUs } from './AboutUs';
 export { Settings } from './Settings';
+export { PricingTiers } from './PricingTiers';
 export { Login } from './Login';
 export { Setup } from './Setup';

@@ -15,6 +15,7 @@ import {
   AdminDashboard,
   ContactUs,
   Settings,
+  PricingTiers,
   AboutUs,
 } from './pages';
 import { Sidebar, TopBar, TawkToChat } from './components';
@@ -91,6 +92,10 @@ function AppContent() {
         <Route
           path="/settings"
           element={isAdmin ? <Settings /> : <Navigate to="/catalogue" replace />}
+        />
+        <Route
+          path="/pricing-tiers"
+          element={isAdmin ? <PricingTiers /> : <Navigate to="/catalogue" replace />}
         />
         <Route path="*" element={<Navigate to="/catalogue" replace />} />
         </Routes>

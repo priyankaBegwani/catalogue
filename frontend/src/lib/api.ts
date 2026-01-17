@@ -146,6 +146,14 @@ export interface Party {
   created_at: string;
   updated_at?: string;
   user_profiles?: UserProfile | null;
+  // Pricing tier fields
+  volume_tier_id?: string;
+  relationship_tier_id?: string;
+  hybrid_auto_tier_id?: string;
+  hybrid_manual_override?: boolean;
+  hybrid_override_tier_id?: string;
+  monthly_order_count?: number;
+  tier_last_updated?: string;
 }
 
 export interface ImportPartyData {
@@ -905,7 +913,13 @@ class ApiClient {
     state: string,
     pincode: string,
     phone_number: string,
-    gst_number: string
+    gst_number: string,
+    volume_tier_id?: string,
+    relationship_tier_id?: string,
+    hybrid_auto_tier_id?: string,
+    hybrid_manual_override?: boolean,
+    hybrid_override_tier_id?: string,
+    monthly_order_count?: number
   }, editingParty: Party | null): Promise<Party> {
       const url = editingParty 
           ? `${API_URL}/api/parties/${editingParty.id}`

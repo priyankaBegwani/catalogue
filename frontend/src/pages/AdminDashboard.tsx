@@ -489,7 +489,7 @@ const SegmentedControl: React.FC<{
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [designMetric, setDesignMetric] = useState<'views' | 'orders' | 'shares'>('orders');
@@ -506,10 +506,10 @@ const AdminDashboard: React.FC = () => {
 
   // Check admin access
   useEffect(() => {
-    if (profile && profile.role !== 'admin') {
+    if (user && user.role !== 'admin') {
       navigate('/catalogue');
     }
-  }, [profile, navigate]);
+  }, [user, navigate]);
 
   // Load dashboard data
   useEffect(() => {

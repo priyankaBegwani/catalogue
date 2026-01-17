@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranding } from '../hooks/useBranding';
 import {
   BarChart3,
   Package,
@@ -8,27 +9,24 @@ import {
   UserPlus,
   Truck,
   ChevronLeft,
-  ChevronRight,
-  Pin,
-  PinOff,
   ShoppingBag,
   Phone,
   Settings as SettingsIcon,
-  Info
+  Info,
+  TrendingUp
 } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
-  isPinned: boolean;
-  onTogglePin: () => void;
   onClose: () => void;
 }
 
-export function Sidebar({ isOpen, isPinned, onTogglePin, onClose }: SidebarProps) {
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname.slice(1) || 'catalogue';
-  const { isAdmin } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
+  const branding = useBranding();
 
   const navigationItems = [
     ...(isAdmin ? [{
@@ -82,6 +80,13 @@ export function Sidebar({ isOpen, isPinned, onTogglePin, onClose }: SidebarProps
         adminOnly: true,
       },
       {
+        id: 'pricing-tiers',
+        label: 'Pricing Tiers',
+        icon: TrendingUp,
+        path: '/pricing-tiers',
+        adminOnly: true,
+      },
+      {
         id: 'settings',
         label: 'Settings',
         icon: SettingsIcon,
@@ -107,15 +112,13 @@ export function Sidebar({ isOpen, isPinned, onTogglePin, onClose }: SidebarProps
 
   const handleNavigate = (path: string) => {
     navigate(path);
-    if (!isPinned) {
-      onClose();
-    }
+    onClose();
   };
 
   return (
     <>
       {/* Overlay for mobile */}
-      {isOpen && !isPinned && (
+      {isOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
           onClick={onClose}
@@ -126,7 +129,7 @@ export function Sidebar({ isOpen, isPinned, onTogglePin, onClose }: SidebarProps
       <aside
         className={`fixed top-0 left-0 h-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white z-50 transition-all duration-300 ease-in-out shadow-2xl ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } ${isPinned ? 'lg:translate-x-0' : ''}`}
+        }`}
         style={{ width: '280px' }}
       >
         {/* Sidebar Header */}
@@ -137,21 +140,14 @@ export function Sidebar({ isOpen, isPinned, onTogglePin, onClose }: SidebarProps
             </div>
             <div>
               <h2 className="font-bold text-lg bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                Indie Craft
+                {branding.brandName}
               </h2>
               <p className="text-xs text-slate-400">Catalogue System</p>
             </div>
           </div>
           <button
-            onClick={onTogglePin}
-            className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors hidden lg:block"
-            title={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
-          >
-            {isPinned ? <PinOff size={18} /> : <Pin size={18} />}
-          </button>
-          <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors lg:hidden"
+            className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
           >
             <ChevronLeft size={20} />
           </button>
@@ -197,23 +193,12 @@ export function Sidebar({ isOpen, isPinned, onTogglePin, onClose }: SidebarProps
               IC
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">Indie Craft</p>
+              <p className="text-sm font-medium text-white truncate">{branding.brandName}</p>
               <p className="text-xs text-slate-400">v1.0.0</p>
             </div>
           </div>
         </div>
       </aside>
-
-      {/* Toggle Button (when sidebar is closed and not pinned) */}
-      {!isOpen && !isPinned && (
-        <button
-          onClick={() => {}}
-          className="fixed top-24 left-0 z-30 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-3 rounded-r-xl shadow-lg hover:shadow-xl transition-all duration-200 lg:hidden"
-          style={{ display: 'none' }} // Hidden as we'll control via TopBar
-        >
-          <ChevronRight size={20} />
-        </button>
-      )}
     </>
   );
 }

@@ -13,6 +13,7 @@ import {
 import { api } from '../lib/api';
 import { CartModal } from './CartModal';
 import { Wishlist } from './Wishlist';
+import { useBranding } from '../hooks/useBranding';
 
 interface TopBarProps {
   onToggleSidebar: () => void;
@@ -22,6 +23,7 @@ interface TopBarProps {
 export function TopBar({ onToggleSidebar, isSidebarOpen }: TopBarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const branding = useBranding();
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
   const [cartModalOpen, setCartModalOpen] = useState(false);
@@ -77,8 +79,8 @@ export function TopBar({ onToggleSidebar, isSidebarOpen }: TopBarProps) {
           {/* Center: Logo */}
           <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center">
             <img
-              src="/Logo indie.png"
-              alt="Indie Craft"
+              src={branding.logoUrl}
+              alt={branding.brandName}
               style={{ height: '10rem', paddingTop: '10px' }}
               className="w-auto object-contain"
             />

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile } from '../lib/api';
 import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, Phone, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { getWhatsAppUrl, useBranding } from '../hooks/useBranding';
 
 export type DesignTag = 'new-arrival' | 'trending' | 'best-seller' | 'fast-repeat' | 'ready-to-ship' | 'low-stock';
 
@@ -184,6 +185,8 @@ const highlightTags: HighlightTag[] = [
 ];
 
 export function Catalogue() {
+  const { user } = useAuth();
+  const branding = useBranding();
   const [designs, setDesigns] = useState<Design[]>([]);
   const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([]);
   const [categories, setCategories] = useState<DesignCategory[]>([]);
@@ -539,7 +542,7 @@ export function Catalogue() {
     
     message += `📱 *Contact us for inquiries and orders!*`;
     
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    const whatsappUrl = getWhatsAppUrl(message);
     window.open(whatsappUrl, '_blank');
     
     // Close dialog and reset
@@ -735,7 +738,7 @@ export function Catalogue() {
       <div className="mb-6 sm:mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary mb-2">Indie Craft Collection</h1>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary mb-2">{branding.brandName} Collection</h1>
             <p className="text-sm sm:text-base lg:text-lg text-gray-600">Discover our premium collection of ethnic wear</p>
           </div>
           <div className="flex items-center gap-3">
@@ -1180,7 +1183,7 @@ interface DesignCardProps {
   onShareClick?: (design: Design) => void;
 }
 
-function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection }: DesignCardProps) {
+function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection, onShareClick }: DesignCardProps) {
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const slideshowIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -1508,12 +1511,6 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
           )}
           {design.style && (
             <span>{design.style.name}</span>
-          )}
-          {(design.fabric_type || design.style) && design.work_type && (
-            <span className="text-gray-400">•</span>
-          )}
-          {design.work_type && (
-            <span>{design.work_type}</span>
           )}
         </div>
 

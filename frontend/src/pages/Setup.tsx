@@ -1,7 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
+import { useBranding } from '../hooks/useBranding';
 import { ShieldCheck } from 'lucide-react';
 
 export function Setup() {
+  const branding = useBranding();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -47,8 +51,8 @@ export function Setup() {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
         <div className="flex items-center justify-center mb-8">
           <img
-            src="/Logo indie.png"
-            alt="Indie Craft"
+            src={branding.logoUrl}
+            alt={branding.brandName}
             className="h-24 w-auto"
           />
         </div>

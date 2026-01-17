@@ -5,12 +5,14 @@ import { LogOut, Users, Palette, Heart, ShoppingCart, Menu, X, Truck, UserPlus, 
 import { api } from '../lib/api';
 import { CartModal } from './CartModal';
 import { Wishlist } from './Wishlist';
+import { useBranding } from '../hooks/useBranding';
 
 export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname.slice(1) || 'catalogue';
   const { user, logout, isAdmin } = useAuth();
+  const branding = useBranding();
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -69,8 +71,8 @@ export function Navbar() {
               className="flex items-center group transition-transform hover:scale-105"
             >
               <img
-                src="/Logo indie.png"
-                alt="Indie Craft"
+                src={branding.logoUrl}
+                alt={branding.brandName}
                 className="h-14 sm:h-16 lg:h-18 w-auto object-contain transition-all"
               />
             </button>

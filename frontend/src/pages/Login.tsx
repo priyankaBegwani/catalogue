@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranding } from '../hooks/useBranding';
 
 interface LoginProps {
   onShowSetup?: () => void;
@@ -10,7 +12,9 @@ export function Login({ onShowSetup }: LoginProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
   const { login } = useAuth();
+  const branding = useBranding();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,8 +35,8 @@ export function Login({ onShowSetup }: LoginProps) {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
         <div className="flex justify-center">
           <img
-            src="/Logo indie.png"
-            alt="Indie Craft"
+            src={branding.logoUrl}
+            alt={branding.brandName}
             className="h-36 w-auto"
           />
         </div>

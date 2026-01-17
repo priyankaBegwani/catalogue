@@ -1,7 +1,7 @@
 // Component exports for cleaner imports
 export { Sidebar } from './Sidebar';
 export { TopBar } from './TopBar';
-export { Navbar } from './Navbar';
+export { PartyTierSelector } from './PartyTierSelector';
 export { AddDesignModal } from './AddDesignModal';
 export { ViewDesignModal } from './ViewDesignModal';
 export { CartModal } from './CartModal';
