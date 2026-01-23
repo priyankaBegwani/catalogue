@@ -42,3 +42,47 @@ export const requireAdmin = (req, res, next) => {
   }
   next();
 };
+
+export const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      req.user = null;
+      req.profile = null;
+      return next();
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      req.user = null;
+      req.profile = null;
+      return next();
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      req.user = null;
+      req.profile = null;
+      return next();
+    }
+
+    req.user = user;
+    req.profile = profile;
+    next();
+  } catch (error) {
+    console.error('Optional authentication error:', error);
+    req.user = null;
+    req.profile = null;
+    next();
+  }
+};

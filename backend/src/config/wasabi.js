@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const wasabiClient = new S3Client({
@@ -18,13 +18,19 @@ export async function generateUploadUrl(key, contentType) {
     Bucket: BUCKET_NAME,
     Key: key,
     ContentType: contentType,
+    ACL: 'public-read', // Make object publicly readable
   });
 
   const signedUrl = await getSignedUrl(wasabiClient, command, { expiresIn: 3600 });
 
+  // Generate public URL
+  // CDN URL should include bucket name in path: https://cdn.domain.com/bucket-name/designs/...
+  // This allows Cloudflare CNAME to point to s3.region.wasabisys.com and proxy correctly
   const publicUrl = CDN_URL
-    ? `${CDN_URL}/${key}`
+    ? `${CDN_URL}/${BUCKET_NAME}/${key}`
     : `${process.env.WASABI_ENDPOINT || 'https://s3.wasabisys.com'}/${BUCKET_NAME}/${key}`;
+  
+  console.log('Generated public URL:', publicUrl);
 
   return {
     uploadUrl: signedUrl,
@@ -40,6 +46,16 @@ export async function deleteFromWasabi(key) {
   });
 
   await wasabiClient.send(command);
+}
+
+export async function generateSignedGetUrl(key, expiresIn = 3600) {
+  const command = new GetObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+  });
+
+  const signedUrl = await getSignedUrl(wasabiClient, command, { expiresIn });
+  return signedUrl;
 }
 
 export { wasabiClient, BUCKET_NAME };

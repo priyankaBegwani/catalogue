@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
-import { authenticateUser } from '../middleware/auth.js';
-import { generateUploadUrl, deleteFromWasabi } from '../config/wasabi.js';
+import { authenticateUser, optionalAuth } from '../middleware/auth.js';
+import { generateUploadUrl, deleteFromWasabi, generateSignedGetUrl } from '../config/wasabi.js';
 import { generateSupabaseUploadUrl, deleteFromSupabase } from '../config/supabaseStorage.js';
 import { generateLocalStoragePath, saveToLocalStorage, deleteFromLocalStorage } from '../config/localStorage.js';
 import { config } from '../config.js';
@@ -151,6 +151,105 @@ router.post('/upload-local', authenticateUser, upload.single('file'), async (req
   } catch (error) {
     console.error('Local upload error:', error);
     res.status(500).json({ error: 'Failed to upload file locally' });
+  }
+});
+
+// Generate signed URLs for image retrieval
+router.post('/signed-url', optionalAuth, async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'imageUrl is required' });
+    }
+
+    // Extract key from URL
+    const urlParts = imageUrl.split('/');
+    const keyStartIndex = urlParts.findIndex(part => part === 'designs');
+    
+    if (keyStartIndex === -1) {
+      return res.status(400).json({ error: 'Invalid image URL format' });
+    }
+
+    const key = urlParts.slice(keyStartIndex).join('/');
+
+    let signedUrl;
+
+    // Generate signed URL based on storage type
+    switch (config.storageType) {
+      case 'cdn':
+        signedUrl = await generateSignedGetUrl(key, 3600); // 1 hour expiry
+        break;
+      
+      case 'supabase':
+        // For Supabase, return the original URL as it handles auth differently
+        signedUrl = imageUrl;
+        break;
+      
+      case 'local':
+        // For local storage, return the original URL
+        signedUrl = imageUrl;
+        break;
+      
+      default:
+        return res.status(400).json({ error: 'Invalid storage type' });
+    }
+
+    res.json({ signedUrl });
+  } catch (error) {
+    console.error('Generate signed URL error:', error);
+    res.status(500).json({ error: 'Failed to generate signed URL' });
+  }
+});
+
+// Batch generate signed URLs for multiple images
+router.post('/signed-urls-batch', optionalAuth, async (req, res) => {
+  try {
+    const { imageUrls } = req.body;
+
+    if (!imageUrls || !Array.isArray(imageUrls)) {
+      return res.status(400).json({ error: 'imageUrls array is required' });
+    }
+
+    const signedUrls = [];
+
+    for (const imageUrl of imageUrls) {
+      try {
+        // Extract key from URL
+        const urlParts = imageUrl.split('/');
+        const keyStartIndex = urlParts.findIndex(part => part === 'designs');
+        
+        if (keyStartIndex !== -1) {
+          const key = urlParts.slice(keyStartIndex).join('/');
+          
+          let signedUrl;
+          
+          switch (config.storageType) {
+            case 'cdn':
+              signedUrl = await generateSignedGetUrl(key, 3600);
+              break;
+            case 'supabase':
+            case 'local':
+              signedUrl = imageUrl;
+              break;
+            default:
+              signedUrl = imageUrl;
+          }
+          
+          signedUrls.push({ originalUrl: imageUrl, signedUrl });
+        } else {
+          signedUrls.push({ originalUrl: imageUrl, signedUrl: imageUrl });
+        }
+      } catch (error) {
+        console.error(`Failed to generate signed URL for ${imageUrl}:`, error);
+        signedUrls.push({ originalUrl: imageUrl, signedUrl: imageUrl, error: error.message });
+      }
+    }
+
+    res.json({ signedUrls });
+  } catch (error) {
+    console.error('Batch signed URL error:', error);
+    res.status(500).json({ error: 'Failed to generate signed URLs' });
   }
 });
 

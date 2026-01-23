@@ -1,10 +1,43 @@
 import express from 'express';
-import { supabase } from '../config.js';
-import { authenticateUser } from '../middleware/auth.js';
+import { supabase, config } from '../config.js';
+import { authenticateUser, optionalAuth } from '../middleware/auth.js';
+import { deleteFromWasabi, generateSignedGetUrl } from '../config/wasabi.js';
+import { deleteFromSupabase } from '../config/supabaseStorage.js';
+import { deleteFromLocalStorage } from '../config/localStorage.js';
 
 const router = express.Router();
 
-router.get('/categories', authenticateUser, async (req, res) => {
+// Helper function to convert image URLs to signed URLs
+async function convertToSignedUrls(imageUrls) {
+  if (!imageUrls || imageUrls.length === 0) return imageUrls;
+  
+  // Only generate signed URLs for CDN storage type
+  if (config.storageType !== 'cdn') {
+    return imageUrls;
+  }
+
+  const signedUrls = [];
+  for (const imageUrl of imageUrls) {
+    try {
+      const urlParts = imageUrl.split('/');
+      const keyStartIndex = urlParts.findIndex(part => part === 'designs');
+      
+      if (keyStartIndex !== -1) {
+        const key = urlParts.slice(keyStartIndex).join('/');
+        const signedUrl = await generateSignedGetUrl(key, 3600);
+        signedUrls.push(signedUrl);
+      } else {
+        signedUrls.push(imageUrl);
+      }
+    } catch (error) {
+      console.error(`Failed to generate signed URL for ${imageUrl}:`, error);
+      signedUrls.push(imageUrl);
+    }
+  }
+  return signedUrls;
+}
+
+router.get('/categories', optionalAuth, async (req, res) => {
   try {
     const { data: categories, error } = await supabase
       .from('design_categories')
@@ -50,7 +83,7 @@ router.get('/styles', authenticateUser, async (req, res) => {
   }
 });
 
-router.get('/fabric-types', authenticateUser, async (req, res) => {
+router.get('/fabric-types', optionalAuth, async (req, res) => {
   try {
     const { data: fabricTypes, error } = await supabase
       .from('fabric_types')
@@ -69,9 +102,10 @@ router.get('/fabric-types', authenticateUser, async (req, res) => {
   }
 });
 
-router.get('/', authenticateUser, async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { category_id, fabric_type_id, active_only } = req.query;
+    const isAuthenticated = !!req.user;
 
     let query = supabase
       .from('designs')
@@ -132,16 +166,44 @@ router.get('/', authenticateUser, async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    res.json(designs);
+    // Convert image URLs to signed URLs for all designs
+    const designsWithSignedUrls = await Promise.all(
+      designs.map(async (design) => ({
+        ...design,
+        design_colors: await Promise.all(
+          (design.design_colors || []).map(async (color) => ({
+            ...color,
+            image_urls: await convertToSignedUrls(color.image_urls)
+          }))
+        )
+      }))
+    );
+
+    // Hide prices for non-authenticated users
+    if (!isAuthenticated) {
+      const sanitizedDesigns = designsWithSignedUrls.map(design => ({
+        ...design,
+        design_colors: design.design_colors?.map(color => ({
+          ...color,
+          price: null,
+          stock_quantity: null,
+          size_quantities: null
+        }))
+      }));
+      return res.json(sanitizedDesigns);
+    }
+
+    res.json(designsWithSignedUrls);
   } catch (error) {
     console.error('Get designs error:', error);
     res.status(500).json({ error: 'Failed to fetch designs' });
   }
 });
 
-router.get('/:id', authenticateUser, async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const isAuthenticated = !!req.user;
 
     const { data: design, error } = await supabase
       .from('designs')
@@ -190,6 +252,20 @@ router.get('/:id', authenticateUser, async (req, res) => {
 
     if (!design) {
       return res.status(404).json({ error: 'Design not found' });
+    }
+
+    // Hide prices for non-authenticated users
+    if (!isAuthenticated) {
+      const sanitizedDesign = {
+        ...design,
+        design_colors: design.design_colors?.map(color => ({
+          ...color,
+          price: null,
+          stock_quantity: null,
+          size_quantities: null
+        }))
+      };
+      return res.json(sanitizedDesign);
     }
 
     res.json(design);
@@ -316,6 +392,66 @@ router.delete('/:id', authenticateUser, async (req, res) => {
 
     const { id } = req.params;
 
+    // First, fetch the design with all its colors and images
+    const { data: design, error: fetchError } = await supabase
+      .from('designs')
+      .select(`
+        *,
+        design_colors (
+          id,
+          image_urls
+        )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      return res.status(400).json({ error: fetchError.message });
+    }
+
+    if (!design) {
+      return res.status(404).json({ error: 'Design not found' });
+    }
+
+    // Delete all images from storage
+    if (design.design_colors && design.design_colors.length > 0) {
+      for (const color of design.design_colors) {
+        if (color.image_urls && color.image_urls.length > 0) {
+          for (const imageUrl of color.image_urls) {
+            try {
+              // Extract key from URL
+              const urlParts = imageUrl.split('/');
+              const keyStartIndex = urlParts.findIndex(part => part === 'designs');
+              
+              if (keyStartIndex !== -1) {
+                const key = urlParts.slice(keyStartIndex).join('/');
+                
+                // Delete from appropriate storage
+                switch (config.storageType) {
+                  case 'cdn':
+                    await deleteFromWasabi(key);
+                    console.log(`Deleted from Wasabi: ${key}`);
+                    break;
+                  case 'supabase':
+                    await deleteFromSupabase(key);
+                    console.log(`Deleted from Supabase: ${key}`);
+                    break;
+                  case 'local':
+                    await deleteFromLocalStorage(key);
+                    console.log(`Deleted from local storage: ${key}`);
+                    break;
+                }
+              }
+            } catch (deleteError) {
+              console.error(`Failed to delete image ${imageUrl}:`, deleteError);
+              // Continue with other images even if one fails
+            }
+          }
+        }
+      }
+    }
+
+    // Now delete the design from database (cascade will delete colors)
     const { error } = await supabase
       .from('designs')
       .delete()
@@ -325,7 +461,7 @@ router.delete('/:id', authenticateUser, async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    res.json({ message: 'Design deleted successfully' });
+    res.json({ message: 'Design and associated images deleted successfully' });
   } catch (error) {
     console.error('Delete design error:', error);
     res.status(500).json({ error: 'Failed to delete design' });
@@ -415,6 +551,56 @@ router.delete('/colors/:colorId', authenticateUser, async (req, res) => {
 
     const { colorId } = req.params;
 
+    // First, fetch the color with its images
+    const { data: color, error: fetchError } = await supabase
+      .from('design_colors')
+      .select('id, image_urls')
+      .eq('id', colorId)
+      .single();
+
+    if (fetchError) {
+      return res.status(400).json({ error: fetchError.message });
+    }
+
+    if (!color) {
+      return res.status(404).json({ error: 'Color not found' });
+    }
+
+    // Delete all images from storage
+    if (color.image_urls && color.image_urls.length > 0) {
+      for (const imageUrl of color.image_urls) {
+        try {
+          // Extract key from URL
+          const urlParts = imageUrl.split('/');
+          const keyStartIndex = urlParts.findIndex(part => part === 'designs');
+          
+          if (keyStartIndex !== -1) {
+            const key = urlParts.slice(keyStartIndex).join('/');
+            
+            // Delete from appropriate storage
+            switch (config.storageType) {
+              case 'cdn':
+                await deleteFromWasabi(key);
+                console.log(`Deleted from Wasabi: ${key}`);
+                break;
+              case 'supabase':
+                await deleteFromSupabase(key);
+                console.log(`Deleted from Supabase: ${key}`);
+                break;
+              case 'local':
+                await deleteFromLocalStorage(key);
+                console.log(`Deleted from local storage: ${key}`);
+                break;
+            }
+          }
+        } catch (deleteError) {
+          console.error(`Failed to delete image ${imageUrl}:`, deleteError);
+          // Continue with other images even if one fails
+        }
+      }
+    }
+
+    // Now delete the color from database
     const { error } = await supabase
       .from('design_colors')
       .delete()
@@ -424,7 +610,7 @@ router.delete('/colors/:colorId', authenticateUser, async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    res.json({ message: 'Color deleted successfully' });
+    res.json({ message: 'Color and associated images deleted successfully' });
   } catch (error) {
     console.error('Delete color error:', error);
     res.status(500).json({ error: 'Failed to delete color' });

@@ -216,7 +216,35 @@ export function Catalogue() {
   useEffect(() => {
     loadCategories();
     loadFabricTypes();
+    loadFiltersFromUrl();
   }, []);
+
+  // Load filters from URL parameters (for shared links)
+  const loadFiltersFromUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    
+    const categories = params.get('categories')?.split(',').filter(Boolean) || [];
+    const colors = params.get('colors')?.split(',').filter(Boolean) || [];
+    const tags = params.get('tags')?.split(',').filter(Boolean) as DesignTag[] || [];
+    const minPrice = params.get('minPrice');
+    const maxPrice = params.get('maxPrice');
+    const designNo = params.get('designNo') || '';
+    const sortBy = params.get('sortBy') as FilterState['sortBy'] || 'newest';
+    
+    if (categories.length > 0 || colors.length > 0 || tags.length > 0 || minPrice || maxPrice || designNo) {
+      setFilters({
+        categories,
+        colors,
+        tags,
+        priceRange: {
+          min: minPrice ? Number(minPrice) : 0,
+          max: maxPrice ? Number(maxPrice) : 100000
+        },
+        designNo,
+        sortBy
+      });
+    }
+  };
 
   useEffect(() => {
     loadDesigns();
@@ -524,23 +552,44 @@ export function Catalogue() {
   // Execute catalogue share with optional user message
   const executeFilteredCatalogueShare = () => {
     const shareableUrl = generateShareableUrl();
-    const filterSummary = generateFilterSummary();
     
-    let message = `🛍️ *Curated Catalogue Selection*\n\n`;
+    // Warm greeting message
+    let message = `✨ *Hello!* ✨\n\n`;
+    message += `We're excited to share our beautiful collection with you! 🎉\n\n`;
+    message += `Explore *${filteredDesigns.length} stunning design${filteredDesigns.length !== 1 ? 's' : ''}* handpicked just for you from our exclusive catalogue.\n\n`;
     
-    if (filterSummary.length > 0) {
-      message += `*Filter Criteria:*\n${filterSummary.join('\n')}\n\n`;
+    // Get 3-4 thumbnail images from different designs
+    const thumbnailCount = Math.min(4, filteredDesigns.length);
+    const thumbnailImages: string[] = [];
+    
+    for (let i = 0; i < thumbnailCount && i < filteredDesigns.length; i++) {
+      const design = filteredDesigns[i];
+      const firstColor = design.design_colors?.[0];
+      if (firstColor?.image_urls && firstColor.image_urls.length > 0) {
+        thumbnailImages.push(firstColor.image_urls[0]);
+      }
     }
     
-    message += `📊 *Results:* ${filteredDesigns.length} design${filteredDesigns.length !== 1 ? 's' : ''} found\n\n`;
-    message += `🔗 *View Filtered Catalogue:*\n${shareableUrl}\n\n`;
+    // Add thumbnail images
+    if (thumbnailImages.length > 0) {
+      message += `📸 *Preview of our designs:*\n`;
+      thumbnailImages.forEach((imageUrl, index) => {
+        message += `${imageUrl}\n`;
+      });
+      message += `\n`;
+    }
+    
+    message += `🔗 *Click here to explore the full catalogue:*\n${shareableUrl}\n\n`;
+    message += `💡 Browse all designs, view details, and find your perfect match!\n`;
+    message += `🔐 Login to view prices and place orders.\n\n`;
     
     // Add user's optional message/query
     if (shareUserMessage.trim()) {
-      message += `💬 *Message:*\n${shareUserMessage.trim()}\n\n`;
+      message += `💬 *Your Message:*\n${shareUserMessage.trim()}\n\n`;
     }
     
-    message += `📱 *Contact us for inquiries and orders!*`;
+    message += `📱 *Have questions? We're here to help!*\n`;
+    message += `Feel free to reach out for pricing, bulk orders, or any inquiries. 😊`;
     
     const whatsappUrl = getWhatsAppUrl(message);
     window.open(whatsappUrl, '_blank');
@@ -1184,6 +1233,7 @@ interface DesignCardProps {
 }
 
 function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection, onShareClick }: DesignCardProps) {
+  const { user } = useAuth();
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const slideshowIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -1192,6 +1242,7 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
   const selectedColor = design.design_colors?.[selectedColorIndex];
   const selectedColorImages = selectedColor?.image_urls || [];
   const firstImage = selectedColorImages[currentImageIndex] || selectedColorImages[0];
+  const isAuthenticated = !!user;
 
   // WhatsApp share function - opens dialog for user message
   const shareOnWhatsApp = (e: React.MouseEvent) => {
@@ -1516,9 +1567,15 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
 
         {/* Price */}
         <div className="flex items-baseline justify-between">
-          <span className="text-lg sm:text-xl font-bold text-primary">
-            ₹{selectedColor?.price.toLocaleString() || '0'}
-          </span>
+          {isAuthenticated && selectedColor?.price ? (
+            <span className="text-lg sm:text-xl font-bold text-primary">
+              ₹{selectedColor.price.toLocaleString()}
+            </span>
+          ) : (
+            <span className="text-sm text-gray-600 font-medium">
+              🔐 Login to view price
+            </span>
+          )}
           <span className="text-xs text-gray-500">MOQ: Contact</span>
         </div>
       </div>
@@ -1532,7 +1589,7 @@ interface DesignQuickViewProps {
 }
 
 function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [sizeQuantities, setSizeQuantities] = useState<Record<string, number>>({});
@@ -1551,6 +1608,7 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
   const [viewMode, setViewMode] = useState<'individual' | 'sets'>('individual'); // Admin toggle state
   const selectedColor = design.design_colors?.[selectedColorIndex];
   const selectedImage = selectedColor?.image_urls?.[selectedImageIndex];
+  const isAuthenticated = !!user;
 
   // Load user profile and size sets
   useEffect(() => {
@@ -2027,7 +2085,11 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                               <span className={colorTotalStock > 0 ? 'text-green-600' : 'text-red-600'}>
                                 {colorTotalStock > 0 ? `${colorTotalStock}` : 'Out'}
                               </span>
-                              <span className="font-bold text-primary">₹{color.price.toLocaleString()}</span>
+                              {isAuthenticated && color.price ? (
+                                <span className="font-bold text-primary">₹{color.price.toLocaleString()}</span>
+                              ) : (
+                                <span className="text-xs text-gray-500">🔐 Login</span>
+                              )}
                             </div>
                           </button>
                         );
@@ -2043,8 +2105,16 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
               <div className="bg-gradient-to-br from-primary/5 to-blue-50 rounded-lg p-3 border border-primary/20">
                 {selectedColor && (
                   <div className="flex items-baseline gap-2 mb-2">
-                    <span className="text-2xl sm:text-3xl font-bold text-primary">₹{selectedColor.price.toLocaleString()}</span>
-                    <span className="text-xs text-gray-600">per piece</span>
+                    {isAuthenticated && selectedColor.price ? (
+                      <>
+                        <span className="text-2xl sm:text-3xl font-bold text-primary">₹{selectedColor.price.toLocaleString()}</span>
+                        <span className="text-xs text-gray-600">per piece</span>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-semibold text-gray-700">🔐 Login to view price</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 {design.description && (
@@ -2211,28 +2281,47 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
               {/* Action Buttons - Compact */}
               {selectedColor && (
                 <div className="space-y-2 pt-2 border-t border-gray-200">
-                  <button
-                    onClick={handleAddToCart}
-                    disabled={addingToCart || totalItemsToAdd === 0}
-                    className="w-full bg-gradient-to-r from-primary to-blue-600 text-white py-2.5 sm:py-3 text-sm rounded-lg font-semibold hover:shadow-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <ShoppingCart className="w-4 h-4" />
-                    <span>
-                      {addingToCart 
-                        ? 'Adding...' 
-                        : totalItemsToAdd === 0 
-                        ? 'Select Size' 
-                        : `Add ${totalItemsToAdd} to Cart`}
-                    </span>
-                  </button>
-                  <button
-                    onClick={handleAddToWishlist}
-                    disabled={addingToWishlist}
-                    className="w-full bg-white border border-gray-300 text-gray-700 py-2 sm:py-2.5 text-sm rounded-lg font-medium hover:border-primary hover:text-primary transition flex items-center justify-center gap-2"
-                  >
-                    <Heart className="w-4 h-4" />
-                    <span>{addingToWishlist ? 'Adding...' : 'Wishlist'}</span>
-                  </button>
+                  {isAuthenticated ? (
+                    <>
+                      <button
+                        onClick={handleAddToCart}
+                        disabled={addingToCart || totalItemsToAdd === 0}
+                        className="w-full bg-gradient-to-r from-primary to-blue-600 text-white py-2.5 sm:py-3 text-sm rounded-lg font-semibold hover:shadow-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        <ShoppingCart className="w-4 h-4" />
+                        <span>
+                          {addingToCart 
+                            ? 'Adding...' 
+                            : totalItemsToAdd === 0 
+                            ? 'Select Size' 
+                            : `Add ${totalItemsToAdd} to Cart`}
+                        </span>
+                      </button>
+                      <button
+                        onClick={handleAddToWishlist}
+                        disabled={addingToWishlist}
+                        className="w-full bg-white border border-gray-300 text-gray-700 py-2 sm:py-2.5 text-sm rounded-lg font-medium hover:border-primary hover:text-primary transition flex items-center justify-center gap-2"
+                      >
+                        <Heart className="w-4 h-4" />
+                        <span>{addingToWishlist ? 'Adding...' : 'Wishlist'}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+                        <p className="text-sm font-semibold text-yellow-900 mb-2">🔐 Login Required</p>
+                        <p className="text-xs text-yellow-800 mb-3">
+                          Please login to view prices, add to cart, or save to wishlist.
+                        </p>
+                        <a
+                          href="/login"
+                          className="inline-block bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-primary-dark transition"
+                        >
+                          Login / Sign Up
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
