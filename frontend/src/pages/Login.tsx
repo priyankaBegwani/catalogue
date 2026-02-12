@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranding } from '../hooks/useBranding';
+import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
 
 interface LoginProps {
   onShowSetup?: () => void;
@@ -12,7 +12,7 @@ export function Login({ onShowSetup }: LoginProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const { login } = useAuth();
   const branding = useBranding();
 
@@ -68,9 +68,18 @@ export function Login({ onShowSetup }: LoginProps) {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-sm text-primary hover:text-opacity-80 font-medium transition"
+              >
+                Forgot Password?
+              </button>
+            </div>
             <input
               id="password"
               type="password"
@@ -90,20 +99,12 @@ export function Login({ onShowSetup }: LoginProps) {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-
-        <div className="mt-6 text-center text-sm text-gray-600">
-          <p>Contact your administrator for access</p>
-          {onShowSetup && (
-            <button
-              type="button"
-              onClick={onShowSetup}
-              className="mt-2 text-primary hover:text-opacity-80 font-medium"
-            >
-              First time? Create admin account →
-            </button>
-          )}
-        </div>
       </div>
+
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+      />
     </div>
   );
 }

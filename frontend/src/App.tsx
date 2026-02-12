@@ -10,6 +10,7 @@ import {
   PartyEntry,
   TransportEntry,
   Orders,
+  OrderDetails,
   ProfilePage,
   Dashboard,
   AdminDashboard,
@@ -17,6 +18,7 @@ import {
   Settings,
   PricingTiers,
   AboutUs,
+  ResetPassword,
 } from './pages';
 import { Sidebar, TopBar, TawkToChat } from './components';
 
@@ -50,7 +52,12 @@ function AppContent() {
   }
 
   if (!user) {
-    return <Login onShowSetup={() => setShowSetup(true)} />;
+    return (
+      <Routes>
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="*" element={<Login onShowSetup={() => setShowSetup(true)} />} />
+      </Routes>
+    );
   }
 
   return (
@@ -86,6 +93,7 @@ function AppContent() {
         <Route path="/parties" element={<PartyEntry />} />
         <Route path="/transport" element={<TransportEntry />} />
         <Route path="/orders" element={<Orders />} />
+        <Route path="/orders/:orderId" element={<OrderDetails />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/contact" element={<ContactUs />} />
         <Route path="/about" element={<AboutUs />} />

@@ -19,6 +19,23 @@ export interface UserProfile {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  last_login_at?: string | null;
+}
+
+export interface LoginHistory {
+  id: string;
+  user_id: string;
+  login_time: string;
+  logout_time?: string | null;
+  ip_address?: string;
+  user_agent?: string;
+  status: 'success' | 'failed';
+  user: {
+    id: string;
+    email: string;
+    full_name: string;
+    role: 'admin' | 'retailer' | 'guest';
+  };
 }
 
 export interface DesignCategory {
@@ -302,6 +319,51 @@ class ApiClient {
     return await response.json();
   }
 
+  async forgotPassword(email: string) {
+    const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to send reset email');
+    }
+
+    return await response.json();
+  }
+
+  async resetPassword(access_token: string, password: string) {
+    const response = await fetch(`${API_URL}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token, password }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to reset password');
+    }
+
+    return await response.json();
+  }
+
+  async verifyResetToken(access_token: string) {
+    const response = await fetch(`${API_URL}/api/auth/verify-reset-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Invalid or expired token');
+    }
+
+    return await response.json();
+  }
+
   async getCurrentUser() {
     const response = await fetch(`${API_URL}/api/auth/me`, {
       headers: this.getAuthHeader(),
@@ -373,6 +435,32 @@ class ApiClient {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to update user');
+    }
+
+    return await response.json();
+  }
+
+  async getLoginHistory(limit: number = 50): Promise<LoginHistory[]> {
+    const response = await fetch(`${API_URL}/api/users/login-history?limit=${limit}`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch login history');
+    }
+
+    return await response.json();
+  }
+
+  async getInactiveUsers(days: number = 30): Promise<UserProfile[]> {
+    const response = await fetch(`${API_URL}/api/users/inactive?days=${days}`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch inactive users');
     }
 
     return await response.json();
@@ -900,7 +988,14 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to delete party');
+      let errorMessage = 'Failed to delete party';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (parseError) {
+        console.error('Failed to parse error response:', parseError);
+      }
+      throw new Error(errorMessage);
     }
   }
 

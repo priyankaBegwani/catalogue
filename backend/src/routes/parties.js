@@ -168,13 +168,71 @@ router.delete('/:id', authenticateUser, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { error } = await supabase
+    // First check if there are any users associated with this party
+    console.log('Checking dependencies for party ID:', id);
+    const { data: users, error: userCheckError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id, full_name, email')
+      .eq('party_id', id);
+
+    if (userCheckError) {
+      console.error('User check error:', userCheckError);
+      console.error('Error details:', JSON.stringify(userCheckError, null, 2));
+      return res.status(500).json({ error: 'Failed to check party dependencies' });
+    }
+
+    console.log('Found users:', users);
+
+    if (users && users.length > 0) {
+      const userList = users.map(u => `${u.full_name} (${u.email})`).join(', ');
+      return res.status(400).json({ 
+        error: `Cannot delete party. It has ${users.length} associated user(s): ${userList}. Please reassign or delete these users first.` 
+      });
+    }
+
+    // Check for any other dependencies (orders, etc.)
+    // Note: Skip order check for now if orders table doesn't exist or has different structure
+    let hasOrders = false;
+    try {
+      const { data: orders, error: orderCheckError } = await supabaseAdmin
+        .from('orders')
+        .select('id')
+        .eq('party_id', id)
+        .limit(1);
+
+      if (orderCheckError) {
+        console.log('Order check failed (table might not exist or different structure):', orderCheckError.message);
+        // Don't fail the deletion if orders table doesn't exist
+      } else if (orders && orders.length > 0) {
+        hasOrders = true;
+      }
+    } catch (err) {
+      console.log('Order check exception:', err.message);
+      // Don't fail the deletion if orders table doesn't exist
+    }
+
+    if (hasOrders) {
+      return res.status(400).json({ 
+        error: 'Cannot delete party. It has associated orders. Please delete the orders first or archive the party instead.' 
+      });
+    }
+
+    // If no dependencies, proceed with deletion
+    const { error } = await supabaseAdmin
       .from('parties')
       .delete()
       .eq('id', id);
 
     if (error) {
       console.error('Party deletion error:', error);
+      
+      // Handle specific database errors
+      if (error.code === '23503') {
+        return res.status(400).json({ 
+          error: 'Cannot delete party due to database constraints. The party may have associated records.' 
+        });
+      }
+      
       return res.status(500).json({ error: 'Failed to delete party' });
     }
 

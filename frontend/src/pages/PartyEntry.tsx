@@ -175,8 +175,11 @@ const PartyEntry: React.FC = () => {
       try {
           await api.deleteParty(id);
           await fetchParties();
+          setError(''); // Clear any previous errors
         } catch (err) {
-          setError(err instanceof Error ? err.message : 'Failed to delete party');
+          const errorMessage = err instanceof Error ? err.message : 'Failed to delete party';
+          setError(errorMessage);
+          console.error('Party deletion error:', err);
         }
   };
     

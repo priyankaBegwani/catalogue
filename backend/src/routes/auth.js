@@ -70,6 +70,17 @@ router.post('/login', async (req, res) => {
     });
   console.log(" error while login >>>", error);
     if (error) {
+      // Record failed login attempt
+      await supabase
+        .from('login_history')
+        .insert({
+          user_id: null,
+          login_time: new Date().toISOString(),
+          ip_address: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+          user_agent: req.headers['user-agent'],
+          status: 'failed'
+        });
+      
       return res.status(401).json({ error: error.message });
     }
 
@@ -82,6 +93,24 @@ router.post('/login', async (req, res) => {
     if (!profile.is_active) {
       return res.status(403).json({ error: 'User account is inactive' });
     }
+
+    // Update last_login_at in user_profiles
+    await supabase
+      .from('user_profiles')
+      .update({ last_login_at: new Date().toISOString() })
+      .eq('id', data.user.id);
+
+    // Record successful login in login_history
+    await supabase
+      .from('login_history')
+      .insert({
+        user_id: data.user.id,
+        login_time: new Date().toISOString(),
+        ip_address: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+        user_agent: req.headers['user-agent'],
+        status: 'success'
+      });
+
  console.log(" error while login in userprofile >>>", profileError);
     res.json({
       user: data.user,
@@ -98,6 +127,15 @@ router.post('/logout', authenticateUser, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader.replace('Bearer ', '');
+
+    // Update the most recent login record with logout time
+    await supabase
+      .from('login_history')
+      .update({ logout_time: new Date().toISOString() })
+      .eq('user_id', req.user.id)
+      .is('logout_time', null)
+      .order('login_time', { ascending: false })
+      .limit(1);
 
     await supabase.auth.admin.signOut(token);
 
@@ -132,6 +170,125 @@ router.get('/me', authenticateUser, async (req, res) => {
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user info' });
+  }
+});
+
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id, email, is_active')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (!profile) {
+      return res.json({ 
+        message: 'If an account exists with this email, a password reset link has been sent.' 
+      });
+    }
+
+    if (!profile.is_active) {
+      return res.status(403).json({ error: 'User account is inactive' });
+    }
+
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password`
+    });
+
+    if (error) {
+      console.error('Password reset error:', error);
+      return res.status(500).json({ error: 'Failed to send reset email' });
+    }
+
+    res.json({ 
+      message: 'If an account exists with this email, a password reset link has been sent.' 
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { access_token, password } = req.body;
+
+    if (!access_token || !password) {
+      return res.status(400).json({ error: 'Access token and new password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    // Create a Supabase client with the user's access token
+    const { createClient } = await import('@supabase/supabase-js');
+    const userSupabase = createClient(
+      process.env.VITE_SUPABASE_URL,
+      process.env.VITE_SUPABASE_ANON_KEY,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${access_token}`
+          }
+        }
+      }
+    );
+
+    const { data, error } = await userSupabase.auth.updateUser({
+      password: password
+    });
+
+    if (error) {
+      console.error('Reset password error:', error);
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+router.post('/verify-reset-token', async (req, res) => {
+  try {
+    const { access_token } = req.body;
+
+    if (!access_token) {
+      return res.status(400).json({ error: 'Access token is required' });
+    }
+
+    // Create a Supabase client with the user's access token
+    const { createClient } = await import('@supabase/supabase-js');
+    const userSupabase = createClient(
+      process.env.VITE_SUPABASE_URL,
+      process.env.VITE_SUPABASE_ANON_KEY,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${access_token}`
+          }
+        }
+      }
+    );
+
+    const { data, error } = await userSupabase.auth.getUser();
+
+    if (error || !data.user) {
+      return res.status(400).json({ error: 'Invalid or expired token' });
+    }
+
+    res.json({ valid: true, email: data.user.email });
+  } catch (error) {
+    console.error('Verify token error:', error);
+    res.status(500).json({ error: 'Failed to verify token' });
   }
 });
 

@@ -177,4 +177,83 @@ router.delete('/:id', authenticateUser, requireAdmin, async (req, res) => {
   }
 });
 
+// GET /api/users/login-history - Get recent login history
+router.get('/login-history', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+
+    // Query login_history table with user profile information
+    const { data: loginHistory, error } = await supabase
+      .from('login_history')
+      .select(`
+        id,
+        user_id,
+        login_time,
+        logout_time,
+        ip_address,
+        user_agent,
+        status,
+        user_profiles!login_history_user_id_fkey (
+          id,
+          email,
+          full_name,
+          role
+        )
+      `)
+      .order('login_time', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('Login history query error:', error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    // Format the response to match the expected structure
+    const formattedHistory = loginHistory.map(record => ({
+      id: record.id,
+      user_id: record.user_id,
+      login_time: record.login_time,
+      logout_time: record.logout_time,
+      ip_address: record.ip_address,
+      user_agent: record.user_agent,
+      status: record.status,
+      user: record.user_profiles ? {
+        id: record.user_profiles.id,
+        email: record.user_profiles.email,
+        full_name: record.user_profiles.full_name,
+        role: record.user_profiles.role
+      } : null
+    }));
+
+    res.json(formattedHistory);
+  } catch (error) {
+    console.error('Get login history error:', error);
+    res.status(500).json({ error: 'Failed to fetch login history' });
+  }
+});
+
+// GET /api/users/inactive - Get inactive users
+router.get('/inactive', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+
+    const { data: users, error } = await supabase
+      .from('user_profiles')
+      .select('*, parties!user_profiles_party_id_fkey(name)')
+      .or(`last_login_at.is.null,last_login_at.lt.${cutoffDate.toISOString()}`)
+      .order('last_login_at', { ascending: true, nullsFirst: false });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    res.json(users);
+  } catch (error) {
+    console.error('Get inactive users error:', error);
+    res.status(500).json({ error: 'Failed to fetch inactive users' });
+  }
+});
+
 export default router;

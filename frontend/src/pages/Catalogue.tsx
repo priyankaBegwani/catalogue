@@ -3,6 +3,7 @@ import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile } from '.
 import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, Phone, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getWhatsAppUrl, useBranding } from '../hooks/useBranding';
+import { AddToCartModal } from '../components/AddToCartModal';
 
 export type DesignTag = 'new-arrival' | 'trending' | 'best-seller' | 'fast-repeat' | 'ready-to-ship' | 'low-stock';
 
@@ -212,6 +213,9 @@ export function Catalogue() {
   const [shareUserMessage, setShareUserMessage] = useState('');
   const [shareType, setShareType] = useState<'catalogue' | 'design' | null>(null);
   const [pendingShareDesign, setPendingShareDesign] = useState<Design | null>(null);
+  const [showAddToCartModal, setShowAddToCartModal] = useState(false);
+  const [addCartDesign, setAddCartDesign] = useState<Design | null>(null);
+  const [addCartColorIndex, setAddCartColorIndex] = useState(0);
 
   useEffect(() => {
     loadCategories();
@@ -709,6 +713,18 @@ export function Catalogue() {
     setSelectedDesigns(new Set());
   };
 
+  const openAddToCartModal = (design: Design, colorIndex: number) => {
+    setAddCartDesign(design);
+    setAddCartColorIndex(colorIndex);
+    setShowAddToCartModal(true);
+  };
+
+  const closeAddToCartModal = () => {
+    setShowAddToCartModal(false);
+    setAddCartDesign(null);
+    setAddCartColorIndex(0);
+  };
+
   const shareBulkOnWhatsApp = async () => {
     if (selectedDesigns.size === 0) return;
     
@@ -1125,9 +1141,9 @@ export function Catalogue() {
                   onShareClick={(design) => {
                     setPendingShareDesign(design);
                     setShareType('design');
-                    setShareUserMessage('');
                     setShowShareDialog(true);
                   }}
+                  onAddToCart={openAddToCartModal}
                 />
               ))}
             </div>
@@ -1139,6 +1155,15 @@ export function Catalogue() {
         <DesignQuickView
           design={selectedDesign}
           onClose={() => setSelectedDesign(null)}
+        />
+      )}
+
+      {showAddToCartModal && addCartDesign && (
+        <AddToCartModal
+          isOpen={showAddToCartModal}
+          onClose={closeAddToCartModal}
+          design={addCartDesign}
+          selectedColorIndex={addCartColorIndex}
         />
       )}
 
@@ -1230,9 +1255,10 @@ interface DesignCardProps {
   isSelected?: boolean;
   onToggleSelection?: () => void;
   onShareClick?: (design: Design) => void;
+  onAddToCart?: (design: Design, colorIndex: number) => void;
 }
 
-function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection, onShareClick }: DesignCardProps) {
+function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection, onShareClick, onAddToCart }: DesignCardProps) {
   const { user } = useAuth();
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -1579,6 +1605,22 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
           <span className="text-xs text-gray-500">MOQ: Contact</span>
         </div>
       </div>
+
+      {/* Add to Cart Button - Appears on Hover */}
+      {isAuthenticated && onAddToCart && (
+        <div className="px-3 pb-3 sm:px-4 sm:pb-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToCart(design, selectedColorIndex);
+            }}
+            className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 flex items-center justify-center gap-2 text-sm shadow-md"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            Add to Cart
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Edit2, 
@@ -17,6 +18,7 @@ import * as XLSX from 'xlsx';
 import { api, Order, CreateOrderData, Party, DesignColor } from '../lib/api';
 
 const Orders: React.FC = () => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1031,9 +1033,12 @@ const Orders: React.FC = () => {
                     <div className="flex items-center">
                       <Package className="mr-2 h-4 w-4 text-gray-400" />
                       <div>
-                        <div className="rounded bg-gray-100 px-2 py-1 font-mono text-sm font-medium text-gray-900">
+                        <button
+                          onClick={() => navigate(`/orders/${order.id}`)}
+                          className="rounded bg-gray-100 px-2 py-1 font-mono text-sm font-medium text-gray-900 hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                        >
                           {order.order_number}
-                        </div>
+                        </button>
                         {/* Show order remarks if they exist */}
                         {order.order_remarks && order.order_remarks.length > 0 && (
                           <div className="mt-1 text-xs text-gray-500">
@@ -1334,9 +1339,12 @@ const Orders: React.FC = () => {
                   <div className="mb-3 flex items-center justify-between">
                     <div className="flex items-center">
                       <Package className="mr-2 h-4 w-4 text-gray-400" />
-                      <span className="rounded bg-white px-2 py-1 font-mono text-sm font-medium text-gray-900">
+                      <button
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                        className="rounded bg-white px-2 py-1 font-mono text-sm font-medium text-gray-900 hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                      >
                         {order.order_number}
-                      </span>
+                      </button>
                     </div>
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
                       {order.status}
