@@ -39,4 +39,4 @@ export default defineConfig({
       overlay: false, // Disable error overlay for better performance
     },
   },
-});}
+});
