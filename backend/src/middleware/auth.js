@@ -1,4 +1,28 @@
 import { supabase } from '../config.js';
+import { cache } from '../utils/cache.js';
+import { AppError } from '../utils/errorHandler.js';
+
+/**
+ * Get user profile with caching
+ */
+const getUserProfile = async (userId, token) => {
+  const cacheKey = `user_profile:${userId}`;
+  
+  return cache.getOrSet(cacheKey, async () => {
+    const { data: profile, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error || !profile) {
+      throw new AppError('User profile not found or inactive', 403);
+    }
+
+    return profile;
+  }, 300); // Cache for 5 minutes
+};
 
 export const authenticateUser = async (req, res, next) => {
   try {
@@ -16,21 +40,15 @@ export const authenticateUser = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (profileError || !profile) {
-      return res.status(403).json({ error: 'User profile not found or inactive' });
-    }
+    const profile = await getUserProfile(user.id, token);
 
     req.user = user;
     req.profile = profile;
     next();
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error('Authentication error:', error);
     res.status(500).json({ error: 'Authentication failed' });
   }
@@ -63,21 +81,15 @@ export const optionalAuth = async (req, res, next) => {
       return next();
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (profileError || !profile) {
+    try {
+      const profile = await getUserProfile(user.id, token);
+      req.user = user;
+      req.profile = profile;
+    } catch (profileError) {
       req.user = null;
       req.profile = null;
-      return next();
     }
-
-    req.user = user;
-    req.profile = profile;
+    
     next();
   } catch (error) {
     console.error('Optional authentication error:', error);

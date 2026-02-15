@@ -1,82 +1,86 @@
 import express from 'express';
 import { supabase } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
+import { 
+  asyncHandler, 
+  AppError,
+  validateRequired,
+  validateUUID,
+  executeQuery,
+  cacheMiddleware
+} from '../utils/index.js';
 
 const router = express.Router();
 
-router.get('/size-sets', authenticateUser, async (req, res) => {
-  try {
-    const { data: sizeSets, error } = await supabase
-      .from('size_sets')
-      .select('*')
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
-
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
+router.get('/size-sets', 
+  authenticateUser, 
+  cacheMiddleware(600), // Cache for 10 minutes
+  asyncHandler(async (req, res) => {
+    const sizeSets = await executeQuery(
+      supabase
+        .from('size_sets')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true }),
+      'Failed to fetch size sets'
+    );
 
     res.json(sizeSets);
-  } catch (error) {
-    console.error('Get size sets error:', error);
-    res.status(500).json({ error: 'Failed to fetch size sets' });
-  }
-});
+  })
+);
 
-router.get('/', authenticateUser, async (req, res) => {
-  try {
-    const { data: cartItems, error } = await supabase
-      .from('cart_items')
-      .select(`
-        *,
-        design:designs!cart_items_design_id_fkey (
-          id,
-          design_no,
-          name,
-          description,
-          available_sizes,
-          category:design_categories!designs_category_id_fkey (
+router.get('/', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
+    const cartItems = await executeQuery(
+      supabase
+        .from('cart_items')
+        .select(`
+          *,
+          design:designs!cart_items_design_id_fkey (
+            id,
+            design_no,
+            name,
+            description,
+            available_sizes,
+            category:design_categories!designs_category_id_fkey (
+              id,
+              name,
+              slug
+            )
+          ),
+          color:design_colors!cart_items_color_id_fkey (
+            id,
+            color_name,
+            color_code,
+            price,
+            in_stock,
+            stock_quantity,
+            image_urls
+          ),
+          size_set:size_sets!cart_items_size_set_id_fkey (
             id,
             name,
-            slug
+            sizes
           )
-        ),
-        color:design_colors!cart_items_color_id_fkey (
-          id,
-          color_name,
-          color_code,
-          price,
-          in_stock,
-          stock_quantity,
-          image_urls
-        ),
-        size_set:size_sets!cart_items_size_set_id_fkey (
-          id,
-          name,
-          sizes
-        )
-      `)
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
+        `)
+        .eq('user_id', req.user.id)
+        .order('created_at', { ascending: false }),
+      'Failed to fetch cart items'
+    );
 
     res.json(cartItems);
-  } catch (error) {
-    console.error('Get cart error:', error);
-    res.status(500).json({ error: 'Failed to fetch cart items' });
-  }
-});
+  })
+);
 
-router.post('/', authenticateUser, async (req, res) => {
-  try {
+router.post('/', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { design_id, color_id, size, size_set_id, quantity } = req.body;
 
-    if (!design_id || !color_id) {
-      return res.status(400).json({ error: 'Design ID and Color ID are required' });
-    }
+    validateRequired(req.body, ['design_id', 'color_id']);
+    validateUUID(design_id, 'Design ID');
+    validateUUID(color_id, 'Color ID');
 
     // Determine if this is a set order (retailer) or per-size order (guest)
     const isSetOrder = !!size_set_id;
@@ -84,10 +88,10 @@ router.post('/', authenticateUser, async (req, res) => {
 
     // Validation based on user role
     if (userRole === 'retailer' && !isSetOrder) {
-      return res.status(400).json({ error: 'Retailers must order by size sets' });
+      throw new AppError('Retailers must order by size sets', 400);
     }
     if (userRole === 'guest' && isSetOrder) {
-      return res.status(400).json({ error: 'Guests must order per size' });
+      throw new AppError('Guests must order per size', 400);
     }
 
     // Build query to check for existing item
@@ -105,28 +109,23 @@ router.post('/', authenticateUser, async (req, res) => {
       existingQuery = existingQuery.eq('size', size || '');
     }
 
-    const { data: existingItem, error: checkError } = await existingQuery.maybeSingle();
-
-    if (checkError) {
-      return res.status(500).json({ error: checkError.message });
-    }
+    const { data: existingItem } = await existingQuery.maybeSingle();
 
     if (existingItem) {
-      const { data: updatedItem, error: updateError } = await supabase
-        .from('cart_items')
-        .update({ quantity: existingItem.quantity + (quantity || 1) })
-        .eq('id', existingItem.id)
-        .select(`
-          *,
-          design:designs!cart_items_design_id_fkey (*),
-          color:design_colors!cart_items_color_id_fkey (*),
-          size_set:size_sets!cart_items_size_set_id_fkey (*)
-        `)
-        .single();
-
-      if (updateError) {
-        return res.status(400).json({ error: updateError.message });
-      }
+      const updatedItem = await executeQuery(
+        supabase
+          .from('cart_items')
+          .update({ quantity: existingItem.quantity + (quantity || 1) })
+          .eq('id', existingItem.id)
+          .select(`
+            *,
+            design:designs!cart_items_design_id_fkey (*),
+            color:design_colors!cart_items_color_id_fkey (*),
+            size_set:size_sets!cart_items_size_set_id_fkey (*)
+          `)
+          .single(),
+        'Failed to update cart item'
+      );
 
       return res.json(updatedItem);
     }
@@ -148,97 +147,89 @@ router.post('/', authenticateUser, async (req, res) => {
       insertData.size_set_id = null;
     }
 
-    const { data: cartItem, error } = await supabase
-      .from('cart_items')
-      .insert(insertData)
-      .select(`
-        *,
-        design:designs!cart_items_design_id_fkey (*),
-        color:design_colors!cart_items_color_id_fkey (*),
-        size_set:size_sets!cart_items_size_set_id_fkey (*)
-      `)
-      .single();
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
+    const cartItem = await executeQuery(
+      supabase
+        .from('cart_items')
+        .insert(insertData)
+        .select(`
+          *,
+          design:designs!cart_items_design_id_fkey (*),
+          color:design_colors!cart_items_color_id_fkey (*),
+          size_set:size_sets!cart_items_size_set_id_fkey (*)
+        `)
+        .single(),
+      'Failed to add item to cart'
+    );
 
     res.status(201).json(cartItem);
-  } catch (error) {
-    console.error('Add to cart error:', error);
-    res.status(500).json({ error: 'Failed to add item to cart' });
-  }
-});
+  })
+);
 
-router.put('/:id', authenticateUser, async (req, res) => {
-  try {
+router.put('/:id', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { quantity } = req.body;
 
-    if (!quantity || quantity < 1) {
-      return res.status(400).json({ error: 'Quantity must be at least 1' });
+    validateUUID(id, 'Cart item ID');
+    validateRequired(req.body, ['quantity']);
+
+    if (quantity < 1) {
+      throw new AppError('Quantity must be at least 1', 400);
     }
 
-    const { data: cartItem, error } = await supabase
-      .from('cart_items')
-      .update({ quantity })
-      .eq('id', id)
-      .eq('user_id', req.user.id)
-      .select(`
-        *,
-        design:designs!cart_items_design_id_fkey (*),
-        color:design_colors!cart_items_color_id_fkey (*)
-      `)
-      .single();
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
+    const cartItem = await executeQuery(
+      supabase
+        .from('cart_items')
+        .update({ quantity })
+        .eq('id', id)
+        .eq('user_id', req.user.id)
+        .select(`
+          *,
+          design:designs!cart_items_design_id_fkey (*),
+          color:design_colors!cart_items_color_id_fkey (*)
+        `)
+        .single(),
+      'Failed to update cart item'
+    );
 
     res.json(cartItem);
-  } catch (error) {
-    console.error('Update cart error:', error);
-    res.status(500).json({ error: 'Failed to update cart item' });
-  }
-});
+  })
+);
 
-router.delete('/:id', authenticateUser, async (req, res) => {
-  try {
+router.delete('/:id', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    const { error } = await supabase
-      .from('cart_items')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', req.user.id);
+    validateUUID(id, 'Cart item ID');
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
+    await executeQuery(
+      supabase
+        .from('cart_items')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', req.user.id),
+      'Failed to remove item from cart'
+    );
 
     res.json({ message: 'Item removed from cart' });
-  } catch (error) {
-    console.error('Remove from cart error:', error);
-    res.status(500).json({ error: 'Failed to remove item from cart' });
-  }
-});
+  })
+);
 
-router.delete('/', authenticateUser, async (req, res) => {
-  try {
-    const { error } = await supabase
-      .from('cart_items')
-      .delete()
-      .eq('user_id', req.user.id);
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
+router.delete('/', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
+    await executeQuery(
+      supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', req.user.id),
+      'Failed to clear cart'
+    );
 
     res.json({ message: 'Cart cleared' });
-  } catch (error) {
-    console.error('Clear cart error:', error);
-    res.status(500).json({ error: 'Failed to clear cart' });
-  }
-});
+  })
+);
 
 export default router;

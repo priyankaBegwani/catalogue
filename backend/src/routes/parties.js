@@ -1,61 +1,60 @@
 import express from 'express';
 import { supabaseAdmin, supabase } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
+import { 
+  asyncHandler, 
+  AppError,
+  validateRequired,
+  validateUUID,
+  executeQuery,
+  getOneOrFail,
+  cacheMiddleware,
+  cache
+} from '../utils/index.js';
 
 const router = express.Router();
 
 // Get all parties
-router.get('/', authenticateUser, async (req, res) => {
-  try {
-    const { data: parties, error } = await supabaseAdmin
-      .from('parties')
-      .select(`*`)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Parties fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch parties' });
-    }
+router.get('/', 
+  authenticateUser, 
+  cacheMiddleware(300), // Cache for 5 minutes
+  asyncHandler(async (req, res) => {
+    const parties = await executeQuery(
+      supabaseAdmin
+        .from('parties')
+        .select(`*`)
+        .order('created_at', { ascending: false }),
+      'Failed to fetch parties'
+    );
 
     res.json({ parties });
-  } catch (error) {
-    console.error('Parties error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Get single party
-router.get('/:id', authenticateUser, async (req, res) => {
-  try {
+router.get('/:id', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    const { data: party, error } = await supabaseAdmin
-      .from('parties')
-      .select(`
-        *
-      `)
-      .eq('id', id)
-      .maybeSingle();
+    validateUUID(id, 'Party ID');
 
-    if (error) {
-      console.error('Party fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch party' });
-    }
-
-    if (!party) {
-      return res.status(404).json({ error: 'Party not found' });
-    }
+    const party = await getOneOrFail(
+      supabaseAdmin
+        .from('parties')
+        .select(`*`)
+        .eq('id', id),
+      'Party not found'
+    );
 
     res.json({ party });
-  } catch (error) {
-    console.error('Party fetch error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Create new party
-router.post('/', authenticateUser, async (req, res) => {
-  try {
+router.post('/', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { 
       name, 
       description, 
@@ -67,14 +66,63 @@ router.post('/', authenticateUser, async (req, res) => {
       gst_number
     } = req.body;
 
-    if (!name) {
-      return res.status(400).json({ error: 'Party name is required' });
-    }
-    console.log("req.user.id in parties>>>>>>>>>>>>>", req.user.id);
-    const { data: party, error } = await supabaseAdmin
-      .from('parties')
-      .insert([
-        {
+    validateRequired(req.body, ['name']);
+
+    const party = await executeQuery(
+      supabaseAdmin
+        .from('parties')
+        .insert([
+          {
+            name,
+            description: description || '',
+            address: address || '',
+            city: city || '',
+            state: state || '',
+            pincode: pincode || '',
+            phone_number: phone_number || '',
+            gst_number: gst_number || '',
+            created_by: req.user.id
+          }
+        ])
+        .select(`*`)
+        .single(),
+      'Failed to create party'
+    );
+
+    // Invalidate cache
+    cache.delete('cache:/api/parties');
+    cache.delete('cache:/api/orders/parties');
+
+    res.status(201).json({
+      message: 'Party created successfully',
+      party
+    });
+  })
+);
+
+// Update party
+router.put('/:id', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { 
+      name, 
+      description, 
+      address, 
+      city, 
+      state, 
+      pincode, 
+      phone_number,
+      gst_number
+    } = req.body;
+
+    validateUUID(id, 'Party ID');
+    validateRequired(req.body, ['name']);
+
+    const party = await executeQuery(
+      supabase
+        .from('parties')
+        .update({
           name,
           description: description || '',
           address: address || '',
@@ -83,90 +131,32 @@ router.post('/', authenticateUser, async (req, res) => {
           pincode: pincode || '',
           phone_number: phone_number || '',
           gst_number: gst_number || '',
-          created_by: req.user.id
-        }
-      ])
-      .select(`
-        *
-      `)
-      .single();
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select(`*`)
+        .single(),
+      'Failed to update party'
+    );
 
-    if (error) {
-      console.error('Party creation error:', error);
-      return res.status(500).json({ error: 'Failed to create party' });
-    }
-
-    res.status(201).json({
-      message: 'Party created successfully',
-      party
-    });
-  } catch (error) {
-    console.error('Party creation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Update party
-router.put('/:id', authenticateUser, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { 
-      name, 
-      description, 
-      address, 
-      city, 
-      state, 
-      pincode, 
-      phone_number,
-      gst_number
-    } = req.body;
-
-    if (!name) {
-      return res.status(400).json({ error: 'Party name is required' });
-    }
-
-    const { data: party, error } = await supabase
-      .from('parties')
-      .update({
-        name,
-        description: description || '',
-        address: address || '',
-        city: city || '',
-        state: state || '',
-        pincode: pincode || '',
-        phone_number: phone_number || '',
-        gst_number: gst_number || '',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select(`
-        *
-      `)
-      .single();
-
-    if (error) {
-      console.error('Party update error:', error);
-      return res.status(500).json({ error: 'Failed to update party' });
-    }
-
-    if (!party) {
-      return res.status(404).json({ error: 'Party not found or you do not have permission to update it' });
-    }
+    // Invalidate cache
+    cache.delete('cache:/api/parties');
+    cache.delete('cache:/api/orders/parties');
 
     res.json({
       message: 'Party updated successfully',
       party
     });
-  } catch (error) {
-    console.error('Party update error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Delete party
-router.delete('/:id', authenticateUser, async (req, res) => {
-  try {
+router.delete('/:id', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
+
+    validateUUID(id, 'Party ID');
 
     // First check if there are any users associated with this party
     console.log('Checking dependencies for party ID:', id);
@@ -176,18 +166,17 @@ router.delete('/:id', authenticateUser, async (req, res) => {
       .eq('party_id', id);
 
     if (userCheckError) {
-      console.error('User check error:', userCheckError);
-      console.error('Error details:', JSON.stringify(userCheckError, null, 2));
-      return res.status(500).json({ error: 'Failed to check party dependencies' });
+      throw new AppError('Failed to check party dependencies', 500, { dbError: userCheckError.message });
     }
 
     console.log('Found users:', users);
 
     if (users && users.length > 0) {
       const userList = users.map(u => `${u.full_name} (${u.email})`).join(', ');
-      return res.status(400).json({ 
-        error: `Cannot delete party. It has ${users.length} associated user(s): ${userList}. Please reassign or delete these users first.` 
-      });
+      throw new AppError(
+        `Cannot delete party. It has ${users.length} associated user(s): ${userList}. Please reassign or delete these users first.`,
+        400
+      );
     }
 
     // Check for any other dependencies (orders, etc.)
@@ -212,9 +201,10 @@ router.delete('/:id', authenticateUser, async (req, res) => {
     }
 
     if (hasOrders) {
-      return res.status(400).json({ 
-        error: 'Cannot delete party. It has associated orders. Please delete the orders first or archive the party instead.' 
-      });
+      throw new AppError(
+        'Cannot delete party. It has associated orders. Please delete the orders first or archive the party instead.',
+        400
+      );
     }
 
     // If no dependencies, proceed with deletion
@@ -224,23 +214,22 @@ router.delete('/:id', authenticateUser, async (req, res) => {
       .eq('id', id);
 
     if (error) {
-      console.error('Party deletion error:', error);
-      
       // Handle specific database errors
       if (error.code === '23503') {
-        return res.status(400).json({ 
-          error: 'Cannot delete party due to database constraints. The party may have associated records.' 
-        });
+        throw new AppError(
+          'Cannot delete party due to database constraints. The party may have associated records.',
+          400
+        );
       }
-      
-      return res.status(500).json({ error: 'Failed to delete party' });
+      throw new AppError('Failed to delete party', 500, { dbError: error.message });
     }
 
+    // Invalidate cache
+    cache.delete('cache:/api/parties');
+    cache.delete('cache:/api/orders/parties');
+
     res.json({ message: 'Party deleted successfully' });
-  } catch (error) {
-    console.error('Party deletion error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 export default router;

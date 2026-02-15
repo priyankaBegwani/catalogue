@@ -1,59 +1,60 @@
 import express from 'express';
 import { supabase } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
+import { 
+  asyncHandler, 
+  AppError,
+  validateRequired,
+  validateUUID,
+  executeQuery,
+  getOneOrFail,
+  cacheMiddleware,
+  cache
+} from '../utils/index.js';
 
 const router = express.Router();
 
 // Get all transport options
-router.get('/', authenticateUser, async (req, res) => {
-  try {
-    const { data: transportOptions, error } = await supabase
-      .from('transport')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Transport options fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch transport options' });
-    }
+router.get('/', 
+  authenticateUser, 
+  cacheMiddleware(600), // Cache for 10 minutes
+  asyncHandler(async (req, res) => {
+    const transportOptions = await executeQuery(
+      supabase
+        .from('transport')
+        .select('*')
+        .order('created_at', { ascending: false }),
+      'Failed to fetch transport options'
+    );
 
     res.json({ transportOptions });
-  } catch (error) {
-    console.error('Transport options error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Get single transport option
-router.get('/:id', authenticateUser, async (req, res) => {
-  try {
+router.get('/:id', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    const { data: transport, error } = await supabase
-      .from('transport')
-      .select('*')
-      .eq('id', id)
-      .single();
+    validateUUID(id, 'Transport ID');
 
-    if (error) {
-      console.error('Transport fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch transport option' });
-    }
-
-    if (!transport) {
-      return res.status(404).json({ error: 'Transport option not found' });
-    }
+    const transport = await getOneOrFail(
+      supabase
+        .from('transport')
+        .select('*')
+        .eq('id', id),
+      'Transport option not found'
+    );
 
     res.json({ transport });
-  } catch (error) {
-    console.error('Transport fetch error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Create new transport option
-router.post('/', authenticateUser, async (req, res) => {
-  try {
+router.post('/', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { 
       transport_name, 
       description, 
@@ -66,9 +67,7 @@ router.post('/', authenticateUser, async (req, res) => {
       pincode 
     } = req.body;
 
-    if (!transport_name) {
-      return res.status(400).json({ error: 'Transport name is required' });
-    }
+    validateRequired(req.body, ['transport_name']);
 
     const { data: transport, error } = await supabase
       .from('transport')
@@ -89,29 +88,30 @@ router.post('/', authenticateUser, async (req, res) => {
       .single();
 
     if (error) {
-      console.error('Transport creation error:', error);
-      if (error.code === '23505') { // Unique constraint violation
+      if (error.code === '23505') {
         if (error.message.includes('transport_name')) {
-          return res.status(400).json({ error: 'Transport name already exists' });
+          throw new AppError('Transport name already exists', 400);
         }
-        return res.status(400).json({ error: 'Duplicate key error: ' + error.message });
+        throw new AppError('Duplicate key error: ' + error.message, 400);
       }
-      return res.status(500).json({ error: 'Failed to create transport option: ' + error.message });
+      throw new AppError('Failed to create transport option', 500, { dbError: error.message });
     }
+
+    // Invalidate cache
+    cache.delete('cache:/api/transport');
+    cache.delete('cache:/api/orders/transport');
 
     res.status(201).json({
       message: 'Transport option created successfully',
       transport
     });
-  } catch (error) {
-    console.error('Transport creation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Update transport option
-router.put('/:id', authenticateUser, async (req, res) => {
-  try {
+router.put('/:id', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { 
       transport_name, 
@@ -125,9 +125,8 @@ router.put('/:id', authenticateUser, async (req, res) => {
       pincode 
     } = req.body;
 
-    if (!transport_name) {
-      return res.status(400).json({ error: 'Transport name is required' });
-    }
+    validateUUID(id, 'Transport ID');
+    validateRequired(req.body, ['transport_name']);
 
     const { data: transport, error } = await supabase
       .from('transport')
@@ -147,47 +146,45 @@ router.put('/:id', authenticateUser, async (req, res) => {
       .single();
 
     if (error) {
-      console.error('Transport update error:', error);
-      if (error.code === '23505') { // Unique constraint violation
-        return res.status(400).json({ error: 'Transport name already exists' });
+      if (error.code === '23505') {
+        throw new AppError('Transport name already exists', 400);
       }
-      return res.status(500).json({ error: 'Failed to update transport option' });
+      throw new AppError('Failed to update transport option', 500, { dbError: error.message });
     }
 
-    if (!transport) {
-      return res.status(404).json({ error: 'Transport option not found' });
-    }
+    // Invalidate cache
+    cache.delete('cache:/api/transport');
+    cache.delete('cache:/api/orders/transport');
 
     res.json({
       message: 'Transport option updated successfully',
       transport
     });
-  } catch (error) {
-    console.error('Transport update error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Delete transport option
-router.delete('/:id', authenticateUser, async (req, res) => {
-  try {
+router.delete('/:id', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    const { error } = await supabase
-      .from('transport')
-      .delete()
-      .eq('id', id);
+    validateUUID(id, 'Transport ID');
 
-    if (error) {
-      console.error('Transport deletion error:', error);
-      return res.status(500).json({ error: 'Failed to delete transport option' });
-    }
+    await executeQuery(
+      supabase
+        .from('transport')
+        .delete()
+        .eq('id', id),
+      'Failed to delete transport option'
+    );
+
+    // Invalidate cache
+    cache.delete('cache:/api/transport');
+    cache.delete('cache:/api/orders/transport');
 
     res.json({ message: 'Transport option deleted successfully' });
-  } catch (error) {
-    console.error('Transport deletion error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 export default router;

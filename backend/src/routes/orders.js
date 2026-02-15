@@ -1,66 +1,67 @@
 import express from 'express';
 import { supabase } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
+import { 
+  asyncHandler, 
+  AppError,
+  validateRequired,
+  validateUUID,
+  executeQuery,
+  cacheMiddleware
+} from '../utils/index.js';
 
 const router = express.Router();
 
 // Get transport options for dropdown
-router.get('/transport', authenticateUser, async (req, res) => {
-  try {
-    const { data: transportOptions, error } = await supabase
-      .from('transport')
-      .select('*')
-      .order('transport_name');
-
-    if (error) {
-      console.error('Transport options fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch transport options' });
-    }
+router.get('/transport', 
+  authenticateUser, 
+  cacheMiddleware(600), // Cache for 10 minutes
+  asyncHandler(async (req, res) => {
+    const transportOptions = await executeQuery(
+      supabase
+        .from('transport')
+        .select('*')
+        .order('transport_name'),
+      'Failed to fetch transport options'
+    );
 
     res.json({ transportOptions });
-  } catch (error) {
-    console.error('Transport options error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Get parties for dropdown
-router.get('/parties', authenticateUser, async (req, res) => {
-  try {
-    const { data: parties, error } = await supabase
-      .from('parties')
-      .select('id, party_id, name')
-      .order('name');
-  console.log("parties :::",parties)
-     console.log("error :::",error)
-    if (error) {
-      console.error('Parties fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch parties' });
-    }
+router.get('/parties', 
+  authenticateUser, 
+  cacheMiddleware(600), // Cache for 10 minutes
+  asyncHandler(async (req, res) => {
+    const parties = await executeQuery(
+      supabase
+        .from('parties')
+        .select('id, party_id, name')
+        .order('name'),
+      'Failed to fetch parties'
+    );
 
     res.json({ parties });
-  } catch (error) {
-    console.error('Parties error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Get designs for dropdown
-router.get('/designs', authenticateUser, async (req, res) => {
-  try {
-    const { data: designsData, error } = await supabase
-      .from('designs')
-      .select(`
-        design_number,
-        itemtype!designs_item_type_id_fkey(itemtype),
-        colors!designs_color_id_fkey(id, color_name, primary_color)
-      `)
-      .order('design_number');
-
-    if (error) {
-      console.error('Designs fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch designs' });
-    }
+router.get('/designs', 
+  authenticateUser, 
+  cacheMiddleware(300), // Cache for 5 minutes
+  asyncHandler(async (req, res) => {
+    const designsData = await executeQuery(
+      supabase
+        .from('designs')
+        .select(`
+          design_number,
+          itemtype!designs_item_type_id_fkey(itemtype),
+          colors!designs_color_id_fkey(id, color_name, primary_color)
+        `)
+        .order('design_number'),
+      'Failed to fetch designs'
+    );
 
     // Group designs by design_number with their available colors
     const groupedDesigns = designsData.reduce((acc, design) => {
@@ -80,15 +81,13 @@ router.get('/designs', authenticateUser, async (req, res) => {
 
     const designsList = Object.values(groupedDesigns);
     res.json({ designs: designsList });
-  } catch (error) {
-    console.error('Designs error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Get orders with order items (role-based access)
-router.get('/', authenticateUser, async (req, res) => {
-  try {
+router.get('/', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     let query = supabase
       .from('orders')
       .select(`
@@ -107,28 +106,26 @@ router.get('/', authenticateUser, async (req, res) => {
       `);
 
     // If user is not admin, only show their orders
-    if (req.user.role !== 'admin') {
+    if (req.profile?.role !== 'admin') {
       query = query.eq('user_id', req.user.id);
     }
 
-    const { data: orders, error } = await query.order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Orders fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch orders' });
-    }
+    const orders = await executeQuery(
+      query.order('created_at', { ascending: false }),
+      'Failed to fetch orders'
+    );
 
     res.json({ orders });
-  } catch (error) {
-    console.error('Orders error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Get single order with items
-router.get('/:id', authenticateUser, async (req, res) => {
-  try {
+router.get('/:id', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
+    
+    validateUUID(id, 'Order ID');
     
     let query = supabase
       .from('orders')
@@ -149,31 +146,23 @@ router.get('/:id', authenticateUser, async (req, res) => {
       .eq('id', id);
 
     // If user is not admin, only show their orders
-    if (req.user.role !== 'admin') {
+    if (req.profile?.role !== 'admin') {
       query = query.eq('user_id', req.user.id);
     }
 
-    const { data: order, error } = await query.single();
-
-    if (error) {
-      console.error('Order fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch order' });
-    }
-
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
+    const order = await executeQuery(
+      query.single(),
+      'Order not found'
+    );
 
     res.json(order);
-  } catch (error) {
-    console.error('Order fetch error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Checkout - Create order from cart items
-router.post('/checkout', authenticateUser, async (req, res) => {
-  try {
+router.post('/checkout', 
+  authenticateUser, 
+  asyncHandler(async (req, res) => {
     const { 
       party_name, 
       expected_delivery_date,
@@ -181,9 +170,7 @@ router.post('/checkout', authenticateUser, async (req, res) => {
       remarks
     } = req.body;
 
-    if (!party_name) {
-      return res.status(400).json({ error: 'Party name is required' });
-    }
+    validateRequired(req.body, ['party_name']);
 
     // Get user's cart items
     const { data: cartItems, error: cartError } = await supabase
@@ -200,12 +187,11 @@ router.post('/checkout', authenticateUser, async (req, res) => {
       .eq('user_id', req.user.id);
 
     if (cartError) {
-      console.error('Cart fetch error:', cartError);
-      return res.status(500).json({ error: 'Failed to fetch cart items' });
+      throw new AppError('Failed to fetch cart items', 500, { dbError: cartError.message });
     }
 
     if (!cartItems || cartItems.length === 0) {
-      return res.status(400).json({ error: 'Cart is empty' });
+      throw new AppError('Cart is empty', 400);
     }
 
     // Generate order number (ORD-YYYYMMDD-XXXXX)
@@ -252,10 +238,9 @@ router.post('/checkout', authenticateUser, async (req, res) => {
       .select();
 
     if (itemsError) {
-      console.error('Order items creation error:', itemsError);
       // Rollback order creation
       await supabase.from('orders').delete().eq('id', order.id);
-      return res.status(500).json({ error: 'Failed to create order items' });
+      throw new AppError('Failed to create order items', 500, { dbError: itemsError.message });
     }
 
     // Clear user's cart after successful order creation
@@ -296,11 +281,8 @@ router.post('/checkout', authenticateUser, async (req, res) => {
         order_items: items
       }
     });
-  } catch (error) {
-    console.error('Checkout error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  })
+);
 
 // Create new order with items
 router.post('/', authenticateUser, async (req, res) => {
