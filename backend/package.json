@@ -6,6 +6,7 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",
+    "build": "echo 'No build step required'",
     "start": "node src/server.js"
   },
   "dependencies": {
