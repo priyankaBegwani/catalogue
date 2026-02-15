@@ -466,6 +466,18 @@ class ApiClient {
     return await response.json();
   }
 
+  async deleteUser(id: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/users/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete user');
+    }
+  }
+
 
 
   /* Designs related Functions */

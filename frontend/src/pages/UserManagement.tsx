@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api, UserProfile, Party, LoginHistory } from '../lib/api';
 import { UserPlus, Edit2, XCircle, CheckCircle, Trash2, Users, Clock, UserX, Activity, LogIn } from 'lucide-react';
+import { formatDate, getRelativeTime } from '../utils/dateUtils';
+import { ErrorAlert } from '../components';
 
 type TabType = 'users' | 'login-history' | 'inactive-users';
 
@@ -14,11 +16,7 @@ export function UserManagement() {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -39,60 +37,49 @@ export function UserManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
 
-  const loadUsers = async () => {
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const loadUsers = useCallback(async () => {
     const data = await api.getUsers();
     setUsers(data);
-  };
+  }, []);
 
-  const loadLoginHistory = async () => {
+  const loadLoginHistory = useCallback(async () => {
     const data = await api.getLoginHistory(50);
     setLoginHistory(data);
-  };
+  }, []);
 
-  const loadInactiveUsers = async () => {
+  const loadInactiveUsers = useCallback(async () => {
     const data = await api.getInactiveUsers(30);
     setInactiveUsers(data);
-  };
+  }, []);
 
-  const handleToggleActive = async (user: UserProfile) => {
+  const handleToggleActive = useCallback(async (user: UserProfile) => {
     try {
       await api.updateUser(user.id, { is_active: !user.is_active });
       await loadUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update user');
     }
-  };
+  }, [loadUsers]);
 
-  const handleDeleteUser = async (user: UserProfile) => {
+  const handleDeleteUser = useCallback(async (user: UserProfile) => {
     if (!confirm(`Are you sure you want to delete user "${user.full_name}"? This action cannot be undone.`)) {
       return;
     }
 
     try {
-      alert('Delete user functionality needs to be implemented in the backend');
+      await api.deleteUser(user.id);
+      await loadUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user');
     }
-  };
+  }, [loadUsers]);
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
-
-  const getRelativeTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return `${Math.floor(diffDays / 30)} months ago`;
-  };
 
   const tabs = [
     { id: 'users', label: 'Users', icon: Users },
@@ -151,11 +138,7 @@ export function UserManagement() {
         </nav>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
-        </div>
-      )}
+      <ErrorAlert message={error} onDismiss={() => setError('')} className="mb-6" />
 
       {/* Tab Content */}
       {activeTab === 'users' && (

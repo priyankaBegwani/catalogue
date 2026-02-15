@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api, Design } from '../lib/api';
 import { Plus, Trash2, ImageIcon, Package, MessageCircle, CheckSquare, Square } from 'lucide-react';
-import { AddDesignModal, ViewDesignModal } from '../components';
+import { AddDesignModal, ViewDesignModal, ErrorAlert } from '../components';
 
 export function DesignManagement() {
   const [designs, setDesigns] = useState<Design[]>([]);
@@ -15,11 +15,7 @@ export function DesignManagement() {
   const [selectedDesigns, setSelectedDesigns] = useState<Set<string>>(new Set());
   const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
 
-  useEffect(() => {
-    loadDesigns();
-  }, []);
-
-  const loadDesigns = async () => {
+  const loadDesigns = useCallback(async () => {
     try {
       setLoading(true);
       const data = await api.getDesigns();
@@ -29,9 +25,14 @@ export function DesignManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleDelete = async (id: string) => {
+  useEffect(() => {
+    loadDesigns();
+  }, [loadDesigns]);
+
+
+  const handleDelete = useCallback(async (id: string) => {
     if (!confirm('Are you sure you want to delete this design?')) {
       return;
     }
@@ -42,34 +43,34 @@ export function DesignManagement() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete design');
     }
-  };
+  }, [loadDesigns]);
 
-  const handleViewDesign = (design: Design, colorIndex: number = 0) => {
+  const handleViewDesign = useCallback((design: Design, colorIndex: number = 0) => {
     setSelectedDesign(design);
     setSelectedColorIndex(colorIndex);
     setShowViewModal(true);
-  };
+  }, []);
 
-  const handleEditDesign = (design: Design) => {
+  const handleEditDesign = useCallback((design: Design) => {
     setEditingDesign(design);
     setShowAddModal(true);
-  };
+  }, []);
 
-  const handleToggleActive = async (design: Design) => {
+  const handleToggleActive = useCallback(async (design: Design) => {
     try {
       await api.updateDesign(design.id, { is_active: !design.is_active });
       await loadDesigns();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update design status');
     }
-  };
+  }, [loadDesigns]);
 
   const getMinPrice = (design: Design) => {
     if (!design.design_colors || design.design_colors.length === 0) return 0;
     return Math.min(...design.design_colors.map(c => c.price));
   };
 
-  const toggleDesignSelection = (designId: string) => {
+  const toggleDesignSelection = useCallback((designId: string) => {
     setSelectedDesigns(prev => {
       const newSet = new Set(prev);
       if (newSet.has(designId)) {
@@ -79,16 +80,16 @@ export function DesignManagement() {
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const selectAllDesigns = () => {
+  const selectAllDesigns = useCallback(() => {
     const allIds = designs.map(d => d.id);
     setSelectedDesigns(new Set(allIds));
-  };
+  }, [designs]);
 
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedDesigns(new Set());
-  };
+  }, []);
 
   const shareBulkOnWhatsApp = async () => {
     if (selectedDesigns.size === 0) return;
@@ -194,13 +195,9 @@ export function DesignManagement() {
         </div>
       )}
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
-        </div>
-      )}
+      <ErrorAlert message={error} onDismiss={() => setError('')} className="mb-6" />
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
         {designs.map((design) => (
           <DesignCard
             key={design.id}

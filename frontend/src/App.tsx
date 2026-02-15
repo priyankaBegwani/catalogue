@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import {
@@ -77,6 +77,11 @@ function AppContent() {
           sidebarPinned ? 'lg:pl-[280px]' : ''
         }`}
       >
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          </div>
+        }>
         <Routes>
         <Route path="/" element={<Navigate to={isAdmin ? '/admin' : '/catalogue'} replace />} />
         <Route
@@ -107,6 +112,7 @@ function AppContent() {
         />
         <Route path="*" element={<Navigate to="/catalogue" replace />} />
         </Routes>
+        </Suspense>
       </main>
       
       {/* Tawk.to Chat Widget - Only for non-admin users (retailers and guests) */}

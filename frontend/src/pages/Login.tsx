@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback, lazy, Suspense } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranding } from '../hooks/useBranding';
-import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
+import { ErrorAlert, LoadingSpinner } from '../components';
+
+const ForgotPasswordModal = lazy(() => import('../components/ForgotPasswordModal').then(module => ({ default: module.ForgotPasswordModal })));
 
 interface LoginProps {
   onShowSetup?: () => void;
@@ -16,7 +18,7 @@ export function Login({ onShowSetup }: LoginProps) {
   const { login } = useAuth();
   const branding = useBranding();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -24,33 +26,27 @@ export function Login({ onShowSetup }: LoginProps) {
     try {
       await login(email, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : 'Failed to login');
     } finally {
       setLoading(false);
     }
-  };
+  }, [email, password, login]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-secondary to-white flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-secondary to-white flex items-center justify-center px-4 pt-2 pb-4 sm:p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
         <div className="flex justify-center">
           <img
             src={branding.logoUrl}
             alt={branding.brandName}
             className="h-36 w-auto"
+            loading="eager"
+            decoding="sync"
           />
         </div>
 
-        <p className="text-center text-gray-800 mb-8">
-         <b>Sign in to access your account</b> 
-        </p>
-
         <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
+          <ErrorAlert message={error} onDismiss={() => setError('')} />
 
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -94,17 +90,26 @@ export function Login({ onShowSetup }: LoginProps) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? (
+              <>
+                <LoadingSpinner />
+                Signing in...
+              </>
+            ) : (
+              'Sign In'
+            )}
           </button>
         </form>
       </div>
 
-      <ForgotPasswordModal
-        isOpen={showForgotPassword}
-        onClose={() => setShowForgotPassword(false)}
-      />
+      <Suspense fallback={null}>
+        <ForgotPasswordModal
+          isOpen={showForgotPassword}
+          onClose={() => setShowForgotPassword(false)}
+        />
+      </Suspense>
     </div>
   );
 }

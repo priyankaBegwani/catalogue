@@ -16,27 +16,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        // Add a small delay to prevent blocking initial render
+        await new Promise(resolve => setTimeout(resolve, 0));
+        
+        const data = await api.getCurrentUser();
+        setUser(data.profile);
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     checkAuth();
   }, []);
-
-  const checkAuth = async () => {
-    try {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      const data = await api.getCurrentUser();
-      setUser(data.profile);
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const login = async (email: string, password: string) => {
     const data = await api.login({ email, password });

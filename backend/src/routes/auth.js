@@ -1,5 +1,5 @@
 import express from 'express';
-import { supabase, supabaseAdmin } from '../config.js';
+import { config, supabase, supabaseAdmin } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -197,8 +197,22 @@ router.post('/forgot-password', async (req, res) => {
       return res.status(403).json({ error: 'User account is inactive' });
     }
 
+    const rawFrontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
+    const normalizedFrontendUrl = rawFrontendUrl.replace(/\/+$/, '');
+    const frontendUrlWithScheme = /^https?:\/\//i.test(normalizedFrontendUrl)
+      ? normalizedFrontendUrl
+      : `https://${normalizedFrontendUrl}`;
+
+    let redirectTo;
+    try {
+      redirectTo = new URL('/reset-password', frontendUrlWithScheme).toString();
+    } catch (e) {
+      console.error('Invalid FRONTEND_URL for password reset redirect:', rawFrontendUrl, e);
+      return res.status(500).json({ error: 'Password reset is not configured correctly' });
+    }
+
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password`
+      redirectTo
     });
 
     if (error) {
@@ -227,19 +241,24 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
 
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      console.error('Missing Supabase config (supabaseUrl/supabaseAnonKey) for reset-password');
+      return res.status(500).json({ error: 'Password reset is not configured correctly' });
+    }
+
     // Create a Supabase client with the user's access token
     const { createClient } = await import('@supabase/supabase-js');
-    const userSupabase = createClient(
-      process.env.VITE_SUPABASE_URL,
-      process.env.VITE_SUPABASE_ANON_KEY,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${access_token}`
-          }
+    const userSupabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${access_token}`
         }
       }
-    );
+    });
 
     const { data, error } = await userSupabase.auth.updateUser({
       password: password
@@ -247,7 +266,7 @@ router.post('/reset-password', async (req, res) => {
 
     if (error) {
       console.error('Reset password error:', error);
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
+      return res.status(400).json({ error: error.message || 'Invalid or expired reset token' });
     }
 
     res.json({ message: 'Password reset successfully' });
@@ -265,24 +284,29 @@ router.post('/verify-reset-token', async (req, res) => {
       return res.status(400).json({ error: 'Access token is required' });
     }
 
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      console.error('Missing Supabase config (supabaseUrl/supabaseAnonKey) for verify-reset-token');
+      return res.status(500).json({ error: 'Password reset is not configured correctly' });
+    }
+
     // Create a Supabase client with the user's access token
     const { createClient } = await import('@supabase/supabase-js');
-    const userSupabase = createClient(
-      process.env.VITE_SUPABASE_URL,
-      process.env.VITE_SUPABASE_ANON_KEY,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${access_token}`
-          }
+    const userSupabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${access_token}`
         }
       }
-    );
+    });
 
     const { data, error } = await userSupabase.auth.getUser();
 
     if (error || !data.user) {
-      return res.status(400).json({ error: 'Invalid or expired token' });
+      return res.status(400).json({ error: error?.message || 'Invalid or expired token' });
     }
 
     res.json({ valid: true, email: data.user.email });

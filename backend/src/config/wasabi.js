@@ -49,6 +49,14 @@ export async function deleteFromWasabi(key) {
 }
 
 export async function generateSignedGetUrl(key, expiresIn = 3600) {
+  // If CDN is configured and objects are public, use CDN URL directly
+  // This is faster and more reliable than signed Wasabi URLs
+  if (CDN_URL) {
+    // CDN serves public objects, no signing needed
+    return `${CDN_URL}/${BUCKET_NAME}/${key}`;
+  }
+  
+  // Fallback to signed Wasabi URL if no CDN
   const command = new GetObjectCommand({
     Bucket: BUCKET_NAME,
     Key: key,

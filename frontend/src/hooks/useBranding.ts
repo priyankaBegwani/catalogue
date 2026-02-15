@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export interface BrandingSettings {
   brandName: string;
@@ -18,6 +18,7 @@ const DEFAULT_BRANDING: BrandingSettings = {
 
 export function useBranding(): BrandingSettings {
   const [branding, setBranding] = useState<BrandingSettings>(DEFAULT_BRANDING);
+  const cssAppliedRef = useRef(false);
 
   useEffect(() => {
     const loadBranding = () => {
@@ -27,22 +28,28 @@ export function useBranding(): BrandingSettings {
       const secondaryColor = localStorage.getItem('secondary_color') || DEFAULT_BRANDING.secondaryColor;
       const whatsappNumber = localStorage.getItem('whatsapp_number') || DEFAULT_BRANDING.whatsappNumber;
 
-      setBranding({
+      const newBranding = {
         brandName,
         logoUrl,
         primaryColor,
         secondaryColor,
         whatsappNumber,
-      });
+      };
 
-      // Apply CSS variables for dynamic theming
-      document.documentElement.style.setProperty('--color-primary', primaryColor);
-      document.documentElement.style.setProperty('--color-secondary', secondaryColor);
+      setBranding(newBranding);
+
+      // Apply CSS variables only once or when colors change
+      if (!cssAppliedRef.current || 
+          primaryColor !== DEFAULT_BRANDING.primaryColor || 
+          secondaryColor !== DEFAULT_BRANDING.secondaryColor) {
+        document.documentElement.style.setProperty('--color-primary', primaryColor);
+        document.documentElement.style.setProperty('--color-secondary', secondaryColor);
+        cssAppliedRef.current = true;
+      }
     };
 
     loadBranding();
 
-    // Listen for storage changes (when settings are updated)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key?.startsWith('brand_') || e.key?.startsWith('logo_') || 
           e.key?.startsWith('primary_') || e.key?.startsWith('secondary_') || 

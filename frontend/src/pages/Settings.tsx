@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Save, MessageCircle, Info, ExternalLink, CheckCircle, AlertCircle, Palette, Image, Type, Phone, ChevronDown, ChevronUp, ShoppingBag, Eye, EyeOff, TrendingUp, Users, Zap } from 'lucide-react';
 import { TierModel } from '../types/pricing';
 import { getPricingConfig, savePricingConfig } from '../utils/pricingTiers';
 
 export function Settings() {
+  const navigate = useNavigate();
   const [tawkPropertyId, setTawkPropertyId] = useState('');
   const [tawkWidgetId, setTawkWidgetId] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -93,14 +95,22 @@ export function Settings() {
 
       setSaveStatus('success');
       
+      // Trigger storage event to update other components
+      window.dispatchEvent(new Event('storage'));
+      
       // Reset success message after 3 seconds
       setTimeout(() => {
         setSaveStatus('idle');
       }, 3000);
 
-      // Show reload prompt
+      // Show reload prompt and navigate to refresh the app
       if (window.confirm('Settings saved! The page needs to reload for changes to take effect. Reload now?')) {
-        window.location.reload();
+        // Navigate to current route to trigger re-render
+        navigate('/settings', { replace: true });
+        // Force a full page reload to apply CSS variables and other changes
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
       }
     } catch (error) {
       setErrorMessage('Failed to save settings');

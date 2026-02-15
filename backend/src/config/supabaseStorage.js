@@ -89,4 +89,28 @@ export async function generateSupabaseUploadUrl(key) {
   }
 }
 
+/**
+ * Generate a signed GET URL for retrieving a file from Supabase Storage.
+ * Useful when the bucket is private (recommended for production).
+ * @param {string} key - Storage path/key
+ * @param {number} expiresIn - Expiry time in seconds
+ * @returns {Promise<string>} Signed URL
+ */
+export async function generateSupabaseSignedGetUrl(key, expiresIn = 3600) {
+  try {
+    const { data, error } = await supabaseAdmin.storage
+      .from(STORAGE_BUCKET)
+      .createSignedUrl(key, expiresIn);
+
+    if (error) {
+      throw new Error(`Failed to generate signed URL: ${error.message}`);
+    }
+
+    return data.signedUrl;
+  } catch (error) {
+    console.error('Generate Supabase signed GET URL error:', error);
+    throw error;
+  }
+}
+
 export { STORAGE_BUCKET };

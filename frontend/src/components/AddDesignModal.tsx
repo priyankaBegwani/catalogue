@@ -48,9 +48,11 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
   const [uploadingImages, setUploadingImages] = useState(false);
   const [error, setError] = useState('');
   const prevCategoryRef = useRef<string>('');
-  const colorNameRefs = useRef<HTMLInputElement[]>([]);
-  const colorPriceRefs = useRef<HTMLInputElement[]>([]);
+  const colorNameRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const colorPriceRefs = useRef<Array<HTMLInputElement | null>>([]);
   const sizeInputRefs = useRef<Array<Record<string, HTMLInputElement | null>>>([]);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const colorsSectionRef = useRef<HTMLDivElement | null>(null);
 
   const scrollInputIntoView = (element: HTMLElement | null) => {
     if (element) {
@@ -234,10 +236,18 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     setColors(prev => [...prev, createEmptyColor()]);
 
     setTimeout(() => {
+      // Keep the user in the "Colors" area (especially on mobile) by scrolling the modal form container.
+      const formEl = formRef.current;
+      const colorsSection = colorsSectionRef.current;
+      if (formEl && colorsSection) {
+        const top = colorsSection.offsetTop - formEl.offsetTop;
+        formEl.scrollTo({ top, behavior: 'smooth' });
+      }
+
       const nameInput = colorNameRefs.current[newColorIndex];
       if (nameInput) {
-        nameInput.focus();
-        nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Avoid browser auto-scrolling the entire page on focus.
+        nameInput.focus({ preventScroll: true });
       }
     }, 0);
   };
@@ -398,7 +408,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-h-[calc(100vh-150px)] sm:max-h-[calc(100vh-200px)] overflow-y-auto">
+        <form ref={formRef} onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-h-[calc(100vh-150px)] sm:max-h-[calc(100vh-200px)] overflow-y-auto">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
@@ -518,7 +528,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
           </div>
          
 
-          <div>
+          <div ref={colorsSectionRef}>
             <div className="flex items-center justify-between mb-3 sm:mb-4">
               <label className="block text-xs sm:text-sm font-medium text-gray-700">Colors</label>
               <button
@@ -591,6 +601,9 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
                         step="0.01"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                         placeholder="0.00"
+                        ref={(el) => {
+                          colorPriceRefs.current[index] = el || null;
+                        }}
                       />
                     </div>
 

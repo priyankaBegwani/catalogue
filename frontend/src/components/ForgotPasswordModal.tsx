@@ -1,44 +1,44 @@
-import { useState } from 'react';
-import { X, Mail, CheckCircle, AlertCircle } from 'lucide-react';
+import { useState, useCallback, memo } from 'react';
+import { X, Mail, CheckCircle } from 'lucide-react';
 import { api } from '../lib/api';
+import { LoadingSpinner } from './LoadingSpinner';
+import { ErrorAlert } from './ErrorAlert';
 
 interface ForgotPasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProps) {
+export const ForgotPasswordModal = memo(({ isOpen, onClose }: ForgotPasswordModalProps) => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      console.log('Sending forgot password request for:', email);
       await api.forgotPassword(email);
       setSuccess(true);
       setTimeout(() => {
         handleClose();
       }, 3000);
     } catch (err) {
-      console.error('Forgot password error:', err);
       setError(err instanceof Error ? err.message : 'Failed to send reset email');
     } finally {
       setLoading(false);
     }
-  };
+  }, [email]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setEmail('');
     setError('');
     setSuccess(false);
     onClose();
-  };
+  }, [onClose]);
 
   if (!isOpen) return null;
 
@@ -68,12 +68,7 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
+                <ErrorAlert message={error} onDismiss={() => setError('')} />
 
                 <div>
                   <label htmlFor="reset-email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -98,7 +93,7 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
                 >
                   {loading ? (
                     <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <LoadingSpinner />
                       Sending...
                     </>
                   ) : (
@@ -139,4 +134,6 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
       </div>
     </div>
   );
-}
+});
+
+ForgotPasswordModal.displayName = 'ForgotPasswordModal';

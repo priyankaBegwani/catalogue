@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Lock, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Lock, CheckCircle, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { api } from '../lib/api';
 import { useBranding } from '../hooks/useBranding';
+import { ErrorAlert, LoadingSpinner } from '../components';
 
 export function ResetPassword() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const branding = useBranding();
   
@@ -22,15 +22,29 @@ export function ResetPassword() {
   const [token, setToken] = useState('');
 
   useEffect(() => {
-    // Extract token from URL hash or query params
-    const hashParams = new URLSearchParams(window.location.hash.substring(1));
-    const accessToken = hashParams.get('access_token') || 
-                       searchParams.get('access_token') || 
-                       searchParams.get('token') || '';
+    // Extract token from URL - Supabase uses hash fragment with access_token
+    const hash = window.location.hash;
+    const hashParams = new URLSearchParams(hash.substring(1));
     
+    // Try to get token from hash first (Supabase default)
+    let accessToken = hashParams.get('access_token');
+    
+    // Fallback to query params if not in hash
+    if (!accessToken) {
+      const searchParams = new URLSearchParams(window.location.search);
+      accessToken = searchParams.get('access_token') || searchParams.get('token');
+    }
+    
+    console.log('Reset URL hash:', hash);
     console.log('Extracted token:', accessToken ? 'Token found' : 'No token');
-    setToken(accessToken);
-  }, [searchParams]);
+    
+    if (accessToken) {
+      setToken(accessToken);
+    } else {
+      setError('Invalid or missing reset token. Please request a new password reset.');
+      setVerifying(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (token) {
@@ -46,10 +60,13 @@ export function ResetPassword() {
     }
 
     try {
+      console.log('Verifying token with API...');
       const response = await api.verifyResetToken(token);
+      console.log('Token verification response:', response);
       setTokenValid(true);
       setUserEmail(response.email || '');
     } catch (err) {
+      console.error('Token verification error:', err);
       setError('This password reset link is invalid or has expired. Please request a new one.');
       setTokenValid(false);
     } finally {
@@ -57,34 +74,34 @@ export function ResetPassword() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
 
     if (password.length < 6) {
       setError('Password must be at least 6 characters long');
       return;
     }
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
     setLoading(true);
+    setError('');
 
     try {
       await api.resetPassword(token, password);
       setSuccess(true);
       setTimeout(() => {
-        navigate('/');
-      }, 3000);
+        navigate('/login');
+      }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset password');
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, password, confirmPassword, navigate]);
 
   if (verifying) {
     return (
@@ -157,12 +174,7 @@ export function ResetPassword() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
-                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
+              <ErrorAlert message={error} onDismiss={() => setError('')} />
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
@@ -226,7 +238,7 @@ export function ResetPassword() {
               >
                 {loading ? (
                   <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <LoadingSpinner />
                     Resetting Password...
                   </>
                 ) : (

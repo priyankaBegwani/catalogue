@@ -2,7 +2,7 @@ import express from 'express';
 import { supabase, config } from '../config.js';
 import { authenticateUser, optionalAuth } from '../middleware/auth.js';
 import { deleteFromWasabi, generateSignedGetUrl } from '../config/wasabi.js';
-import { deleteFromSupabase } from '../config/supabaseStorage.js';
+import { deleteFromSupabase, generateSupabaseSignedGetUrl } from '../config/supabaseStorage.js';
 import { deleteFromLocalStorage } from '../config/localStorage.js';
 
 const router = express.Router();
@@ -10,9 +10,9 @@ const router = express.Router();
 // Helper function to convert image URLs to signed URLs
 async function convertToSignedUrls(imageUrls) {
   if (!imageUrls || imageUrls.length === 0) return imageUrls;
-  
-  // Only generate signed URLs for CDN storage type
-  if (config.storageType !== 'cdn') {
+
+  // Only generate signed URLs for storage types that require it
+  if (config.storageType !== 'cdn' && config.storageType !== 'supabase') {
     return imageUrls;
   }
 
@@ -24,8 +24,15 @@ async function convertToSignedUrls(imageUrls) {
       
       if (keyStartIndex !== -1) {
         const key = urlParts.slice(keyStartIndex).join('/');
-        const signedUrl = await generateSignedGetUrl(key, 3600);
-        signedUrls.push(signedUrl);
+        if (config.storageType === 'cdn') {
+          const signedUrl = await generateSignedGetUrl(key, 3600);
+          signedUrls.push(signedUrl);
+        } else if (config.storageType === 'supabase') {
+          const signedUrl = await generateSupabaseSignedGetUrl(key, 3600);
+          signedUrls.push(signedUrl);
+        } else {
+          signedUrls.push(imageUrl);
+        }
       } else {
         signedUrls.push(imageUrl);
       }
