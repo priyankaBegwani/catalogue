@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -20,7 +20,7 @@ interface TopBarProps {
   isSidebarOpen: boolean;
 }
 
-export function TopBar({ onToggleSidebar, isSidebarOpen }: TopBarProps) {
+export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: TopBarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const branding = useBranding();
@@ -34,6 +34,15 @@ export function TopBar({ onToggleSidebar, isSidebarOpen }: TopBarProps) {
     loadCartCount();
     loadWishlistCount();
   }, []);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  }, [logout, navigate]);
 
   const loadCartCount = async () => {
     try {
@@ -220,4 +229,4 @@ export function TopBar({ onToggleSidebar, isSidebarOpen }: TopBarProps) {
       )}
     </>
   );
-}
+});

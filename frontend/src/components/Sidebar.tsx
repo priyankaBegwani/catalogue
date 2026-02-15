@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
+import { memo, useMemo, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranding } from '../hooks/useBranding';
 import {
@@ -21,14 +22,14 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-export function Sidebar({ isOpen, onClose }: SidebarProps) {
+export const Sidebar = memo(function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname.slice(1) || 'catalogue';
   const { user, logout, isAdmin } = useAuth();
   const branding = useBranding();
 
-  const navigationItems = [
+  const navigationItems = useMemo(() => [
     ...(isAdmin ? [{
       id: 'admin',
       label: 'Admin Dashboard',
@@ -108,12 +109,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       path: '/about',
       adminOnly: false,
     },
-  ];
+  ], [isAdmin]);
 
-  const handleNavigate = (path: string) => {
+  const handleNavigate = useCallback((path: string) => {
     navigate(path);
     onClose();
-  };
+  }, [navigate, onClose]);
 
   return (
     <>
@@ -201,4 +202,4 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       </aside>
     </>
   );
-}
+});
