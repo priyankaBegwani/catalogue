@@ -1334,6 +1334,123 @@ class ApiClient {
     return await this.updateOrder(order.id, orderData);
   }
 
+  async getDashboardKpis(): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/kpis`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch KPIs');
+    }
+
+    return await response.json();
+  }
+
+  async getTopViewedDesigns(): Promise<any[]> {
+    const response = await fetch(`${API_URL}/api/admin/designs/top-viewed`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch top viewed designs');
+    }
+
+    return await response.json();
+  }
+
+  async getTopOrderedDesigns(): Promise<any[]> {
+    const response = await fetch(`${API_URL}/api/admin/designs/top-ordered`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch top ordered designs');
+    }
+
+    return await response.json();
+  }
+
+  async getMostSharedDesigns(): Promise<any[]> {
+    const response = await fetch(`${API_URL}/api/admin/designs/most-shared`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch most shared designs');
+    }
+
+    return await response.json();
+  }
+
+  async getActiveParties(): Promise<any[]> {
+    const response = await fetch(`${API_URL}/api/admin/parties/active`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch active parties');
+    }
+
+    return await response.json();
+  }
+
+  async getStagnantParties(): Promise<any[]> {
+    const response = await fetch(`${API_URL}/api/admin/parties/stagnant`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch stagnant parties');
+    }
+
+    return await response.json();
+  }
+
+  async getColorTrends(): Promise<any[]> {
+    const response = await fetch(`${API_URL}/api/admin/trends/colors`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch color trends');
+    }
+
+    return await response.json();
+  }
+
+  async getWhatsAppEngagement(): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/engagement/whatsapp`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch WhatsApp engagement');
+    }
+
+    return await response.json();
+  }
+
+  async getDashboardAlerts(): Promise<any[]> {
+    const response = await fetch(`${API_URL}/api/admin/alerts`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch alerts');
+    }
+
+    return await response.json();
+  }
+
 }
 
 export const api = new ApiClient();

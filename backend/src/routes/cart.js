@@ -82,16 +82,15 @@ router.post('/',
     validateUUID(design_id, 'Design ID');
     validateUUID(color_id, 'Color ID');
 
-    // Determine if this is a set order (retailer) or per-size order (guest)
+    // Determine if this is a set order or per-size order
     const isSetOrder = !!size_set_id;
-    const userRole = req.profile?.role;
 
-    // Validation based on user role
-    if (userRole === 'retailer' && !isSetOrder) {
-      throw new AppError('Retailers must order by size sets', 400);
+    // Validate that either size or size_set_id is provided (but not both)
+    if (isSetOrder && size) {
+      throw new AppError('Cannot specify both size and size_set_id', 400);
     }
-    if (userRole === 'guest' && isSetOrder) {
-      throw new AppError('Guests must order per size', 400);
+    if (!isSetOrder && !size) {
+      throw new AppError('Must specify either size or size_set_id', 400);
     }
 
     // Build query to check for existing item

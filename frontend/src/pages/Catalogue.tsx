@@ -186,7 +186,7 @@ const highlightTags: HighlightTag[] = [
 ];
 
 export function Catalogue() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const branding = useBranding();
   const [designs, setDesigns] = useState<Design[]>([]);
   const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([]);
@@ -199,6 +199,7 @@ export function Catalogue() {
   const [error, setError] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [availableColors, setAvailableColors] = useState<string[]>([]);
+  const [showPriceToCustomers, setShowPriceToCustomers] = useState(true);
   const [filters, setFilters] = useState<FilterState>({
     categories: [],
     priceRange: { min: 0, max: 100000 },
@@ -221,6 +222,9 @@ export function Catalogue() {
     loadCategories();
     loadFabricTypes();
     loadFiltersFromUrl();
+    // Load price visibility setting
+    const savedShowPrice = localStorage.getItem('show_price_to_customers') !== 'false';
+    setShowPriceToCustomers(savedShowPrice);
   }, []);
 
   // Load filters from URL parameters (for shared links)
@@ -1259,7 +1263,7 @@ interface DesignCardProps {
 }
 
 function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection, onShareClick, onAddToCart }: DesignCardProps) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const slideshowIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -1269,6 +1273,8 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
   const selectedColorImages = selectedColor?.image_urls || [];
   const firstImage = selectedColorImages[currentImageIndex] || selectedColorImages[0];
   const isAuthenticated = !!user;
+  const showPriceToCustomers = localStorage.getItem('show_price_to_customers') !== 'false';
+  const shouldShowPrice = isAdmin || (isAuthenticated && showPriceToCustomers);
 
   // WhatsApp share function - opens dialog for user message
   const shareOnWhatsApp = (e: React.MouseEvent) => {
@@ -1593,13 +1599,17 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
 
         {/* Price */}
         <div className="flex items-baseline justify-between">
-          {isAuthenticated && selectedColor?.price ? (
+          {shouldShowPrice && selectedColor?.price ? (
             <span className="text-lg sm:text-xl font-bold text-primary">
               ₹{selectedColor.price.toLocaleString()}
             </span>
-          ) : (
+          ) : !isAuthenticated ? (
             <span className="text-sm text-gray-600 font-medium">
               🔐 Login to view price
+            </span>
+          ) : (
+            <span className="text-sm text-gray-600 font-medium">
+              💬 Contact for price
             </span>
           )}
           <span className="text-xs text-gray-500">MOQ: Contact</span>

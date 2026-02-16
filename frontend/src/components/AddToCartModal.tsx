@@ -25,6 +25,7 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [sizeSets, setSizeSets] = useState<SizeSet[]>([]);
   const [selectedSetId, setSelectedSetId] = useState<string>('');
+  const [setQuantity, setSetQuantity] = useState<number>(0);
   const [viewMode, setViewMode] = useState<'individual' | 'sets'>('individual');
 
   const selectedColor = design.design_colors?.[selectedColorIndex];
@@ -92,7 +93,7 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
     }));
   };
 
-  const setQuantity = (size: string, quantity: number) => {
+  const updateSizeQuantity = (size: string, quantity: number) => {
     setSizeQuantities(prev => prev.map(item => {
       if (item.size === size) {
         const validQuantity = Math.max(0, quantity);
@@ -103,24 +104,27 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
   };
 
   useEffect(() => {
-    const total = sizeQuantities.reduce((sum, item) => sum + item.quantity, 0);
-    setTotalQuantity(total);
-  }, [sizeQuantities]);
+    if (viewMode === 'sets' && selectedSetId) {
+      // In set mode, total is the set quantity
+      setTotalQuantity(setQuantity);
+    } else {
+      // In individual mode, sum all size quantities
+      const total = sizeQuantities.reduce((sum, item) => sum + item.quantity, 0);
+      setTotalQuantity(total);
+    }
+  }, [sizeQuantities, setQuantity, viewMode, selectedSetId]);
 
   const applySizeSet = () => {
     const selectedSet = sizeSets.find(set => set.id === selectedSetId);
     if (!selectedSet) return;
 
-    // For size sets, we'll set quantity 1 for each size in the set
-    setSizeQuantities(prev => prev.map(item => {
-      const isInSet = selectedSet.sizes.includes(item.size);
-      const quantity = isInSet ? 1 : 0;
-      return { ...item, quantity };
-    }));
+    // Reset set quantity when changing sets
+    setSetQuantity(0);
   };
 
   const clearQuantities = () => {
     setSizeQuantities(prev => prev.map(item => ({ ...item, quantity: 0 })));
+    setSetQuantity(0);
   };
 
   const handleAddToCart = async () => {
@@ -130,7 +134,7 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
     }
 
     if (totalQuantity === 0) {
-      setError('Please select at least one size');
+      setError(viewMode === 'sets' ? 'Please enter set quantity' : 'Please select at least one size');
       return;
     }
 
@@ -138,16 +142,26 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
     setError('');
 
     try {
-      const itemsToAdd = sizeQuantities.filter(item => item.quantity > 0);
-      
-      // Add each item to cart individually
-      for (const item of itemsToAdd) {
+      if (viewMode === 'sets' && selectedSetId) {
+        // Add size set to cart
         await api.addToCart({
           design_id: design.id,
           color_id: selectedColor?.id || '',
-          size: item.size,
-          quantity: item.quantity
+          size_set_id: selectedSetId,
+          quantity: setQuantity
         });
+      } else {
+        // Add individual sizes to cart
+        const itemsToAdd = sizeQuantities.filter(item => item.quantity > 0);
+        
+        for (const item of itemsToAdd) {
+          await api.addToCart({
+            design_id: design.id,
+            color_id: selectedColor?.id || '',
+            size: item.size,
+            quantity: item.quantity
+          });
+        }
       }
       
       setSuccess(true);
@@ -164,6 +178,7 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
   const handleClose = () => {
     setSizeQuantities(prev => prev.map(item => ({ ...item, quantity: 0 })));
     setTotalQuantity(0);
+    setSetQuantity(0);
     setError('');
     setSuccess(false);
     setSelectedSetId('');
@@ -269,6 +284,8 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
                       setSelectedSetId(e.target.value);
                       if (e.target.value) {
                         applySizeSet();
+                      } else {
+                        setSetQuantity(0);
                       }
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -276,53 +293,42 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
                     <option value="">Choose a size set...</option>
                     {sizeSets.map(set => (
                       <option key={set.id} value={set.id}>
-                        {set.name}
+                        {set.name} ({set.sizes.join(', ')})
                       </option>
                     ))}
                   </select>
                   
-                  {/* Show quantity controls for selected size set */}
+                  {/* Show set quantity input */}
                   {selectedSetId && (
-                    <div className="mt-3">
-                      <div className="text-xs text-gray-600 mb-2">Adjust quantities for each size:</div>
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {sizeQuantities
-                          .filter(item => {
-                            const selectedSet = sizeSets.find(set => set.id === selectedSetId);
-                            return selectedSet?.sizes.includes(item.size);
-                          })
-                          .map((item) => (
-                            <div key={item.size} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between">
-                                  <span className="font-medium text-gray-900">{item.size}</span>
-                                  <span className="text-xs text-gray-500">Available: {item.available}</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => updateQuantity(item.size, -1)}
-                                  className="w-8 h-8 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition"
-                                >
-                                  <Minus className="w-4 h-4" />
-                                </button>
-                                <input
-                                  type="number"
-                                  value={item.quantity}
-                                  onChange={(e) => setQuantity(item.size, parseInt(e.target.value) || 0)}
-                                  className="w-16 text-center border border-gray-300 rounded-lg py-1 text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                                  min="0"
-                                />
-                                <button
-                                  onClick={() => updateQuantity(item.size, 1)}
-                                  className="w-8 h-8 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition"
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                    <div className="mt-4">
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        Number of Sets
+                      </label>
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <button
+                          onClick={() => setSetQuantity(prev => Math.max(0, prev - 1))}
+                          className="w-10 h-10 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition"
+                        >
+                          <Minus className="w-5 h-5" />
+                        </button>
+                        <input
+                          type="number"
+                          value={setQuantity}
+                          onChange={(e) => setSetQuantity(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="flex-1 text-center border border-gray-300 rounded-lg py-2 text-lg font-semibold focus:ring-2 focus:ring-primary focus:border-transparent"
+                          min="0"
+                          placeholder="0"
+                        />
+                        <button
+                          onClick={() => setSetQuantity(prev => prev + 1)}
+                          className="w-10 h-10 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
                       </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Each set includes: {sizeSets.find(s => s.id === selectedSetId)?.sizes.join(', ')}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -360,7 +366,7 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
                           <input
                             type="number"
                             value={item.quantity}
-                            onChange={(e) => setQuantity(item.size, parseInt(e.target.value) || 0)}
+                            onChange={(e) => updateSizeQuantity(item.size, parseInt(e.target.value) || 0)}
                             className="w-16 text-center border border-gray-300 rounded-lg py-1 text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
                             min="0"
                           />
