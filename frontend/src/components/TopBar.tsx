@@ -1,4 +1,4 @@
-import { useState, useEffect, memo, useCallback } from 'react';
+import { useState, useEffect, memo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -29,11 +29,31 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
   const [cartModalOpen, setCartModalOpen] = useState(false);
   const [wishlistModalOpen, setWishlistModalOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadCartCount();
     loadWishlistCount();
   }, []);
+
+  // Handle click outside to close profile dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: Event) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+
+    if (profileDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [profileDropdownOpen]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -78,26 +98,36 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
         <div className="h-full px-4 md:px-6">
           {/* Mobile Layout: Stacked */}
           <div className="sm:hidden flex flex-col">
-            {/* Top row: Menu and Actions */}
-            <div className="flex items-center justify-between h-14">
+            {/* First row: Logo */}
+            <div className="flex items-center justify-center py-2 border-b border-gray-100">
+              <img
+                src={branding.logoUrl}
+                alt={branding.brandName}
+                style={{ height: '3.5rem' }}
+                className="w-auto object-contain max-w-[140px]"
+              />
+            </div>
+            
+            {/* Second row: Menu and Actions */}
+            <div className="flex items-center justify-between h-12">
               <button
                 onClick={onToggleSidebar}
                 className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
                 aria-label="Toggle menu"
               >
-                {isSidebarOpen ? <X size={24} className="text-gray-700" /> : <Menu size={24} className="text-gray-700" />}
+                {isSidebarOpen ? <X size={20} className="text-gray-700" /> : <Menu size={20} className="text-gray-700" />}
               </button>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 {/* Wishlist */}
                 <button
                   onClick={() => setWishlistModalOpen(true)}
-                  className="relative p-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
+                  className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
                   title="Wishlist"
                 >
-                  <Heart className="w-6 h-6" />
+                  <Heart className="w-5 h-5" />
                   {wishlistCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg">
+                    <span className="absolute -top-1 -right-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-lg text-[10px]">
                       {wishlistCount}
                     </span>
                   )}
@@ -106,26 +136,25 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                 {/* Cart */}
                 <button
                   onClick={() => setCartModalOpen(true)}
-                  className="relative p-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
+                  className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
                   title="Shopping Cart"
                 >
-                  <ShoppingCart className="w-6 h-6" />
+                  <ShoppingCart className="w-5 h-5" />
                   {cartCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg">
+                    <span className="absolute -top-1 -right-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-lg text-[10px]">
                       {cartCount}
                     </span>
                   )}
                 </button>
 
                 {/* Profile Dropdown */}
-                <div className="relative">
+                <div className="relative" ref={profileDropdownRef}>
                   <button
                     onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                    onBlur={() => setTimeout(() => setProfileDropdownOpen(false), 200)}
                     className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-xl transition-all"
                     title="Profile"
                   >
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg text-sm">
                       {user?.full_name?.charAt(0).toUpperCase() || 'U'}
                     </div>
                   </button>
@@ -181,16 +210,6 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                 </div>
               </div>
             </div>
-            
-            {/* Bottom row: Logo */}
-            <div className="flex items-center justify-center pb-2">
-              <img
-                src={branding.logoUrl}
-                alt={branding.brandName}
-                style={{ height: '6rem' }}
-                className="w-auto object-contain max-w-[200px]"
-              />
-            </div>
           </div>
 
           {/* Desktop Layout: Single Row */}
@@ -245,10 +264,9 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               </button>
 
               {/* Profile Dropdown */}
-              <div className="relative">
+              <div className="relative" ref={profileDropdownRef}>
                 <button
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                  onBlur={() => setTimeout(() => setProfileDropdownOpen(false), 200)}
                   className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-xl transition-all"
                   title="Profile"
                 >

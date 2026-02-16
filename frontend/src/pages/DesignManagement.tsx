@@ -242,8 +242,14 @@ export function DesignManagement() {
             setShowViewModal(false);
             setSelectedDesign(null);
           }}
-          onUpdate={() => {
-            loadDesigns();
+          onUpdate={async () => {
+            await loadDesigns();
+            // Refresh the selected design with updated data
+            const updatedDesigns = await api.getDesigns();
+            const updatedDesign = updatedDesigns.find(d => d.id === selectedDesign.id);
+            if (updatedDesign) {
+              setSelectedDesign(updatedDesign);
+            }
           }}
         />
       )}

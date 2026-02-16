@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api, CartItem } from '../lib/api';
-import { X, Trash2, Minus, Plus, ShoppingBag, ChevronDown, ChevronUp, Package, Download, MessageCircle } from 'lucide-react';
+import { X, Trash2, Minus, Plus, ShoppingBag, ChevronDown, ChevronUp, Package } from 'lucide-react';
 import { CheckoutModal } from './CheckoutModal';
-import { downloadCartPDF, getWhatsAppShareLink } from '../utils/pdfGenerator';
 import { useAuth } from '../contexts/AuthContext';
 
 interface CartModalProps {
@@ -11,7 +10,6 @@ interface CartModalProps {
 }
 
 export function CartModal({ isOpen, onClose }: CartModalProps) {
-  const { user } = useAuth();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -100,17 +98,6 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const uniqueDesigns = Object.keys(groupedItems).length;
 
-  const handleDownloadPDF = () => {
-    const userInfo = user ? { name: user.full_name, email: user.email } : undefined;
-    downloadCartPDF(cartItems, userInfo);
-  };
-
-  const handleWhatsAppShare = () => {
-    const userInfo = user ? { name: user.full_name, email: user.email } : undefined;
-    const whatsappLink = getWhatsAppShareLink(cartItems, userInfo);
-    window.open(whatsappLink, '_blank');
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -184,39 +171,13 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
 
         {cartItems.length > 0 && (
           <div className="border-t border-gray-200 p-4 sm:p-6 bg-gray-50">
-            {/* Action Buttons */}
-            <div className="space-y-2 sm:space-y-3">
-              {/* Download PDF and WhatsApp Share Buttons */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={handleDownloadPDF}
-                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-2.5 sm:py-3 text-xs sm:text-sm rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-200"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download PDF</span>
-                </button>
-                <button
-                  onClick={handleWhatsAppShare}
-                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 text-white py-2.5 sm:py-3 text-xs sm:text-sm rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-200"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  <span>Share on WhatsApp</span>
-                </button>
-              </div>
-              
-              {/* Info Text */}
-              <p className="text-xs text-gray-600 text-center">
-                Download PDF or share on WhatsApp to get quotes from us
-              </p>
-              
-              {/* Checkout Button */}
-              <button
-                onClick={() => setShowCheckout(true)}
-                className="w-full bg-primary text-white py-3 sm:py-4 text-sm sm:text-base rounded-lg font-semibold hover:bg-opacity-90 transition"
-              >
-                Proceed to Checkout
-              </button>
-            </div>
+            {/* Checkout Button */}
+            <button
+              onClick={() => setShowCheckout(true)}
+              className="w-full bg-primary text-white py-3 sm:py-4 text-sm sm:text-base rounded-lg font-semibold hover:bg-opacity-90 transition"
+            >
+              Proceed to Checkout
+            </button>
           </div>
         )}
       </div>
@@ -249,42 +210,54 @@ interface GroupedCartCardProps {
 }
 
 function GroupedCartCard({ groupKey, group, isExpanded, onToggle, onUpdateQuantity, onRemove, updatingItems }: GroupedCartCardProps) {
-  const firstImage = group.color.image_urls?.[0];
+  // Get first available image from color or design
+  const firstImage = group.color.image_urls?.[0] || 
+                     group.design.design_colors?.find((c: any) => c.id === group.color.id)?.image_urls?.[0] ||
+                     group.design.design_colors?.[0]?.image_urls?.[0];
   const totalQuantity = group.items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = group.items.reduce((sum, item) => sum + (item.color.price * item.quantity), 0);
   const sizeSummary = group.items.map(item => `${item.size}(${item.quantity})`).join(', ');
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition">
       {/* Compact Header - Always Visible */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition text-left"
+        className="w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-gray-50 transition text-left"
       >
-        <div className="flex-shrink-0 w-16 h-16 bg-secondary rounded-lg overflow-hidden">
+        <div className="flex-shrink-0 w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-lg overflow-hidden border-2 border-gray-200">
           {firstImage ? (
-            <img src={firstImage} alt={group.design.name} className="w-full h-full object-cover" />
+            <div className="w-full h-full flex items-center justify-center bg-white p-1">
+              <img src={firstImage} alt={group.design.name} className="w-full h-full object-contain" />
+            </div>
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="w-full h-full flex items-center justify-center bg-gray-50">
               <span className="text-sm font-bold text-primary">{group.design.design_no}</span>
             </div>
           )}
         </div>
 
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-bold text-gray-900 truncate">{group.design.name}</h3>
-          <div className="flex items-center gap-1.5 text-xs text-gray-600 mt-0.5">
+          <h3 className="text-sm sm:text-base font-bold text-gray-900 mb-1">{group.design.name}</h3>
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 mb-1.5">
             {group.color.color_code && (
-              <div className="w-3 h-3 rounded-full border border-gray-300" style={{ backgroundColor: group.color.color_code }} />
+              <div className="w-4 h-4 rounded-full border-2 border-gray-300 shadow-sm" style={{ backgroundColor: group.color.color_code }} />
             )}
-            <span>{group.color.color_name}</span>
+            <span className="font-medium">{group.color.color_name}</span>
           </div>
-          <div className="text-xs text-gray-500 mt-1 truncate">{sizeSummary}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {group.items.map((item, idx) => (
+              <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-semibold">
+                <span>{item.is_set_order && item.size_set ? item.size_set.name : `Size ${item.size}`}</span>
+                <span className="text-primary/60">×</span>
+                <span>{item.quantity}</span>
+              </span>
+            ))}
+          </div>
         </div>
 
         <div className="flex-shrink-0 text-right">
-          <div className="text-sm font-bold text-primary">₹{totalPrice.toLocaleString()}</div>
-          <div className="text-xs text-gray-500">{totalQuantity} items</div>
+          <div className="text-base sm:text-lg font-bold text-gray-900">{totalQuantity}</div>
+          <div className="text-xs text-gray-500">items</div>
         </div>
 
         {isExpanded ? (
@@ -296,56 +269,71 @@ function GroupedCartCard({ groupKey, group, isExpanded, onToggle, onUpdateQuanti
 
       {/* Expanded Details */}
       {isExpanded && (
-        <div className="border-t border-gray-200 p-3 bg-gray-50">
+        <div className="border-t-2 border-gray-200 p-3 sm:p-4 bg-gradient-to-b from-gray-50 to-white">
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">{group.items[0]?.is_set_order ? 'Size Set Breakdown:' : 'Size Breakdown:'}</p>
           <div className="space-y-2">
             {group.items.map((item) => {
               const isUpdating = updatingItems.has(item.id);
+              const displayLabel = item.is_set_order && item.size_set 
+                ? item.size_set.name 
+                : `Size ${item.size}`;
+              const displaySizes = item.is_set_order && item.size_set
+                ? item.size_set.sizes.join(', ')
+                : null;
+              
               return (
-                <div key={item.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                  <div className="flex items-center gap-3 flex-1">
-                    <span className="text-sm font-medium text-gray-700 min-w-[50px]">Size {item.size}</span>
+                <div key={item.id} className="flex items-center justify-between p-3 bg-white rounded-lg border-2 border-gray-200 shadow-sm">
+                  <div className="flex items-center gap-3 sm:gap-4 flex-1">
+                    <div className="flex flex-col">
+                      <div className="bg-primary/10 text-primary font-bold text-sm sm:text-base px-3 py-1.5 rounded-lg text-center">
+                        {displayLabel}
+                      </div>
+                      {displaySizes && (
+                        <div className="text-xs text-gray-600 mt-1 text-center">
+                          ({displaySizes})
+                        </div>
+                      )}
+                    </div>
                     
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onUpdateQuantity(item.id, item.quantity - 1);
                         }}
                         disabled={isUpdating || item.quantity <= 1}
-                        className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 transition flex items-center justify-center disabled:opacity-50"
+                        className="w-8 h-8 rounded-lg bg-gray-200 hover:bg-gray-300 transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Minus className="w-3 h-3" />
+                        <Minus className="w-4 h-4" />
                       </button>
-                      <span className="text-sm font-semibold w-6 text-center">{item.quantity}</span>
+                      <div className="flex flex-col items-center min-w-[50px]">
+                        <span className="text-lg sm:text-xl font-bold text-gray-900">{item.quantity}</span>
+                        <span className="text-xs text-gray-500">qty</span>
+                      </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onUpdateQuantity(item.id, item.quantity + 1);
                         }}
                         disabled={isUpdating}
-                        className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 transition flex items-center justify-center disabled:opacity-50"
+                        className="w-8 h-8 rounded-lg bg-gray-200 hover:bg-gray-300 transition flex items-center justify-center disabled:opacity-50"
                       >
-                        <Plus className="w-3 h-3" />
+                        <Plus className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-gray-900">
-                      ₹{(item.color.price * item.quantity).toLocaleString()}
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemove(item.id);
-                      }}
-                      disabled={isUpdating}
-                      className="text-red-500 hover:text-red-600 transition disabled:opacity-50"
-                      title="Remove"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemove(item.id);
+                    }}
+                    disabled={isUpdating}
+                    className="text-red-500 hover:text-red-600 transition disabled:opacity-50 p-2 hover:bg-red-50 rounded-lg"
+                    title="Remove this size"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
                 </div>
               );
             })}

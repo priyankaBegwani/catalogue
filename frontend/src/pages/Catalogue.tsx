@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile } from '../lib/api';
-import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, Phone, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck } from 'lucide-react';
+import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, Phone, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck, Plus, Minus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getWhatsAppUrl, useBranding } from '../hooks/useBranding';
 import { AddToCartModal } from '../components/AddToCartModal';
@@ -1447,17 +1447,19 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
       )}
       
       <div
-        className="relative aspect-w-3 aspect-h-4 bg-secondary overflow-hidden"
+        className="relative bg-secondary overflow-hidden rounded-t-xl"
         onClick={onQuickView}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
         {firstImage ? (
-          <img
-            src={firstImage}
-            alt={design.name}
-            className="w-full h-48 sm:h-64 lg:h-72 object-cover group-hover:scale-105 transition duration-500"
-          />
+          <div className="w-full h-48 sm:h-64 lg:h-72 flex items-center justify-center bg-white">
+            <img
+              src={firstImage}
+              alt={design.name}
+              className="w-full h-full object-contain group-hover:scale-105 transition duration-500"
+            />
+          </div>
         ) : (
           <div className="w-full h-48 sm:h-64 lg:h-72 flex flex-col items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
             <ImageIcon className="w-16 h-16 sm:w-20 sm:h-20 text-gray-400 mb-3" />
@@ -1646,6 +1648,8 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [sizeQuantities, setSizeQuantities] = useState<Record<string, number>>({});
   const [setQuantities, setSetQuantities] = useState<Record<string, number>>({});
+  const [selectedSetId, setSelectedSetId] = useState<string>('');
+  const [tempQuantity, setTempQuantity] = useState<number>(1);
   const [sizeSets, setSizeSets] = useState<SizeSet[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [addingToCart, setAddingToCart] = useState(false);
@@ -1858,6 +1862,28 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
         return rest;
       }
       return { ...prev, [setId]: validQuantity };
+    });
+  };
+
+  // Add size set with quantity
+  const handleAddSizeSet = () => {
+    if (!selectedSetId || tempQuantity <= 0) return;
+    
+    setSetQuantities(prev => ({
+      ...prev,
+      [selectedSetId]: (prev[selectedSetId] || 0) + tempQuantity
+    }));
+    
+    // Reset selection
+    setSelectedSetId('');
+    setTempQuantity(1);
+  };
+
+  // Remove a size set completely
+  const handleRemoveSizeSet = (setId: string) => {
+    setSetQuantities(prev => {
+      const { [setId]: _, ...rest } = prev;
+      return rest;
     });
   };
 
@@ -2206,58 +2232,119 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
               )}
 
               {(isAdmin && viewMode === 'sets') || (isRetailer && !isAdmin) ? (
-                /* Retailer: Size Set Selection */
+                /* Retailer: Size Set Selection with Dropdown */
                 sizeSets.length > 0 && (
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-1.5">
                         <Package className="w-4 h-4 text-primary" />
                         <h3 className="text-xs sm:text-sm font-semibold text-gray-900">Size Sets</h3>
                       </div>
                       {totalItemsToAdd > 0 && (
                         <span className="text-xs font-medium text-white bg-primary px-2 py-0.5 rounded-full">
-                          {totalItemsToAdd}
+                          {totalItemsToAdd} total
                         </span>
                       )}
                     </div>
-                    <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                      {sizeSets.map((sizeSet) => {
-                        const currentQty = setQuantities[sizeSet.id] || 0;
+
+                    {/* Add Size Set Section */}
+                    <div className="bg-gray-50 rounded-lg p-3 mb-3 border border-gray-200">
+                      <div className="space-y-2">
+                        <select
+                          value={selectedSetId}
+                          onChange={(e) => setSelectedSetId(e.target.value)}
+                          className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary focus:border-primary"
+                        >
+                          <option value="">Select a size set...</option>
+                          {sizeSets.map((set) => (
+                            <option key={set.id} value={set.id}>
+                              {set.name} ({set.sizes.join(', ')})
+                            </option>
+                          ))}
+                        </select>
                         
-                        return (
-                          <div
-                            key={sizeSet.id}
-                            className={`flex items-center justify-between p-2 rounded-lg border transition ${
-                              currentQty > 0
-                                ? 'border-primary bg-primary/5'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="flex-1 min-w-0 mr-2">
-                              <div className="text-xs sm:text-sm font-semibold text-gray-900 truncate">{sizeSet.name}</div>
-                              <div className="text-xs text-gray-500 truncate">{sizeSet.sizes.join(', ')}</div>
-                            </div>
-                            
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => updateSetQuantity(sizeSet.id, currentQty - 1)}
-                                disabled={currentQty === 0}
-                                className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 transition disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-center font-bold"
-                              >
-                                −
-                              </button>
-                              <span className="text-sm font-semibold w-6 text-center">{currentQty}</span>
-                              <button
-                                onClick={() => updateSetQuantity(sizeSet.id, currentQty + 1)}
-                                className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 transition flex items-center justify-center font-bold"
-                              >
-                                +
-                              </button>
-                            </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 flex items-center gap-2">
+                            <label className="text-xs font-medium text-gray-700 whitespace-nowrap">Quantity:</label>
+                            <input
+                              type="number"
+                              value={tempQuantity}
+                              onChange={(e) => setTempQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                              className="flex-1 text-center border-2 border-gray-300 rounded-lg py-1.5 text-sm font-bold focus:ring-2 focus:ring-primary focus:border-primary"
+                              min="1"
+                              placeholder="1"
+                            />
                           </div>
-                        );
-                      })}
+                          <button
+                            onClick={handleAddSizeSet}
+                            disabled={!selectedSetId || tempQuantity <= 0}
+                            className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-opacity-90 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Add
+                          </button>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Selected Size Sets List */}
+                    {Object.keys(setQuantities).length > 0 && (
+                      <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Selected Sets:</p>
+                        {Object.entries(setQuantities).map(([setId, quantity]) => {
+                          const sizeSet = sizeSets.find(s => s.id === setId);
+                          if (!sizeSet) return null;
+                          
+                          return (
+                            <div
+                              key={setId}
+                              className="p-3 rounded-lg border-2 border-primary bg-primary/5 shadow-sm"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0 mr-2">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm font-bold text-gray-900">{sizeSet.name}</span>
+                                    <span className="text-xs font-bold text-primary bg-primary/20 px-2 py-0.5 rounded-full">
+                                      {quantity} set{quantity > 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-600 flex flex-wrap gap-1">
+                                    {sizeSet.sizes.map((size, idx) => (
+                                      <span key={idx} className="px-1.5 py-0.5 bg-white rounded text-xs font-medium">
+                                        {size}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => updateSetQuantity(setId, quantity - 1)}
+                                      className="w-6 h-6 rounded bg-white hover:bg-gray-100 transition flex items-center justify-center text-gray-700 font-bold border border-gray-300"
+                                    >
+                                      −
+                                    </button>
+                                    <button
+                                      onClick={() => updateSetQuantity(setId, quantity + 1)}
+                                      className="w-6 h-6 rounded bg-white hover:bg-gray-100 transition flex items-center justify-center text-gray-700 font-bold border border-gray-300"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                  <button
+                                    onClick={() => handleRemoveSizeSet(setId)}
+                                    className="text-red-500 hover:text-red-600 transition p-1"
+                                    title="Remove"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               ) : (
