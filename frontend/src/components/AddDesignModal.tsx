@@ -38,6 +38,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     style_id: '',
     fabric_type_id: '',
     available_sizes: [] as string[],
+    whatsapp_image_url: '',
   });
   const [categories, setCategories] = useState<DesignCategory[]>([]);
   const [styles, setStyles] = useState<DesignStyle[]>([]);
@@ -46,6 +47,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
   const [colors, setColors] = useState<ColorData[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadingWhatsAppImage, setUploadingWhatsAppImage] = useState(false);
   const [error, setError] = useState('');
   const prevCategoryRef = useRef<string>('');
   const colorNameRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -96,14 +98,20 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         name: editingDesign.name,
         description: editingDesign.description || '',
         category_id: editingDesign.category_id || '',
-        style_id: editingDesign.style_id || '',
         fabric_type_id: editingDesign.fabric_type_id || '',
         available_sizes: editingDesign.available_sizes || [],
+        whatsapp_image_url: editingDesign.whatsapp_image_url || '',
       });
       prevCategoryRef.current = editingDesign.category_id || '';
       // Load styles for the editing design's category
       if (editingDesign.category_id) {
-        loadStyles(editingDesign.category_id);
+        loadStyles(editingDesign.category_id).then(() => {
+          // Ensure style_id is set after styles are loaded
+          setFormData(prev => ({
+            ...prev,
+            style_id: editingDesign.style_id || ''
+          }));
+        });
       }
       // Pre-populate colors
       if (editingDesign.design_colors) {
@@ -259,6 +267,21 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     sizeInputRefs.current.splice(index, 1);
   };
 
+  // Handle WhatsApp image upload
+  const handleWhatsAppImageUpload = async (file: File | null) => {
+    if (!file) return;
+
+    try {
+      setUploadingWhatsAppImage(true);
+      const url = await uploadDesignImage(file, formData.design_no || 'temp', 'whatsapp');
+      setFormData(prev => ({ ...prev, whatsapp_image_url: url }));
+    } catch (err) {
+      setError('Failed to upload WhatsApp image');
+    } finally {
+      setUploadingWhatsAppImage(false);
+    }
+  };
+
   const handleColorChange = (index: number, field: keyof ColorData, value: any) => {
     const newColors = [...colors];
     newColors[index] = { ...newColors[index], [field]: value };
@@ -312,7 +335,8 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         category_id: formData.category_id || undefined,
         style_id: formData.style_id || undefined,
         fabric_type_id: formData.fabric_type_id || undefined,
-        available_sizes: formData.available_sizes
+        available_sizes: formData.available_sizes,
+        whatsapp_image_url: formData.whatsapp_image_url || undefined
       };
 
       const colorsWithImages = await Promise.all(
@@ -526,7 +550,57 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
               placeholder="Brief description of the design"
             />
           </div>
-         
+
+          {/* WhatsApp Sharing Image */}
+          <div className="border-2 border-green-200 rounded-lg p-4 bg-green-50">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-1">
+                  WhatsApp Sharing Image
+                </label>
+                <p className="text-xs text-gray-600">
+                  Upload a single image to be used when sharing this design on WhatsApp
+                </p>
+              </div>
+              <MessageCircle className="w-6 h-6 text-green-600" />
+            </div>
+
+            <div className="space-y-3">
+              {formData.whatsapp_image_url ? (
+                <div className="relative inline-block">
+                  <img
+                    src={formData.whatsapp_image_url}
+                    alt="WhatsApp sharing preview"
+                    className="w-full max-w-xs h-48 object-contain rounded-lg border-2 border-green-300 bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, whatsapp_image_url: '' }))}
+                    className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-2 hover:bg-red-700 transition shadow-lg"
+                    title="Remove image"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center px-6 py-8 border-2 border-dashed border-green-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-100 transition">
+                  <Upload className="w-8 h-8 text-green-500 mb-2" />
+                  <span className="text-sm font-medium text-gray-700">Upload WhatsApp Image</span>
+                  <span className="text-xs text-gray-500 mt-1">PNG, JPG up to 10MB</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleWhatsAppImageUpload(e.target.files?.[0] || null)}
+                    className="hidden"
+                    disabled={uploadingWhatsAppImage}
+                  />
+                  {uploadingWhatsAppImage && (
+                    <span className="text-xs text-green-600 mt-2">Uploading...</span>
+                  )}
+                </label>
+              )}
+            </div>
+          </div>
 
           <div ref={colorsSectionRef}>
             <div className="flex items-center justify-between mb-3 sm:mb-4">

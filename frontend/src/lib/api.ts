@@ -79,6 +79,7 @@ export interface Design {
   style_id: string | null;
   fabric_type_id: string | null;
   available_sizes: string[];
+  whatsapp_image_url?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

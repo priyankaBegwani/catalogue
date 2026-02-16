@@ -282,10 +282,14 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
     e.stopPropagation();
     
     try {
+      // Use WhatsApp image if available, otherwise use color images
+      const whatsappImage = design.whatsapp_image_url;
+      const imagesToShare = whatsappImage ? [whatsappImage] : imageUrls.slice(0, 2);
+      
       // Check if Web Share API is available and we have images
-      if (navigator.share && imageUrls.length > 0) {
+      if (navigator.share && imagesToShare.length > 0) {
         // Try to load and share actual images
-        const imagePromises = imageUrls.slice(0, 2).map(async (url) => {
+        const imagePromises = imagesToShare.map(async (url) => {
           try {
             const response = await fetch(url);
             const blob = await response.blob();

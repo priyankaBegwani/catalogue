@@ -572,9 +572,14 @@ export function Catalogue() {
     
     for (let i = 0; i < thumbnailCount && i < filteredDesigns.length; i++) {
       const design = filteredDesigns[i];
+      // Use WhatsApp image if available, otherwise fall back to first color image
+      const whatsappImage = design.whatsapp_image_url;
       const firstColor = design.design_colors?.[0];
-      if (firstColor?.image_urls && firstColor.image_urls.length > 0) {
-        thumbnailImages.push(firstColor.image_urls[0]);
+      const fallbackImage = firstColor?.image_urls?.[0];
+      const imageToUse = whatsappImage || fallbackImage;
+      
+      if (imageToUse) {
+        thumbnailImages.push(imageToUse);
       }
     }
     
@@ -615,7 +620,10 @@ export function Catalogue() {
     const design = pendingShareDesign;
     const selectedColor = design.design_colors?.[0];
     const colorCount = design.design_colors?.length || 0;
+    // Use WhatsApp image if available, otherwise fall back to color images
+    const whatsappImage = design.whatsapp_image_url;
     const selectedColorImages = selectedColor?.image_urls || [];
+    const shareImage = whatsappImage || selectedColorImages[0];
     
     try {
       const productLink = `${window.location.origin}/catalogue?design=${design.id}`;
@@ -652,9 +660,9 @@ export function Catalogue() {
       message += `\n📱 *Interested? Contact us for more details!*`;
       
       // Try Web Share API with image
-      if (navigator.share && selectedColorImages.length > 0) {
+      if (navigator.share && shareImage) {
         try {
-          const imageUrl = selectedColorImages[0];
+          const imageUrl = shareImage;
           const response = await fetch(imageUrl);
           const blob = await response.blob();
           const file = new File([blob], `${design.design_no}.jpg`, { type: 'image/jpeg' });
