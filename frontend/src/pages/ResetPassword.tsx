@@ -35,9 +35,6 @@ export function ResetPassword() {
       accessToken = searchParams.get('access_token') || searchParams.get('token');
     }
     
-    console.log('Reset URL hash:', hash);
-    console.log('Extracted token:', accessToken ? 'Token found' : 'No token');
-    
     if (accessToken) {
       setToken(accessToken);
     } else {
@@ -60,9 +57,7 @@ export function ResetPassword() {
     }
 
     try {
-      console.log('Verifying token with API...');
       const response = await api.verifyResetToken(token);
-      console.log('Token verification response:', response);
       setTokenValid(true);
       setUserEmail(response.email || '');
     } catch (err) {

@@ -89,9 +89,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     loadCategories();
     loadFabricTypes();
     if (editingDesign) {
-      console.log('Editing design:', editingDesign);
-      console.log('Design colors:', editingDesign.design_colors);
-      
       // Pre-populate form with existing design data
       setFormData({
         design_no: editingDesign.design_no,
@@ -116,8 +113,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
       // Pre-populate colors
       if (editingDesign.design_colors) {
         const mappedColors = editingDesign.design_colors.map(color => {
-          console.log('Color size_quantities:', color.color_name, color.size_quantities);
-          
           // Parse size_quantities if it's a string (from database)
           let sizeQuantities = color.size_quantities;
           if (typeof sizeQuantities === 'string') {
@@ -149,7 +144,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
             uploadingVideos: []
           };
         });
-        console.log('Mapped colors:', mappedColors);
         setColors(mappedColors);
       }
     }
@@ -552,54 +546,53 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
           </div>
 
           {/* WhatsApp Sharing Image */}
-          <div className="border-2 border-green-200 rounded-lg p-4 bg-green-50">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-1">
-                  WhatsApp Sharing Image
-                </label>
-                <p className="text-xs text-gray-600">
-                  Upload a single image to be used when sharing this design on WhatsApp
-                </p>
-              </div>
-              <MessageCircle className="w-6 h-6 text-green-600" />
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <div className="flex items-center gap-2 mb-3">
+              <MessageCircle className="w-5 h-5 text-green-600" />
+              <label className="text-sm font-medium text-gray-900">
+                WhatsApp Share Image <span className="text-gray-500 font-normal">(Optional)</span>
+              </label>
             </div>
 
-            <div className="space-y-3">
-              {formData.whatsapp_image_url ? (
-                <div className="relative inline-block">
-                  <img
-                    src={formData.whatsapp_image_url}
-                    alt="WhatsApp sharing preview"
-                    className="w-full max-w-xs h-48 object-contain rounded-lg border-2 border-green-300 bg-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, whatsapp_image_url: '' }))}
-                    className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-2 hover:bg-red-700 transition shadow-lg"
-                    title="Remove image"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+            {formData.whatsapp_image_url ? (
+              <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg">
+                <img
+                  src={formData.whatsapp_image_url}
+                  alt="WhatsApp preview"
+                  className="w-16 h-16 object-cover rounded border border-gray-300"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">WhatsApp image uploaded</p>
+                  <p className="text-xs text-gray-500">Used for social sharing</p>
                 </div>
-              ) : (
-                <label className="flex flex-col items-center justify-center px-6 py-8 border-2 border-dashed border-green-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-100 transition">
-                  <Upload className="w-8 h-8 text-green-500 mb-2" />
-                  <span className="text-sm font-medium text-gray-700">Upload WhatsApp Image</span>
-                  <span className="text-xs text-gray-500 mt-1">PNG, JPG up to 10MB</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleWhatsAppImageUpload(e.target.files?.[0] || null)}
-                    className="hidden"
-                    disabled={uploadingWhatsAppImage}
-                  />
-                  {uploadingWhatsAppImage && (
-                    <span className="text-xs text-green-600 mt-2">Uploading...</span>
-                  )}
-                </label>
-              )}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, whatsapp_image_url: '' }))}
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                  title="Remove"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-3 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition group">
+                <Upload className="w-5 h-5 text-gray-400 group-hover:text-green-600 transition" />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-green-700">Upload Image</span>
+                  <span className="text-xs text-gray-500 block">PNG, JPG up to 10MB</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleWhatsAppImageUpload(e.target.files?.[0] || null)}
+                  className="hidden"
+                  disabled={uploadingWhatsAppImage}
+                />
+                {uploadingWhatsAppImage && (
+                  <span className="text-xs text-green-600">Uploading...</span>
+                )}
+              </label>
+            )}
           </div>
 
           <div ref={colorsSectionRef}>

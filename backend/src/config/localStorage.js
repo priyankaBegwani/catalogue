@@ -57,7 +57,6 @@ export async function saveToLocalStorage(fileBuffer, key) {
     // Write file to disk
     await fs.writeFile(uploadPath, fileBuffer);
     
-    console.log(`File saved to local storage: ${uploadPath}`);
     return publicUrl;
   } catch (error) {
     console.error('Save to local storage error:', error);
@@ -77,13 +76,11 @@ export async function deleteFromLocalStorage(key) {
     try {
       await fs.access(filePath);
     } catch {
-      console.log(`File not found: ${filePath}`);
       return; // File doesn't exist, consider it deleted
     }
     
     // Delete file
     await fs.unlink(filePath);
-    console.log(`File deleted from local storage: ${filePath}`);
     
     // Try to clean up empty directories
     try {
@@ -101,7 +98,6 @@ export async function deleteFromLocalStorage(key) {
       }
     } catch (cleanupError) {
       // Ignore cleanup errors
-      console.log('Directory cleanup skipped:', cleanupError.message);
     }
   } catch (error) {
     console.error('Delete from local storage error:', error);

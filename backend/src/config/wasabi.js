@@ -29,8 +29,6 @@ export async function generateUploadUrl(key, contentType) {
   const publicUrl = CDN_URL
     ? `${CDN_URL}/${BUCKET_NAME}/${key}`
     : `${process.env.WASABI_ENDPOINT || 'https://s3.wasabisys.com'}/${BUCKET_NAME}/${key}`;
-  
-  console.log('Generated public URL:', publicUrl);
 
   return {
     uploadUrl: signedUrl,

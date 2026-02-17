@@ -35,14 +35,12 @@ router.post('/upload-url', authenticateUser, async (req, res) => {
     // Select storage based on configuration
     switch (config.storageType) {
       case 'cdn':
-        console.log('Using CDN (Wasabi) for image upload');
         const cdnResult = await generateUploadUrl(key, contentType);
         uploadUrl = cdnResult.uploadUrl;
         publicUrl = cdnResult.publicUrl;
         break;
 
       case 'supabase':
-        console.log('Using Supabase Storage for image upload');
         const supabaseResult = await generateSupabaseUploadUrl(key);
         uploadUrl = supabaseResult.uploadUrl;
         publicUrl = supabaseResult.publicUrl;
@@ -50,7 +48,6 @@ router.post('/upload-url', authenticateUser, async (req, res) => {
         break;
 
       case 'local':
-        console.log('Using Local Storage for image upload');
         const localResult = await generateLocalStoragePath(key);
         // For local storage, we'll use a direct upload endpoint
         uploadUrl = `${process.env.VITE_BACKEND_URL || 'http://localhost:3001'}/api/storage/upload-local`;
@@ -98,17 +95,14 @@ router.delete('/delete', authenticateUser, async (req, res) => {
     // Select storage based on configuration
     switch (config.storageType) {
       case 'cdn':
-        console.log('Deleting from CDN (Wasabi)');
         await deleteFromWasabi(key);
         break;
 
       case 'supabase':
-        console.log('Deleting from Supabase Storage');
         await deleteFromSupabase(key);
         break;
 
       case 'local':
-        console.log('Deleting from Local Storage');
         await deleteFromLocalStorage(key);
         break;
 

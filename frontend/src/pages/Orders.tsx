@@ -133,13 +133,6 @@ const Orders: React.FC = () => {
       setLoading(true);
       const data = await api.fetchOrders();
       const ordersData = Array.isArray(data) ? data : data.orders || [];
-      console.log('Orders data:', ordersData);
-      if (ordersData.length > 0) {
-        console.log('First order items:', ordersData[0].order_items);
-        if (ordersData[0].order_items && ordersData[0].order_items.length > 0) {
-          console.log('First item sizes_quantities:', ordersData[0].order_items[0].sizes_quantities);
-        }
-      }
       setOrders(ordersData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch orders');

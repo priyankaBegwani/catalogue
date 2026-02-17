@@ -437,15 +437,12 @@ router.delete('/:id', authenticateUser, async (req, res) => {
                 switch (config.storageType) {
                   case 'cdn':
                     await deleteFromWasabi(key);
-                    console.log(`Deleted from Wasabi: ${key}`);
                     break;
                   case 'supabase':
                     await deleteFromSupabase(key);
-                    console.log(`Deleted from Supabase: ${key}`);
                     break;
                   case 'local':
                     await deleteFromLocalStorage(key);
-                    console.log(`Deleted from local storage: ${key}`);
                     break;
                 }
               }
@@ -588,15 +585,12 @@ router.delete('/colors/:colorId', authenticateUser, async (req, res) => {
             switch (config.storageType) {
               case 'cdn':
                 await deleteFromWasabi(key);
-                console.log(`Deleted from Wasabi: ${key}`);
                 break;
               case 'supabase':
                 await deleteFromSupabase(key);
-                console.log(`Deleted from Supabase: ${key}`);
                 break;
               case 'local':
                 await deleteFromLocalStorage(key);
-                console.log(`Deleted from local storage: ${key}`);
                 break;
             }
           }

@@ -32,8 +32,6 @@ export async function uploadDesignImage(
 
   const { uploadUrl, publicUrl, token, storageType, key } = await response.json();
 
-  console.log(`Uploading to ${storageType} storage`);
-
   // Upload file based on storage type
   if (storageType === 'local') {
     // Local storage requires FormData with file and key
@@ -56,7 +54,6 @@ export async function uploadDesignImage(
     }
 
     const result = await uploadResponse.json();
-    console.log(`Upload successful. Public URL: ${result.publicUrl}`);
     return result.publicUrl;
   } else if (storageType === 'supabase' && token) {
     // Supabase requires token in URL
@@ -91,7 +88,6 @@ export async function uploadDesignImage(
     }
   }
 
-  console.log(`Upload successful. Public URL: ${publicUrl}`);
   return publicUrl;
 }
 

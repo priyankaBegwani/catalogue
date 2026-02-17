@@ -47,12 +47,6 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
     try {
       setLoadingData(true);
       
-      // Debug logging
-      console.log('CheckoutModal - User object:', user);
-      console.log('CheckoutModal - User role:', user?.role);
-      console.log('CheckoutModal - User party_id:', user?.party_id);
-      console.log('CheckoutModal - Should show dropdown:', user?.role === 'admin' || !user?.party_id);
-      
       // Fetch transport options
       const transports = await api.getTransportOptions();
       setTransportOptions(transports);

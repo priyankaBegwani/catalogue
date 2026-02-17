@@ -159,7 +159,6 @@ router.delete('/:id',
     validateUUID(id, 'Party ID');
 
     // First check if there are any users associated with this party
-    console.log('Checking dependencies for party ID:', id);
     const { data: users, error: userCheckError } = await supabaseAdmin
       .from('user_profiles')
       .select('id, full_name, email')
@@ -168,8 +167,6 @@ router.delete('/:id',
     if (userCheckError) {
       throw new AppError('Failed to check party dependencies', 500, { dbError: userCheckError.message });
     }
-
-    console.log('Found users:', users);
 
     if (users && users.length > 0) {
       const userList = users.map(u => `${u.full_name} (${u.email})`).join(', ');
@@ -190,13 +187,11 @@ router.delete('/:id',
         .limit(1);
 
       if (orderCheckError) {
-        console.log('Order check failed (table might not exist or different structure):', orderCheckError.message);
         // Don't fail the deletion if orders table doesn't exist
       } else if (orders && orders.length > 0) {
         hasOrders = true;
       }
     } catch (err) {
-      console.log('Order check exception:', err.message);
       // Don't fail the deletion if orders table doesn't exist
     }
 
