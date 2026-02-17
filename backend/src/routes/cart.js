@@ -1,5 +1,5 @@
 import express from 'express';
-import { supabase } from '../config.js';
+import { supabase, config } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { 
   asyncHandler, 
@@ -9,8 +9,39 @@ import {
   executeQuery,
   cacheMiddleware
 } from '../utils/index.js';
+import { generateSignedGetUrl } from '../config/wasabi.js';
 
 const router = express.Router();
+
+// Helper function to convert image URLs to signed URLs
+async function convertToSignedUrls(imageUrls) {
+  if (!imageUrls || imageUrls.length === 0) return imageUrls;
+
+  // Only generate signed URLs for CDN storage type
+  if (config.storageType !== 'cdn') {
+    return imageUrls;
+  }
+
+  const signedUrls = [];
+  for (const imageUrl of imageUrls) {
+    try {
+      const urlParts = imageUrl.split('/');
+      const keyStartIndex = urlParts.findIndex(part => part === 'designs');
+      
+      if (keyStartIndex !== -1) {
+        const key = urlParts.slice(keyStartIndex).join('/');
+        const signedUrl = await generateSignedGetUrl(key, 3600);
+        signedUrls.push(signedUrl);
+      } else {
+        signedUrls.push(imageUrl);
+      }
+    } catch (error) {
+      console.error(`Failed to generate signed URL for ${imageUrl}:`, error);
+      signedUrls.push(imageUrl);
+    }
+  }
+  return signedUrls;
+}
 
 router.get('/size-sets', 
   authenticateUser, 
@@ -69,7 +100,18 @@ router.get('/',
       'Failed to fetch cart items'
     );
 
-    res.json(cartItems);
+    // Convert image URLs to signed URLs for each cart item
+    const cartItemsWithSignedUrls = await Promise.all(
+      cartItems.map(async (item) => ({
+        ...item,
+        color: item.color ? {
+          ...item.color,
+          image_urls: await convertToSignedUrls(item.color.image_urls)
+        } : item.color
+      }))
+    );
+
+    res.json(cartItemsWithSignedUrls);
   })
 );
 

@@ -737,6 +737,11 @@ export function Catalogue() {
     setAddCartColorIndex(0);
   };
 
+  const handleCartSuccess = () => {
+    // Dispatch custom event to notify TopBar to refresh cart count
+    window.dispatchEvent(new CustomEvent('cartUpdated'));
+  };
+
   const shareBulkOnWhatsApp = async () => {
     if (selectedDesigns.size === 0) return;
     
@@ -1174,6 +1179,7 @@ export function Catalogue() {
         <AddToCartModal
           isOpen={showAddToCartModal}
           onClose={closeAddToCartModal}
+          onSuccess={handleCartSuccess}
           design={addCartDesign}
           selectedColorIndex={addCartColorIndex}
         />
@@ -1284,10 +1290,60 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
   const showPriceToCustomers = localStorage.getItem('show_price_to_customers') !== 'false';
   const shouldShowPrice = isAdmin || (isAuthenticated && showPriceToCustomers);
 
-  // WhatsApp share function - opens dialog for user message
-  const shareOnWhatsApp = (e: React.MouseEvent) => {
+  // WhatsApp share function - direct share like design management page
+  const shareOnWhatsApp = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    onShareClick?.(design);
+    
+    try {
+      // Use WhatsApp image if available, otherwise use color images
+      const whatsappImage = design.whatsapp_image_url;
+      const imagesToShare = whatsappImage ? [whatsappImage] : selectedColorImages.slice(0, 2);
+      
+      // Check if Web Share API is available and we have images
+      if (navigator.share && imagesToShare.length > 0) {
+        // Try to load and share actual images
+        const imagePromises = imagesToShare.map(async (url) => {
+          try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const file = new File([blob], `design-${design.design_no}.jpg`, { type: 'image/jpeg' });
+            return file;
+          } catch (error) {
+            console.warn('Failed to load image:', url);
+            return null;
+          }
+        });
+        
+        const imageFiles = (await Promise.all(imagePromises)).filter(file => file !== null);
+        
+        if (imageFiles.length > 0) {
+          // Use Web Share API with actual images
+          await navigator.share({
+            title: `${design.name} (${design.design_no})`,
+            text: `${design.description || 'Beautiful design from our collection!'}\n\n🎨 Colors: ${colorCount} variants\n\nCheck out our catalogue for more designs!`,
+            files: imageFiles
+          });
+          return;
+        }
+      }
+      
+      // Fallback to WhatsApp with image URLs
+      let message = `*${design.name}* (${design.design_no})\n\n` +
+        `${design.description || 'Beautiful design from our collection!'}\n\n` +
+        `🎨 Colors: ${colorCount} variants\n\n`;
+      
+      if (selectedColorImages.length > 0) {
+        const imageList = selectedColorImages.slice(0, 3).join('\n');
+        message += `📸 Images:\n${imageList}\n\n`;
+      }
+      
+      message += `Check out our catalogue for more designs!`;
+      
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+    } catch (error) {
+      console.error('Share failed:', error);
+    }
   };
 
   // Legacy fallback for direct share (not used with dialog)
@@ -1979,12 +2035,9 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[96vh] overflow-hidden flex flex-col"
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto" onClick={onClose}>
+      <div 
+        className="bg-white rounded-xl shadow-2xl w-full max-w-6xl my-auto max-h-[95vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Compact Header */}
@@ -2020,7 +2073,7 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
 
         {/* Main Content - Scrollable */}
         <div className="flex-1 overflow-y-auto">
-          <div className="p-3 sm:p-4">
+          <div className="p-3 sm:p-4 pb-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
               {/* Left Column - Images */}
               <div className="space-y-2 sm:space-y-3">

@@ -34,6 +34,17 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
   useEffect(() => {
     loadCartCount();
     loadWishlistCount();
+
+    // Listen for cart updates from other components
+    const handleCartUpdate = () => {
+      loadCartCount();
+    };
+
+    window.addEventListener('cartUpdated', handleCartUpdate);
+
+    return () => {
+      window.removeEventListener('cartUpdated', handleCartUpdate);
+    };
   }, []);
 
   // Handle click outside to close profile dropdown

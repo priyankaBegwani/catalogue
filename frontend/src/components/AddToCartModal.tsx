@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 interface AddToCartModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
   design: Design;
   selectedColorIndex?: number;
 }
@@ -16,8 +17,8 @@ interface SizeQuantity {
   available: number;
 }
 
-export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0 }: AddToCartModalProps) {
-  const { user } = useAuth();
+export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedColorIndex = 0 }: AddToCartModalProps) {
+  const { user, isAdmin } = useAuth();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -26,7 +27,8 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
   const [sizeSets, setSizeSets] = useState<SizeSet[]>([]);
   const [selectedSetId, setSelectedSetId] = useState<string>('');
   const [setQuantity, setSetQuantity] = useState<number>(0);
-  const [viewMode, setViewMode] = useState<'individual' | 'sets'>('individual');
+  // Retailers can only use size sets, admins can choose
+  const [viewMode, setViewMode] = useState<'individual' | 'sets'>(isAdmin ? 'individual' : 'sets');
 
   const selectedColor = design.design_colors?.[selectedColorIndex];
 
@@ -165,6 +167,12 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
       }
       
       setSuccess(true);
+      
+      // Notify parent to refresh cart count
+      if (onSuccess) {
+        onSuccess();
+      }
+      
       setTimeout(() => {
         handleClose();
       }, 2000);
@@ -188,8 +196,8 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-fadeIn">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md my-auto max-h-[90vh] overflow-y-auto animate-fadeIn">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -211,7 +219,7 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
         </div>
 
         {/* Content */}
-        <div className="p-4">
+        <div className="p-4 pb-8">
           {success ? (
             <div className="text-center py-8">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -238,8 +246,8 @@ export function AddToCartModal({ isOpen, onClose, design, selectedColorIndex = 0
                 </div>
               )}
 
-              {/* View Mode Toggle for Size Sets */}
-              {sizeSets.length > 0 && (
+              {/* View Mode Toggle for Size Sets - Only visible for admins */}
+              {sizeSets.length > 0 && isAdmin && (
                 <div className="mb-4">
                   <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
                     <button

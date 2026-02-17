@@ -28,7 +28,7 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPinned, setSidebarPinned] = useState(() => {
     const saved = localStorage.getItem('sidebarPinned');
-    return saved ? JSON.parse(saved) : true;
+    return saved ? JSON.parse(saved) : false;
   });
 
   useEffect(() => {
@@ -73,7 +73,7 @@ function AppContent() {
         isSidebarOpen={sidebarOpen}
       />
       <main
-        className={`transition-all duration-300 pt-[120px] sm:pt-20 min-h-screen ${
+        className={`transition-all duration-300 pt-[140px] sm:pt-20 min-h-screen ${
           sidebarPinned ? 'lg:pl-[280px]' : ''
         }`}
       >

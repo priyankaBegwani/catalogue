@@ -89,15 +89,21 @@ router.post('/login', async (req, res) => {
     const isEmail = email.includes('@');
     let loginEmail = email;
 
+    console.log('Login attempt - Input:', email, 'Is Email:', isEmail);
+
     // If username provided, look up the email
     if (!isEmail) {
+      console.log('Looking up username:', email);
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('email')
         .eq('username', email)
         .maybeSingle();
 
+      console.log('Username lookup result:', { profile, profileError });
+
       if (profileError || !profile) {
+        console.log('Username lookup failed - profileError:', profileError, 'profile:', profile);
         // Record failed login attempt
         await supabase
           .from('login_history')
@@ -112,7 +118,10 @@ router.post('/login', async (req, res) => {
       }
 
       loginEmail = profile.email;
+      console.log('Found email for username:', loginEmail);
     }
+
+    console.log('Attempting Supabase login with email:', loginEmail);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: loginEmail,

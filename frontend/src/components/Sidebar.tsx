@@ -14,15 +14,19 @@ import {
   Phone,
   Settings as SettingsIcon,
   Info,
-  TrendingUp
+  TrendingUp,
+  Pin,
+  PinOff
 } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
+  isPinned: boolean;
   onClose: () => void;
+  onTogglePin: () => void;
 }
 
-export const Sidebar = memo(function Sidebar({ isOpen, onClose }: SidebarProps) {
+export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogglePin }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname.slice(1) || 'catalogue';
@@ -118,10 +122,10 @@ export const Sidebar = memo(function Sidebar({ isOpen, onClose }: SidebarProps) 
 
   return (
     <>
-      {/* Overlay for mobile */}
-      {isOpen && (
+      {/* Overlay - shows on mobile when open, and on desktop when open but not pinned */}
+      {isOpen && !isPinned && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={onClose}
         />
       )}
@@ -129,8 +133,8 @@ export const Sidebar = memo(function Sidebar({ isOpen, onClose }: SidebarProps) 
       {/* Sidebar */}
       <aside
         className={`fixed top-0 left-0 h-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white z-50 transition-all duration-300 ease-in-out shadow-2xl ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+          isOpen || isPinned ? 'translate-x-0' : '-translate-x-full'
+        } ${isPinned ? 'lg:translate-x-0' : ''}`}
         style={{ width: '280px' }}
       >
         {/* Sidebar Header */}
@@ -146,12 +150,26 @@ export const Sidebar = memo(function Sidebar({ isOpen, onClose }: SidebarProps) 
               <p className="text-xs text-slate-400">Catalogue System</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
-          >
-            <ChevronLeft size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Pin button - only visible on large screens */}
+            <button
+              onClick={onTogglePin}
+              className="hidden lg:block p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
+              title={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
+            >
+              {isPinned ? <Pin size={20} className="text-blue-400" /> : <PinOff size={20} />}
+            </button>
+            {/* Close button - visible on mobile always, on desktop only when not pinned */}
+            <button
+              onClick={onClose}
+              className={`p-2 hover:bg-slate-700/50 rounded-lg transition-colors ${
+                isPinned ? 'lg:hidden' : ''
+              }`}
+              title="Close sidebar"
+            >
+              <ChevronLeft size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Navigation */}

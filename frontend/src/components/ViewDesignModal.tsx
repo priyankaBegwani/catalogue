@@ -78,8 +78,8 @@ export function ViewDesignModal({ design, onClose, onUpdate, initialColorIndex =
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-2 sm:p-4 z-50" onClick={onClose}>
-        <div className="bg-white rounded-lg sm:rounded-xl shadow-2xl w-full max-w-6xl max-h-[98vh] sm:max-h-[95vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto" onClick={onClose}>
+        <div className="bg-white rounded-lg sm:rounded-xl shadow-2xl w-full max-w-6xl my-auto max-h-[98vh] sm:max-h-[95vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
           {/* Header */}
           <div className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
             <div className="flex-1 min-w-0 mr-3">
@@ -119,7 +119,7 @@ export function ViewDesignModal({ design, onClose, onUpdate, initialColorIndex =
           </div>
 
           {/* Content - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-3 sm:p-6">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 pb-8">
           {design.design_colors && design.design_colors.length > 0 ? (
             <div>
                 {/* Color Selector */}
