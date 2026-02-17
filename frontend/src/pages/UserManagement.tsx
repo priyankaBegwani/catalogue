@@ -673,6 +673,7 @@ interface CreateUserModalProps {
 
 function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
   const [formData, setFormData] = useState({
+    username: '',
     email: '',
     password: '',
     full_name: '',
@@ -731,6 +732,18 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
               onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
               required
               className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Username</label>
+            <input
+              type="text"
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              required
+              className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              placeholder="e.g., john_doe"
             />
           </div>
 

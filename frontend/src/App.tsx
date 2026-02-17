@@ -73,7 +73,7 @@ function AppContent() {
         isSidebarOpen={sidebarOpen}
       />
       <main
-        className={`transition-all duration-300 pt-20 min-h-screen ${
+        className={`transition-all duration-300 pt-[120px] sm:pt-20 min-h-screen ${
           sidebarPinned ? 'lg:pl-[280px]' : ''
         }`}
       >

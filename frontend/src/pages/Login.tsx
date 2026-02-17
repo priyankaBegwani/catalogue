@@ -10,7 +10,7 @@ interface LoginProps {
 }
 
 export function Login({ onShowSetup }: LoginProps) {
-  const [email, setEmail] = useState('');
+  const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,13 +24,13 @@ export function Login({ onShowSetup }: LoginProps) {
     setLoading(true);
 
     try {
-      await login(email, password);
+      await login(emailOrUsername, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to login');
     } finally {
       setLoading(false);
     }
-  }, [email, password, login]);
+  }, [emailOrUsername, password, login]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-secondary to-white flex items-center justify-center px-4 pt-2 pb-4 sm:p-4">
@@ -49,17 +49,18 @@ export function Login({ onShowSetup }: LoginProps) {
           <ErrorAlert message={error} onDismiss={() => setError('')} />
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address
+            <label htmlFor="emailOrUsername" className="block text-sm font-medium text-gray-700 mb-2">
+              Username or Email
             </label>
             <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="emailOrUsername"
+              type="text"
+              value={emailOrUsername}
+              onChange={(e) => setEmailOrUsername(e.target.value)}
               required
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition"
-              placeholder="admin@example.com"
+              placeholder="Enter username or email"
+              autoComplete="username"
             />
           </div>
 

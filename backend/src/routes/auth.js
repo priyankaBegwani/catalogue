@@ -6,10 +6,10 @@ const router = express.Router();
 
 router.post('/signup', async (req, res) => {
   try {
-    const { email, password, full_name, role = 'retailer', party_id } = req.body;
+    const { username, email, password, full_name, role = 'retailer', party_id } = req.body;
 
-    if (!email || !password || !full_name) {
-      return res.status(400).json({ error: 'Email, password, and full name are required' });
+    if (!email || !password || !full_name || !username) {
+      return res.status(400).json({ error: 'Username, email, password, and full name are required' });
     }
 
     if (!['admin', 'retailer'].includes(role)) {
@@ -24,11 +24,23 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ error: 'Admin users cannot be associated with a party' });
     }
 
+    // Check if username already exists
+    const { data: existingUser } = await supabaseAdmin
+      .from('user_profiles')
+      .select('username')
+      .eq('username', username)
+      .maybeSingle();
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
       user_metadata: {
+        username,
         full_name,
         role,
         party_id: party_id || null
@@ -38,6 +50,15 @@ router.post('/signup', async (req, res) => {
     if (error) {
       return res.status(400).json({ error: error.message });
     }
+
+    // Update user_profiles with username and email for login lookup
+    await supabaseAdmin
+      .from('user_profiles')
+      .update({ 
+        username: username,
+        email: email 
+      })
+      .eq('id', data.user.id);
 
     const { data: profile } = await supabaseAdmin
       .from('user_profiles')
@@ -61,11 +82,40 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+      return res.status(400).json({ error: 'Username/Email and password are required' });
+    }
+
+    // Check if input is email or username
+    const isEmail = email.includes('@');
+    let loginEmail = email;
+
+    // If username provided, look up the email
+    if (!isEmail) {
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('email')
+        .eq('username', email)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        // Record failed login attempt
+        await supabase
+          .from('login_history')
+          .insert({
+            user_id: null,
+            login_time: new Date().toISOString(),
+            ip_address: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+            user_agent: req.headers['user-agent'],
+            status: 'failed'
+          });
+        return res.status(401).json({ error: 'Invalid username or password' });
+      }
+
+      loginEmail = profile.email;
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: loginEmail,
       password
     });
   console.log(" error while login >>>", error);
