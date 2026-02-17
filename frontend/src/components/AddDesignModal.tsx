@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api, DesignCategory, DesignStyle, FabricType, Design } from '../lib/api';
 import { uploadDesignImage } from '../lib/storage';
-import { X, Plus, Trash2, Upload, Video } from 'lucide-react';
+import { X, Plus, Trash2, Upload, Video, MessageCircle } from 'lucide-react';
 
 interface AddDesignModalProps {
   onClose: () => void;

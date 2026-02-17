@@ -159,7 +159,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
             >
               {isPinned ? <Pin size={20} className="text-blue-400" /> : <PinOff size={20} />}
             </button>
-            {/* Close button - visible on mobile always, on desktop only when not pinned */}
+            {/* Close button - always visible on mobile, on desktop only when not pinned */}
             <button
               onClick={onClose}
               className={`p-2 hover:bg-slate-700/50 rounded-lg transition-colors ${
