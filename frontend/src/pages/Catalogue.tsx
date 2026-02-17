@@ -823,19 +823,6 @@ export function Catalogue() {
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary mb-2">{branding.brandName} Collection</h1>
             <p className="text-sm sm:text-base lg:text-lg text-gray-600">Discover our premium collection of ethnic wear</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setBulkSelectionMode(!bulkSelectionMode)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-                bulkSelectionMode 
-                  ? 'bg-primary text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {bulkSelectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-              {bulkSelectionMode ? 'Selection Mode' : 'Select Designs'}
-            </button>
-          </div>
         </div>
         
         {/* Bulk Selection Controls */}
@@ -1072,7 +1059,7 @@ export function Catalogue() {
         <main className="flex-1">
           {/* Highlight Strip - Tag Pills */}
           <div className="mb-5">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
               {highlightTags.map((tag) => {
                 const Icon = tag.icon;
                 const isActive = filters.tags.some(t => tag.filterPreset.tags?.includes(t));
@@ -1102,9 +1089,22 @@ export function Catalogue() {
                 </button>
               )}
             </div>
+            
+            {/* Select Designs Checkbox */}
+            <div className="mt-3">
+              <button
+                onClick={() => setBulkSelectionMode(!bulkSelectionMode)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
+                  bulkSelectionMode 
+                    ? 'bg-primary text-white' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {bulkSelectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                {bulkSelectionMode ? 'Selection Mode' : 'Select Designs'}
+              </button>
+            </div>
           </div>
-
-        
 
           {/* Results Count & Share Button */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -1146,7 +1146,7 @@ export function Catalogue() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
               {filteredDesigns.map((design) => (
                 <DesignCard
                   key={design.id}
@@ -1297,7 +1297,10 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
     try {
       // Use WhatsApp image if available, otherwise use color images
       const whatsappImage = design.whatsapp_image_url;
-      const imagesToShare = whatsappImage ? [whatsappImage] : selectedColorImages.slice(0, 2);
+      const imagesToShare = whatsappImage ? [whatsappImage] : selectedColorImages.slice(0, 1);
+      
+      // Generate catalogue link
+      const catalogueLink = `${window.location.origin}/catalogue`;
       
       // Check if Web Share API is available and we have images
       if (navigator.share && imagesToShare.length > 0) {
@@ -1317,27 +1320,38 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         const imageFiles = (await Promise.all(imagePromises)).filter(file => file !== null);
         
         if (imageFiles.length > 0) {
+          // Professional message with design number and catalogue link
+          const shareText = `✨ *${design.name}*\n` +
+            `📋 Design No: *${design.design_no}*\n\n` +
+            `${design.description || 'Discover this beautiful design from our exclusive collection!'}\n\n` +
+            `🎨 Available in ${colorCount} stunning color${colorCount > 1 ? 's' : ''}\n\n` +
+            `👉 Explore our complete catalogue:\n${catalogueLink}\n\n` +
+            `_We'd love to help you find the perfect design for your needs!_`;
+          
           // Use Web Share API with actual images
           await navigator.share({
-            title: `${design.name} (${design.design_no})`,
-            text: `${design.description || 'Beautiful design from our collection!'}\n\n🎨 Colors: ${colorCount} variants\n\nCheck out our catalogue for more designs!`,
+            title: `${design.name} - ${design.design_no}`,
+            text: shareText,
             files: imageFiles
           });
           return;
         }
       }
       
-      // Fallback to WhatsApp with image URLs
-      let message = `*${design.name}* (${design.design_no})\n\n` +
-        `${design.description || 'Beautiful design from our collection!'}\n\n` +
-        `🎨 Colors: ${colorCount} variants\n\n`;
+      // Fallback to WhatsApp with professional message
+      let message = `✨ *${design.name}*\n` +
+        `📋 Design No: *${design.design_no}*\n\n` +
+        `${design.description || 'Discover this beautiful design from our exclusive collection!'}\n\n` +
+        `🎨 Available in ${colorCount} stunning color${colorCount > 1 ? 's' : ''}\n\n`;
       
-      if (selectedColorImages.length > 0) {
-        const imageList = selectedColorImages.slice(0, 3).join('\n');
-        message += `📸 Images:\n${imageList}\n\n`;
+      if (whatsappImage) {
+        message += `📸 View Design:\n${whatsappImage}\n\n`;
+      } else if (selectedColorImages.length > 0) {
+        message += `📸 View Design:\n${selectedColorImages[0]}\n\n`;
       }
       
-      message += `Check out our catalogue for more designs!`;
+      message += `👉 Explore our complete catalogue:\n${catalogueLink}\n\n` +
+        `_We'd love to help you find the perfect design for your needs!_`;
       
       const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
@@ -1517,17 +1531,17 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         onTouchEnd={handleTouchEnd}
       >
         {firstImage ? (
-          <div className="w-full h-48 sm:h-64 lg:h-72 flex items-center justify-center bg-white">
+          <div className="w-full h-40 sm:h-72 lg:h-80 flex items-center justify-center bg-white">
             <img
               src={firstImage}
               alt={design.name}
-              className="w-full h-full object-contain group-hover:scale-105 transition duration-500"
+              className="w-full h-full object-cover sm:object-contain group-hover:scale-105 transition duration-500"
             />
           </div>
         ) : (
-          <div className="w-full h-48 sm:h-64 lg:h-72 flex flex-col items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
-            <ImageIcon className="w-16 h-16 sm:w-20 sm:h-20 text-gray-400 mb-3" />
-            <span className="text-sm sm:text-base text-gray-500 font-medium">{design.design_no}</span>
+          <div className="w-full h-40 sm:h-72 lg:h-80 flex flex-col items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
+            <ImageIcon className="w-12 h-12 sm:w-20 sm:h-20 text-gray-400 mb-2" />
+            <span className="text-xs sm:text-base text-gray-500 font-medium">{design.design_no}</span>
           </div>
         )}
 
@@ -1593,12 +1607,12 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         </div>
       </div>
 
-      <div className="p-3 sm:p-4" onClick={onQuickView}>
+      <div className="p-2 sm:p-4" onClick={onQuickView}>
         {/* Design Code (Left) + Color Selection (Right) - Highest Priority */}
-        <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-start justify-between gap-1 sm:gap-3 mb-1.5 sm:mb-3">
           {/* Design Code - Visually Dominant */}
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight leading-tight">
+            <h3 className="text-sm sm:text-xl font-bold text-gray-900 tracking-tight leading-tight">
               {design.design_no}
             </h3>
           </div>
@@ -1606,8 +1620,8 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
           {/* Color Swatches - Compact, Right Aligned */}
           {colorCount > 0 && (
             <div className="flex-shrink-0">
-              <div className="flex items-center gap-1">
-                {design.design_colors?.slice(0, 5).map((color, index) => (
+              <div className="flex items-center gap-0.5 sm:gap-1">
+                {design.design_colors?.slice(0, 3).map((color, index) => (
                   <button
                     key={color.id}
                     onClick={(e) => {
@@ -1616,21 +1630,21 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
                     }}
                     className={`relative rounded-full transition-all ${
                       index === selectedColorIndex
-                        ? 'ring-2 ring-gray-900 ring-offset-1'
+                        ? 'ring-1 sm:ring-2 ring-gray-900 ring-offset-1'
                         : 'hover:ring-1 hover:ring-gray-400'
                     }`}
                     title={color.color_name}
                     aria-label={`Select ${color.color_name} color`}
                   >
                     <div
-                      className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-gray-200"
+                      className="w-5 h-5 sm:w-7 sm:h-7 rounded-full border border-gray-200"
                       style={{ backgroundColor: color.color_code || '#cccccc' }}
                     />
                   </button>
                 ))}
-                {colorCount > 5 && (
-                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-[10px] text-gray-600 font-medium">
-                    +{colorCount - 5}
+                {colorCount > 3 && (
+                  <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-[9px] sm:text-[10px] text-gray-600 font-medium">
+                    +{colorCount - 3}
                   </div>
                 )}
               </div>
@@ -1639,19 +1653,19 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         </div>
 
         {/* Product Name / Category - Secondary */}
-        <div className="mb-2">
-          <p className="text-sm font-medium text-gray-700 line-clamp-1">
+        <div className="mb-1 sm:mb-2">
+          <p className="text-xs sm:text-sm font-medium text-gray-700 line-clamp-1">
             {design.name}
           </p>
           {design.category && (
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
               {design.category.name}
             </p>
           )}
         </div>
 
         {/* Key Attributes - Single Line with Bullet Separators */}
-        <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-600 mb-3">
+        <div className="hidden sm:flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-600 mb-3">
           {design.fabric_type && (
             <span>{design.fabric_type.name}</span>
           )}

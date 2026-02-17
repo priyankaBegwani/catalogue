@@ -139,17 +139,6 @@ export function DesignManagement() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setBulkSelectionMode(!bulkSelectionMode)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-              bulkSelectionMode 
-                ? 'bg-primary text-white' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {bulkSelectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-            {bulkSelectionMode ? 'Selection Mode' : 'Select Designs'}
-          </button>
-          <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center space-x-2 bg-primary text-white px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 w-full sm:w-auto justify-center"
           >
@@ -157,6 +146,21 @@ export function DesignManagement() {
             <span>Add Design</span>
           </button>
         </div>
+      </div>
+      
+      {/* Select Designs Checkbox */}
+      <div className="mb-4">
+        <button
+          onClick={() => setBulkSelectionMode(!bulkSelectionMode)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
+            bulkSelectionMode 
+              ? 'bg-primary text-white' 
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          {bulkSelectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+          {bulkSelectionMode ? 'Selection Mode' : 'Select Designs'}
+        </button>
       </div>
       
       {/* Bulk Selection Controls */}
@@ -197,7 +201,7 @@ export function DesignManagement() {
 
       <ErrorAlert message={error} onDismiss={() => setError('')} className="mb-6" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
         {designs.map((design) => (
           <DesignCard
             key={design.id}

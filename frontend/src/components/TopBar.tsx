@@ -106,21 +106,21 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
   return (
     <>
       <header className="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-40 shadow-sm sm:h-20">
-        <div className="h-full px-4 md:px-6">
+        <div className="h-full sm:px-4 md:px-6">
           {/* Mobile Layout: Stacked */}
           <div className="sm:hidden flex flex-col">
             {/* First row: Logo */}
-            <div className="flex items-center justify-center py-2 border-b border-gray-100">
+            <div className="flex items-center justify-center py-[5px] border-b border-gray-100">
               <img
                 src={branding.logoUrl}
                 alt={branding.brandName}
-                style={{ height: '4.5rem' }}
-                className="w-auto object-contain max-w-[180px]"
+                style={{ height: '6rem' }}
+                className="w-auto object-contain max-w-[240px]"
               />
             </div>
             
             {/* Second row: Menu and Actions */}
-            <div className="flex items-center justify-between h-12">
+            <div className="flex items-center justify-between h-12 px-2">
               <button
                 onClick={onToggleSidebar}
                 className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
@@ -171,7 +171,11 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                   </button>
 
                   {profileDropdownOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div 
+                      className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                    >
                       <div className="px-4 py-3 border-b border-gray-200">
                         <p className="text-sm text-gray-500">Signed in as</p>
                         <p className="text-base font-semibold text-gray-900 mt-1">{user?.full_name}</p>
@@ -182,7 +186,8 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                       </div>
 
                       <button
-                        onMouseDown={() => {
+                        onClick={(e) => {
+                          e.preventDefault();
                           navigate('/orders');
                           setProfileDropdownOpen(false);
                         }}
@@ -193,7 +198,8 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                       </button>
 
                       <button
-                        onMouseDown={() => {
+                        onClick={(e) => {
+                          e.preventDefault();
                           navigate('/profile');
                           setProfileDropdownOpen(false);
                         }}
@@ -205,7 +211,8 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
 
                       <div className="border-t border-gray-200 mt-2 pt-2">
                         <button
-                          onMouseDown={() => {
+                          onClick={(e) => {
+                            e.preventDefault();
                             logout();
                             setProfileDropdownOpen(false);
                           }}
@@ -293,7 +300,11 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                 </button>
 
               {profileDropdownOpen && (
-                <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div 
+                  className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                >
                   <div className="px-4 py-3 border-b border-gray-200">
                     <p className="text-sm text-gray-500">Signed in as</p>
                     <p className="text-base font-semibold text-gray-900 mt-1">{user?.full_name}</p>
@@ -304,7 +315,8 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                   </div>
 
                   <button
-                    onMouseDown={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
                       navigate('/orders');
                       setProfileDropdownOpen(false);
                     }}
@@ -315,7 +327,8 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                   </button>
 
                   <button
-                    onMouseDown={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
                       navigate('/profile');
                       setProfileDropdownOpen(false);
                     }}
@@ -327,7 +340,8 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
 
                   <div className="border-t border-gray-200 mt-2 pt-2">
                     <button
-                      onMouseDown={() => {
+                      onClick={(e) => {
+                        e.preventDefault();
                         logout();
                         setProfileDropdownOpen(false);
                       }}
