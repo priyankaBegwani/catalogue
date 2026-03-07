@@ -63,11 +63,23 @@ export interface DesignStyle {
 export interface FabricType {
   id: string;
   name: string;
-  description: string;
-  display_order: number;
+  description?: string;
   is_active: boolean;
+  display_order: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface Brand {
+  id: string;
+  name: string;
+  description?: string;
+  logo_url?: string;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
 }
 
 export interface Design {
@@ -78,6 +90,7 @@ export interface Design {
   category_id: string | null;
   style_id: string | null;
   fabric_type_id: string | null;
+  brand_id?: string | null;
   available_sizes: string[];
   whatsapp_image_url?: string;
   is_active: boolean;
@@ -88,6 +101,7 @@ export interface Design {
   category?: DesignCategory;
   style?: DesignStyle;
   fabric_type?: FabricType;
+  brand?: Brand;
   order_count?: number;
   last_ordered_at?: string;
   total_quantity_sold?: number;
@@ -526,10 +540,73 @@ class ApiClient {
     return await response.json();
   }
 
-  async getDesigns(categoryId?: string, fabricTypeId?: string, activeOnly?: boolean): Promise<Design[]> {
+  async getBrands(): Promise<Brand[]> {
+    const response = await fetch(`${API_URL}/api/brands`, {
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch brands');
+    }
+
+    return await response.json();
+  }
+
+  async createBrand(brand: Partial<Brand>): Promise<Brand> {
+    const response = await fetch(`${API_URL}/api/brands`, {
+      method: 'POST',
+      headers: {
+        ...this.getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(brand),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create brand');
+    }
+
+    return await response.json();
+  }
+
+  async updateBrand(id: string, brand: Partial<Brand>): Promise<Brand> {
+    const response = await fetch(`${API_URL}/api/brands/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...this.getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(brand),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update brand');
+    }
+
+    return await response.json();
+  }
+
+  async deleteBrand(id: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/brands/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete brand');
+    }
+  }
+
+  async getDesigns(categoryId?: string, fabricTypeId?: string, brandId?: string, styleId?: string, activeOnly?: boolean): Promise<Design[]> {
     const params = new URLSearchParams();
     if (categoryId) params.append('category_id', categoryId);
     if (fabricTypeId) params.append('fabric_type_id', fabricTypeId);
+    if (brandId) params.append('brand_id', brandId);
+    if (styleId) params.append('style_id', styleId);
     if (activeOnly) params.append('active_only', 'true');
     
     const url = params.toString() 

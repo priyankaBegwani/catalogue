@@ -1,7 +1,7 @@
 import express from 'express';
 import { supabase, config } from '../config.js';
 import { authenticateUser, optionalAuth } from '../middleware/auth.js';
-import { deleteFromWasabi, generateSignedGetUrl } from '../config/wasabi.js';
+import { deleteFromR2, getPublicUrl } from '../config/r2.js';
 import { deleteFromSupabase, generateSupabaseSignedGetUrl } from '../config/supabaseStorage.js';
 import { deleteFromLocalStorage } from '../config/localStorage.js';
 
@@ -25,8 +25,8 @@ async function convertToSignedUrls(imageUrls) {
       if (keyStartIndex !== -1) {
         const key = urlParts.slice(keyStartIndex).join('/');
         if (config.storageType === 'cdn') {
-          const signedUrl = await generateSignedGetUrl(key, 3600);
-          signedUrls.push(signedUrl);
+          const publicUrl = getPublicUrl(key);
+          signedUrls.push(publicUrl);
         } else if (config.storageType === 'supabase') {
           const signedUrl = await generateSupabaseSignedGetUrl(key, 3600);
           signedUrls.push(signedUrl);
@@ -111,7 +111,7 @@ router.get('/fabric-types', optionalAuth, async (req, res) => {
 
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { category_id, fabric_type_id, active_only } = req.query;
+    const { category_id, fabric_type_id, brand_id, style_id, active_only } = req.query;
     const isAuthenticated = !!req.user;
 
     let query = supabase
@@ -146,6 +146,12 @@ router.get('/', optionalAuth, async (req, res) => {
           name,
           description
         ),
+        brand:brands (
+          id,
+          name,
+          description,
+          logo_url
+        ),
         created_by:user_profiles!designs_created_by_fkey (
           id,
           full_name,
@@ -160,6 +166,14 @@ router.get('/', optionalAuth, async (req, res) => {
 
     if (fabric_type_id) {
       query = query.eq('fabric_type_id', fabric_type_id);
+    }
+
+    if (brand_id) {
+      query = query.eq('brand_id', brand_id);
+    }
+
+    if (style_id) {
+      query = query.eq('style_id', style_id);
     }
 
     // Filter only active designs for catalogue view
@@ -436,7 +450,7 @@ router.delete('/:id', authenticateUser, async (req, res) => {
                 // Delete from appropriate storage
                 switch (config.storageType) {
                   case 'cdn':
-                    await deleteFromWasabi(key);
+                    await deleteFromR2(key);
                     break;
                   case 'supabase':
                     await deleteFromSupabase(key);
@@ -584,7 +598,7 @@ router.delete('/colors/:colorId', authenticateUser, async (req, res) => {
             // Delete from appropriate storage
             switch (config.storageType) {
               case 'cdn':
-                await deleteFromWasabi(key);
+                await deleteFromR2(key);
                 break;
               case 'supabase':
                 await deleteFromSupabase(key);

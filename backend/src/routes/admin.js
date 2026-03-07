@@ -232,7 +232,7 @@ router.get('/parties/active', authenticateUser, requireAdmin, async (req, res) =
         full_name,
         updated_at,
         party_id,
-        parties (
+        parties!user_profiles_party_id_fkey (
           name
         )
       `)
@@ -297,7 +297,7 @@ router.get('/parties/stagnant', authenticateUser, requireAdmin, async (req, res)
         full_name,
         updated_at,
         party_id,
-        parties (
+        parties!user_profiles_party_id_fkey (
           name,
           phone_number
         )

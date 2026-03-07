@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { api, DesignCategory, DesignStyle, FabricType, Design } from '../lib/api';
+import { api, DesignCategory, DesignStyle, FabricType, Design, Brand } from '../lib/api';
 import { uploadDesignImage } from '../lib/storage';
 import { X, Plus, Trash2, Upload, Video, MessageCircle } from 'lucide-react';
 
@@ -37,12 +37,14 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     category_id: '',
     style_id: '',
     fabric_type_id: '',
+    brand_id: '',
     available_sizes: [] as string[],
     whatsapp_image_url: '',
   });
   const [categories, setCategories] = useState<DesignCategory[]>([]);
   const [styles, setStyles] = useState<DesignStyle[]>([]);
   const [fabricTypes, setFabricTypes] = useState<FabricType[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [sizeInput, setSizeInput] = useState('');
   const [colors, setColors] = useState<ColorData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -88,6 +90,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
   useEffect(() => {
     loadCategories();
     loadFabricTypes();
+    loadBrands();
     if (editingDesign) {
       // Pre-populate form with existing design data
       setFormData({
@@ -95,7 +98,9 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         name: editingDesign.name,
         description: editingDesign.description || '',
         category_id: editingDesign.category_id || '',
+        style_id: editingDesign.style_id || '',
         fabric_type_id: editingDesign.fabric_type_id || '',
+        brand_id: editingDesign.brand_id || '',
         available_sizes: editingDesign.available_sizes || [],
         whatsapp_image_url: editingDesign.whatsapp_image_url || '',
       });
@@ -174,6 +179,15 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
       setFabricTypes(data);
     } catch (err) {
       console.error('Failed to load fabric types:', err);
+    }
+  };
+
+  const loadBrands = async () => {
+    try {
+      const data = await api.getBrands();
+      setBrands(data);
+    } catch (err) {
+      console.error('Failed to load brands:', err);
     }
   };
 
@@ -433,7 +447,68 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
             </div>
           )}
 
+          {/* Brand - First Field */}
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+              Brand
+            </label>
+            <select
+              value={formData.brand_id}
+              onChange={(e) => setFormData({ ...formData, brand_id: e.target.value })}
+              className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              <option value="">Select a brand</option>
+              {brands.map((brand) => (
+                <option key={brand.id} value={brand.id}>
+                  {brand.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category - Second Field */}
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+              Category *
+            </label>
+            <select
+              value={formData.category_id}
+              onChange={(e) => {
+                const newCategory = e.target.value;
+                setFormData(prev => ({
+                  ...prev,
+                  category_id: newCategory,
+                  style_id: newCategory === prev.category_id ? prev.style_id : ''
+                }));
+              }}
+              required
+              className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              <option value="">Select a category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Design Name and Design Number */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Design Name *
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                placeholder="e.g., Premium Kurta"
+              />
+            </div>
+
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Design Number *
@@ -448,49 +523,10 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
                 placeholder="e.g., IND-001"
               />
             </div>
-
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-                Design Name *
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="e.g., Premium Kurta"
-              />
-            </div>
           </div>
 
+          {/* Style and Fabric Type */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-                Category *
-              </label>
-              <select
-                value={formData.category_id}
-                onChange={(e) => {
-                  const newCategory = e.target.value;
-                  setFormData(prev => ({
-                    ...prev,
-                    category_id: newCategory,
-                    style_id: newCategory === prev.category_id ? prev.style_id : ''
-                  }));
-                }}
-                required
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-              >
-                <option value="">Select a category</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Style
@@ -512,24 +548,24 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
                 <p className="text-xs text-gray-500 mt-1">Select a category first</p>
               )}
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-              Fabric Type
-            </label>
-            <select
-              value={formData.fabric_type_id}
-              onChange={(e) => setFormData({ ...formData, fabric_type_id: e.target.value })}
-              className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="">Select a fabric type</option>
-              {fabricTypes.map((fabricType) => (
-                <option key={fabricType.id} value={fabricType.id}>
-                  {fabricType.name}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Fabric Type
+              </label>
+              <select
+                value={formData.fabric_type_id}
+                onChange={(e) => setFormData({ ...formData, fabric_type_id: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                <option value="">Select a fabric type</option>
+                {fabricTypes.map((fabricType) => (
+                  <option key={fabricType.id} value={fabricType.id}>
+                    {fabricType.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>

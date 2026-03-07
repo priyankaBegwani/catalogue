@@ -55,12 +55,13 @@ That's it! Your images will now be stored locally in `backend/uploads/`.
                    └── 1699876543211.jpg
    ```
 
-## Benefits
+## Why Local Storage?
 
-✅ **Zero Configuration** - No external services needed  
-✅ **Fast Development** - Instant file access  
-✅ **No Costs** - Completely free  
-✅ **Easy Debugging** - Files visible in filesystem  
+- **No cloud dependencies**: Works offline, no external storage needed
+- **Fast development**: Instant uploads, no network latency
+- **Simple setup**: Just one environment variable
+- **Free**: No storage costs during development
+- **Easy Debugging**: Files visible in filesystem  
 ✅ **Mimics CDN** - Same URL pattern as production  
 
 ## Limitations

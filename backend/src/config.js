@@ -14,7 +14,7 @@ export const config = {
   supabaseServiceKey: process.env.VITE_SUPABASE_SERVICE_KEY,
   port: process.env.PORT || 3001,
   // Storage type: 'cdn', 'supabase', or 'local'
-  // - 'cdn': Use Wasabi/Cloudflare CDN (production)
+  // - 'cdn': Use Cloudflare R2 (production)
   // - 'supabase': Use Supabase Storage (fallback)
   // - 'local': Use local filesystem (development/testing)
   storageType: process.env.STORAGE_TYPE || 'local'

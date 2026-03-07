@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile } from '../lib/api';
+import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile, Brand, DesignStyle } from '../lib/api';
 import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, Phone, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck, Plus, Minus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getWhatsAppUrl, useBranding } from '../hooks/useBranding';
@@ -9,6 +9,7 @@ export type DesignTag = 'new-arrival' | 'trending' | 'best-seller' | 'fast-repea
 
 interface FilterState {
   categories: string[];
+  brands: string[];
   priceRange: { min: number; max: number };
   colors: string[];
   designNo: string;
@@ -192,8 +193,12 @@ export function Catalogue() {
   const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([]);
   const [categories, setCategories] = useState<DesignCategory[]>([]);
   const [fabricTypes, setFabricTypes] = useState<FabricType[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [styles, setStyles] = useState<DesignStyle[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedFabricType, setSelectedFabricType] = useState<string>('');
+  const [selectedBrand, setSelectedBrand] = useState<string>('');
+  const [selectedStyle, setSelectedStyle] = useState<string>('');
   const [selectedDesign, setSelectedDesign] = useState<Design | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -202,6 +207,7 @@ export function Catalogue() {
   const [showPriceToCustomers, setShowPriceToCustomers] = useState(true);
   const [filters, setFilters] = useState<FilterState>({
     categories: [],
+    brands: [],
     priceRange: { min: 0, max: 100000 },
     colors: [],
     designNo: '',
@@ -221,6 +227,7 @@ export function Catalogue() {
   useEffect(() => {
     loadCategories();
     loadFabricTypes();
+    loadBrands();
     loadFiltersFromUrl();
     // Load price visibility setting
     const savedShowPrice = localStorage.getItem('show_price_to_customers') !== 'false';
@@ -256,7 +263,15 @@ export function Catalogue() {
 
   useEffect(() => {
     loadDesigns();
-  }, [selectedCategory, selectedFabricType]);
+  }, [selectedCategory, selectedFabricType, selectedBrand, selectedStyle]);
+
+  useEffect(() => {
+    loadStyles();
+    // Reset style selection when category changes
+    if (selectedStyle) {
+      setSelectedStyle('');
+    }
+  }, [selectedCategory]);
 
   useEffect(() => {
     applyFilters();
@@ -291,12 +306,37 @@ export function Catalogue() {
     }
   };
 
+  const loadBrands = async () => {
+    try {
+      const data = await api.getBrands();
+      setBrands(data);
+    } catch (err) {
+      console.error('Failed to load brands:', err);
+    }
+  };
+
+  const loadStyles = async () => {
+    try {
+      if (selectedCategory) {
+        const data = await api.getDesignStyles(selectedCategory);
+        setStyles(data);
+      } else {
+        setStyles([]);
+      }
+    } catch (err) {
+      console.error('Failed to load styles:', err);
+      setStyles([]);
+    }
+  };
+
   const loadDesigns = async () => {
     try {
       setLoading(true);
       const data = await api.getDesigns(
         selectedCategory || undefined,
         selectedFabricType || undefined,
+        selectedBrand || undefined,
+        selectedStyle || undefined,
         true // Only fetch active designs for catalogue
       );
       setDesigns(data);
@@ -1031,6 +1071,62 @@ export function Catalogue() {
                     {selectedFabricType && (
                       <button
                         onClick={() => setSelectedFabricType('')}
+                        className="text-xs text-primary hover:text-primary-dark mt-2"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Brand */}
+              {brands.length > 0 && (
+                <div className="border-t border-gray-200 pt-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Brand</h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {brands.map((brand) => (
+                      <label key={brand.id} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={selectedBrand === brand.id}
+                          onChange={() => setSelectedBrand(brand.id)}
+                          className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
+                        />
+                        <span className="text-sm text-gray-700">{brand.name}</span>
+                      </label>
+                    ))}
+                    {selectedBrand && (
+                      <button
+                        onClick={() => setSelectedBrand('')}
+                        className="text-xs text-primary hover:text-primary-dark mt-2"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Style */}
+              {styles.length > 0 && (
+                <div className="border-t border-gray-200 pt-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Style</h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {styles.map((style) => (
+                      <label key={style.id} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={selectedStyle === style.id}
+                          onChange={() => setSelectedStyle(style.id)}
+                          className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
+                        />
+                        <span className="text-sm text-gray-700">{style.name}</span>
+                      </label>
+                    ))}
+                    {selectedStyle && (
+                      <button
+                        onClick={() => setSelectedStyle('')}
                         className="text-xs text-primary hover:text-primary-dark mt-2"
                       >
                         Clear filter

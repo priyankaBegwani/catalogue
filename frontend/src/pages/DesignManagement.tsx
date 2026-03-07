@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { api, Design } from '../lib/api';
+import { api, Design, Brand, DesignStyle } from '../lib/api';
 import { Plus, Trash2, ImageIcon, Package, MessageCircle, CheckSquare, Square } from 'lucide-react';
 import { AddDesignModal, ViewDesignModal, ErrorAlert } from '../components';
 
 export function DesignManagement() {
   const [designs, setDesigns] = useState<Design[]>([]);
+  const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [styles, setStyles] = useState<DesignStyle[]>([]);
+  const [selectedBrand, setSelectedBrand] = useState<string>('');
+  const [selectedStyle, setSelectedStyle] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -27,9 +32,50 @@ export function DesignManagement() {
     }
   }, []);
 
+  const loadBrands = useCallback(async () => {
+    try {
+      const data = await api.getBrands();
+      setBrands(data);
+    } catch (err) {
+      console.error('Failed to load brands:', err);
+    }
+  }, []);
+
+  const loadStyles = useCallback(async () => {
+    try {
+      // Load all styles from all categories for admin view
+      const categories = await api.getDesignCategories();
+      const allStyles: DesignStyle[] = [];
+      for (const category of categories) {
+        const categoryStyles = await api.getDesignStyles(category.id);
+        allStyles.push(...categoryStyles);
+      }
+      setStyles(allStyles);
+    } catch (err) {
+      console.error('Failed to load styles:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadDesigns();
-  }, [loadDesigns]);
+    loadBrands();
+    loadStyles();
+  }, [loadDesigns, loadBrands, loadStyles]);
+
+  useEffect(() => {
+    // Apply brand and style filters
+    let filtered = designs;
+    
+    if (selectedBrand) {
+      filtered = filtered.filter(d => d.brand_id === selectedBrand);
+    }
+    
+    if (selectedStyle) {
+      filtered = filtered.filter(d => d.style_id === selectedStyle);
+    }
+    
+    setFilteredDesigns(filtered);
+  }, [designs, selectedBrand, selectedStyle]);
 
 
   const handleDelete = useCallback(async (id: string) => {
@@ -138,6 +184,34 @@ export function DesignManagement() {
           <p className="text-sm sm:text-base text-gray-600 mt-1">Manage product designs and color variants</p>
         </div>
         <div className="flex items-center gap-3">
+          {brands.length > 0 && (
+            <select
+              value={selectedBrand}
+              onChange={(e) => setSelectedBrand(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              <option value="">All Brands</option>
+              {brands.map((brand) => (
+                <option key={brand.id} value={brand.id}>
+                  {brand.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {styles.length > 0 && (
+            <select
+              value={selectedStyle}
+              onChange={(e) => setSelectedStyle(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              <option value="">All Styles</option>
+              {styles.map((style) => (
+                <option key={style.id} value={style.id}>
+                  {style.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center space-x-2 bg-primary text-white px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 w-full sm:w-auto justify-center"
@@ -169,7 +243,7 @@ export function DesignManagement() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <span className="text-sm font-medium text-blue-900">
-                {selectedDesigns.size} of {designs.length} designs selected
+                {selectedDesigns.size} of {filteredDesigns.length} designs selected
               </span>
               <div className="flex gap-2">
                 <button
@@ -202,7 +276,7 @@ export function DesignManagement() {
       <ErrorAlert message={error} onDismiss={() => setError('')} className="mb-6" />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-        {designs.map((design) => (
+        {filteredDesigns.map((design) => (
           <DesignCard
             key={design.id}
             design={design}

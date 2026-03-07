@@ -9,7 +9,7 @@ import {
   executeQuery,
   cacheMiddleware
 } from '../utils/index.js';
-import { generateSignedGetUrl } from '../config/wasabi.js';
+import { getPublicUrl } from '../config/r2.js';
 
 const router = express.Router();
 
@@ -30,8 +30,8 @@ async function convertToSignedUrls(imageUrls) {
       
       if (keyStartIndex !== -1) {
         const key = urlParts.slice(keyStartIndex).join('/');
-        const signedUrl = await generateSignedGetUrl(key, 3600);
-        signedUrls.push(signedUrl);
+        const publicUrl = getPublicUrl(key);
+        signedUrls.push(publicUrl);
       } else {
         signedUrls.push(imageUrl);
       }

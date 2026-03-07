@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { authenticateUser, optionalAuth } from '../middleware/auth.js';
-import { generateUploadUrl, deleteFromWasabi, generateSignedGetUrl } from '../config/wasabi.js';
+import { uploadToR2, deleteFromR2, getPublicUrl } from '../config/r2.js';
 import { generateSupabaseUploadUrl, deleteFromSupabase } from '../config/supabaseStorage.js';
 import { generateLocalStoragePath, saveToLocalStorage, deleteFromLocalStorage } from '../config/localStorage.js';
 import { config } from '../config.js';
@@ -11,47 +11,43 @@ const router = express.Router();
 // Configure multer for local file uploads
 const upload = multer({ storage: multer.memoryStorage() });
 
-router.post('/upload-url', authenticateUser, async (req, res) => {
+// Direct upload endpoint - frontend sends file to backend
+router.post('/upload', authenticateUser, upload.single('file'), async (req, res) => {
   try {
     if (req.profile.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { fileName, contentType, designNo, colorName } = req.body;
-
-    if (!fileName || !contentType) {
-      return res.status(400).json({ error: 'fileName and contentType are required' });
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided' });
     }
 
-    const fileExt = fileName.split('.').pop();
+    const { designNo, colorName } = req.body;
+    const fileExt = req.file.originalname.split('.').pop();
     const timestamp = Date.now();
     const sanitizedDesignNo = (designNo || 'unknown').replace(/[^a-zA-Z0-9-]/g, '_');
     const sanitizedColorName = (colorName || 'default').replace(/[^a-zA-Z0-9-]/g, '_');
 
     const key = `designs/${sanitizedDesignNo}/${sanitizedColorName}/${timestamp}.${fileExt}`;
 
-    let uploadUrl, publicUrl, token;
+    let publicUrl;
 
     // Select storage based on configuration
     switch (config.storageType) {
       case 'cdn':
-        const cdnResult = await generateUploadUrl(key, contentType);
-        uploadUrl = cdnResult.uploadUrl;
-        publicUrl = cdnResult.publicUrl;
+        const r2Result = await uploadToR2(req.file.buffer, key, req.file.mimetype);
+        publicUrl = r2Result.publicUrl;
         break;
 
       case 'supabase':
+        // Supabase still uses presigned URLs - keep existing logic
         const supabaseResult = await generateSupabaseUploadUrl(key);
-        uploadUrl = supabaseResult.uploadUrl;
+        // Upload to Supabase here if needed
         publicUrl = supabaseResult.publicUrl;
-        token = supabaseResult.token;
         break;
 
       case 'local':
-        const localResult = await generateLocalStoragePath(key);
-        // For local storage, we'll use a direct upload endpoint
-        uploadUrl = `${process.env.VITE_BACKEND_URL || 'http://localhost:3001'}/api/storage/upload-local`;
-        publicUrl = localResult.publicUrl;
+        publicUrl = await saveToLocalStorage(req.file.buffer, key);
         break;
 
       default:
@@ -59,15 +55,14 @@ router.post('/upload-url', authenticateUser, async (req, res) => {
     }
 
     res.json({
-      uploadUrl,
       publicUrl,
       key,
-      token,
       storageType: config.storageType,
+      message: 'File uploaded successfully'
     });
   } catch (error) {
-    console.error('Generate upload URL error:', error);
-    res.status(500).json({ error: 'Failed to generate upload URL' });
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Failed to upload file' });
   }
 });
 
@@ -95,7 +90,7 @@ router.delete('/delete', authenticateUser, async (req, res) => {
     // Select storage based on configuration
     switch (config.storageType) {
       case 'cdn':
-        await deleteFromWasabi(key);
+        await deleteFromR2(key);
         break;
 
       case 'supabase':
@@ -117,38 +112,7 @@ router.delete('/delete', authenticateUser, async (req, res) => {
   }
 });
 
-// Direct upload endpoint for local storage
-router.post('/upload-local', authenticateUser, upload.single('file'), async (req, res) => {
-  try {
-    if (req.profile.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file provided' });
-    }
-
-    const { key } = req.body;
-
-    if (!key) {
-      return res.status(400).json({ error: 'Storage key is required' });
-    }
-
-    // Save file to local storage
-    const publicUrl = await saveToLocalStorage(req.file.buffer, key);
-
-    res.json({
-      publicUrl,
-      key,
-      message: 'File uploaded successfully',
-    });
-  } catch (error) {
-    console.error('Local upload error:', error);
-    res.status(500).json({ error: 'Failed to upload file locally' });
-  }
-});
-
-// Generate signed URLs for image retrieval
+// Get public URL for image retrieval
 router.post('/signed-url', optionalAuth, async (req, res) => {
   try {
     const { imageUrl } = req.body;
@@ -172,7 +136,7 @@ router.post('/signed-url', optionalAuth, async (req, res) => {
     // Generate signed URL based on storage type
     switch (config.storageType) {
       case 'cdn':
-        signedUrl = await generateSignedGetUrl(key, 3600); // 1 hour expiry
+        signedUrl = getPublicUrl(key); // Use public CDN URL
         break;
       
       case 'supabase':
@@ -220,7 +184,7 @@ router.post('/signed-urls-batch', optionalAuth, async (req, res) => {
           
           switch (config.storageType) {
             case 'cdn':
-              signedUrl = await generateSignedGetUrl(key, 3600);
+              signedUrl = getPublicUrl(key); // Use public CDN URL
               break;
             case 'supabase':
             case 'local':

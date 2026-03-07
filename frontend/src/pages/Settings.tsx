@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, MessageCircle, Info, ExternalLink, CheckCircle, AlertCircle, Palette, Image, Type, Phone, ChevronDown, ChevronUp, ShoppingBag, Eye, EyeOff, TrendingUp, Users, Zap } from 'lucide-react';
+import { Save, MessageCircle, Info, ExternalLink, CheckCircle, AlertCircle, Palette, Image, Type, Phone, ChevronDown, ChevronUp, ShoppingBag, Eye, EyeOff, TrendingUp, Users, Zap, Tag } from 'lucide-react';
 import { TierModel } from '../types/pricing';
 import { getPricingConfig, savePricingConfig } from '../utils/pricingTiers';
+import { BrandManagement } from '../components/BrandManagement';
 
 export function Settings() {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ export function Settings() {
   const [tawkSectionOpen, setTawkSectionOpen] = useState(false);
   const [catalogueSectionOpen, setCatalogueSectionOpen] = useState(false);
   const [pricingSectionOpen, setPricingSectionOpen] = useState(false);
+  const [brandManagementSectionOpen, setBrandManagementSectionOpen] = useState(false);
 
   useEffect(() => {
     // Load current settings from localStorage
@@ -513,6 +515,35 @@ export function Settings() {
                   </a>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Brand Management Section */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-6">
+          <button
+            onClick={() => setBrandManagementSectionOpen(!brandManagementSectionOpen)}
+            className="w-full px-6 py-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-4">
+              <div className="bg-gradient-to-br from-purple-500 to-pink-600 p-3 rounded-xl shadow-md">
+                <Tag className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-slate-800">Brand Management</h2>
+                <p className="text-slate-600 text-xs">Configure product brands for designs</p>
+              </div>
+            </div>
+            {brandManagementSectionOpen ? (
+              <ChevronUp className="w-5 h-5 text-gray-400" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-gray-400" />
+            )}
+          </button>
+
+          {brandManagementSectionOpen && (
+            <div className="px-6 pb-6 space-y-6">
+              <BrandManagement />
             </div>
           )}
         </div>

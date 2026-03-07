@@ -10,84 +10,26 @@ export async function uploadDesignImage(
   designNo: string,
   colorName: string
 ): Promise<string> {
-  // Get upload URL from backend
-  const response = await fetch(`${API_URL}/api/storage/upload-url`, {
+  // Direct upload to backend - backend handles storage
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('designNo', designNo);
+  formData.append('colorName', colorName);
+
+  const response = await fetch(`${API_URL}/api/storage/upload`, {
     method: 'POST',
     headers: {
       ...getAuthHeader(),
-      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      fileName: file.name,
-      contentType: file.type,
-      designNo,
-      colorName,
-    }),
+    body: formData,
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to get upload URL');
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || 'Failed to upload image');
   }
 
-  const { uploadUrl, publicUrl, token, storageType, key } = await response.json();
-
-  // Upload file based on storage type
-  if (storageType === 'local') {
-    // Local storage requires FormData with file and key
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('key', key);
-
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        ...getAuthHeader(),
-      },
-      body: formData,
-    });
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      console.error('Local storage upload error:', errorText);
-      throw new Error('Failed to upload file to local storage');
-    }
-
-    const result = await uploadResponse.json();
-    return result.publicUrl;
-  } else if (storageType === 'supabase' && token) {
-    // Supabase requires token in URL
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': file.type,
-        'x-upsert': 'true',
-      },
-      body: file,
-    });
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      console.error('Supabase upload error:', errorText);
-      throw new Error('Failed to upload file to Supabase storage');
-    }
-  } else {
-    // CDN (Wasabi) upload
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': file.type,
-      },
-      body: file,
-    });
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      console.error('CDN upload error:', errorText);
-      throw new Error('Failed to upload file to CDN storage');
-    }
-  }
-
+  const { publicUrl } = await response.json();
   return publicUrl;
 }
 
