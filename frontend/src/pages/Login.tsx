@@ -152,12 +152,7 @@ export function Login({ onShowSetup }: LoginProps) {
                   decoding="sync"
                 />
               </div>
-              <div className="mb-3 flex justify-center">
-                <p className="text-sm text-gray-500 mt-2 tracking-wide">
-    Retailer Portal
-  </p>
-              </div>
-              
+             
             </div>
 
             {/* Login Form */}
