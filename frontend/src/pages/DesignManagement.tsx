@@ -19,6 +19,7 @@ export function DesignManagement() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedDesigns, setSelectedDesigns] = useState<Set<string>>(new Set());
   const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
+  const [showSortModal, setShowSortModal] = useState(false);
   const [masterSearch, setMasterSearch] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -347,41 +348,14 @@ export function DesignManagement() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-8">
+      {/* Mobile: No heading, Desktop: Show heading */}
+      <div className="hidden sm:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
         <div className="flex-1">
           <h1 className="text-2xl sm:text-3xl font-bold text-primary">Design Management</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Manage product designs and color variants</p>
         </div>
         <div className="flex items-center gap-3">
-          {brands.length > 0 && (
-            <select
-              value={selectedBrand}
-              onChange={(e) => setSelectedBrand(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="">All Brands</option>
-              {brands.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.name}
-                </option>
-              ))}
-            </select>
-          )}
-          {styles.length > 0 && (
-            <select
-              value={selectedStyle}
-              onChange={(e) => setSelectedStyle(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="">All Styles</option>
-              {styles.map((style) => (
-                <option key={style.id} value={style.id}>
-                  {style.name}
-                </option>
-              ))}
-            </select>
-          )}
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center space-x-2 bg-primary text-white px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 w-full sm:w-auto justify-center"
@@ -390,6 +364,17 @@ export function DesignManagement() {
             <span>Add Design</span>
           </button>
         </div>
+      </div>
+      
+      {/* Mobile: Add Design button at top */}
+      <div className="sm:hidden mb-4">
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center justify-center space-x-2 bg-primary text-white px-4 py-2.5 text-sm rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 w-full"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Design</span>
+        </button>
       </div>
       
       {/* Master Search Bar - Elegant & Responsive with Autocomplete */}
@@ -468,8 +453,40 @@ export function DesignManagement() {
         )}
       </div>
       
-      {/* Select Designs Checkbox */}
-      <div className="mb-4">
+      {/* Brand & Style Filters - After searchbar */}
+      <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row gap-2">
+        {brands.length > 0 && (
+          <select
+            value={selectedBrand}
+            onChange={(e) => setSelectedBrand(e.target.value)}
+            className="w-full sm:w-auto max-w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-primary focus:border-primary bg-white truncate"
+          >
+            <option value="">All Brands</option>
+            {brands.map((brand) => (
+              <option key={brand.id} value={brand.id}>
+                {brand.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {styles.length > 0 && (
+          <select
+            value={selectedStyle}
+            onChange={(e) => setSelectedStyle(e.target.value)}
+            className="w-full sm:w-auto max-w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-primary focus:border-primary bg-white truncate"
+          >
+            <option value="">All Styles</option>
+            {styles.map((style) => (
+              <option key={style.id} value={style.id}>
+                {style.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      
+      {/* Select Designs Checkbox - Desktop only */}
+      <div className="hidden sm:block mb-4">
         <button
           onClick={() => setBulkSelectionMode(!bulkSelectionMode)}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
@@ -596,6 +613,64 @@ export function DesignManagement() {
           }}
         />
       )}
+
+      {/* Mobile: Sort Modal */}
+      {showSortModal && (
+        <div className="lg:hidden fixed inset-0 z-50 flex items-end" onClick={() => setShowSortModal(false)}>
+          <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+          <div 
+            className="relative w-full bg-white rounded-t-3xl shadow-2xl max-h-[60vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between z-10">
+              <h2 className="text-lg font-bold text-gray-900">Sort By</h2>
+              <button onClick={() => setShowSortModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="space-y-2">
+                {[
+                  { value: 'newest', label: 'Newly Added' },
+                  { value: 'name', label: 'Name (A-Z)' },
+                  { value: 'active', label: 'Active First' },
+                  { value: 'inactive', label: 'Inactive First' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      // Sort logic can be implemented here
+                      setShowSortModal(false);
+                    }}
+                    className="w-full text-left px-4 py-3 rounded-lg border-2 border-gray-200 hover:border-gray-300 text-gray-700 transition-all"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile: Bottom Fixed Filter & Sort Buttons - Two separate buttons */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-2xl">
+        <div className="flex gap-2 p-3">
+          <button
+            onClick={() => setBulkSelectionMode(!bulkSelectionMode)}
+            className="flex-1 bg-gray-900 text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-gray-800 transition-all"
+          >
+            {bulkSelectionMode ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+            <span>{bulkSelectionMode ? 'Selection On' : 'Select'}</span>
+          </button>
+          <button
+            onClick={() => setShowSortModal(true)}
+            className="flex-1 bg-primary text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-primary-dark transition-all"
+          >
+            <span>Sort</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

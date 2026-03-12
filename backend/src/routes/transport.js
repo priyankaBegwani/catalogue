@@ -31,6 +31,66 @@ router.get('/',
   })
 );
 
+// Export to Excel - must come before /:id route
+router.get('/export/excel',
+  authenticateUser,
+  asyncHandler(async (req, res) => {
+    const transportOptions = await executeQuery(
+      supabase
+        .from('transport')
+        .select('*')
+        .order('created_at', { ascending: false }),
+      'Failed to fetch transport options for export'
+    );
+
+    // Format data for Excel
+    const excelData = transportOptions.map(transport => ({
+      'Transport Name': transport.transport_name,
+      'Description': transport.description || '',
+      'Address': transport.address || '',
+      'Phone Number': transport.phone_number || '',
+      'GST Number': transport.gst_number || '',
+      'State': transport.state || '',
+      'District': transport.district || '',
+      'City': transport.city || '',
+      'Pincode': transport.pincode || '',
+      'Created Date': new Date(transport.created_at).toLocaleDateString()
+    }));
+
+    res.json({ data: excelData });
+  })
+);
+
+// Export to PDF - must come before /:id route
+router.get('/export/pdf',
+  authenticateUser,
+  asyncHandler(async (req, res) => {
+    const transportOptions = await executeQuery(
+      supabase
+        .from('transport')
+        .select('*')
+        .order('created_at', { ascending: false }),
+      'Failed to fetch transport options for export'
+    );
+
+    // Format data for PDF
+    const pdfData = transportOptions.map(transport => ({
+      transport_name: transport.transport_name,
+      description: transport.description || '',
+      address: transport.address || '',
+      phone_number: transport.phone_number || '',
+      gst_number: transport.gst_number || '',
+      state: transport.state || '',
+      district: transport.district || '',
+      city: transport.city || '',
+      pincode: transport.pincode || '',
+      created_at: new Date(transport.created_at).toLocaleDateString()
+    }));
+
+    res.json({ data: pdfData });
+  })
+);
+
 // Get single transport option
 router.get('/:id', 
   authenticateUser, 

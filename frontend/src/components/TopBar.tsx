@@ -123,8 +123,8 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               <img
                 src={branding.logoUrl}
                 alt={branding.brandName}
-                style={{ height: '3.5rem' }}
-                className="w-auto object-contain max-w-[140px]"
+                style={{ height: '5.5rem' }}
+                className="w-auto object-contain max-w-[160px]"
               />
             </div>
             

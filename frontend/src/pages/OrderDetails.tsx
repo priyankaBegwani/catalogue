@@ -284,7 +284,7 @@ export default function OrderDetails() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-2 sm:py-8">
         <div className="flex h-64 items-center justify-center">
           <div className="text-gray-600">Loading order details...</div>
         </div>
@@ -294,7 +294,7 @@ export default function OrderDetails() {
 
   if (error || !order) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-2 sm:py-8">
         <div className="rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="text-red-600">{error || 'Order not found'}</p>
           <button
@@ -309,7 +309,7 @@ export default function OrderDetails() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-2 sm:py-8">
       {/* Header */}
       <div className="mb-6">
         <button

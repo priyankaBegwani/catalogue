@@ -108,6 +108,7 @@ export interface Design {
   last_ordered_at?: string;
   total_quantity_sold?: number;
   is_ready_to_ship?: boolean;
+  views?: number;
 }
 
 export interface DesignColor {
@@ -220,7 +221,7 @@ export interface PartiesResponse {
 
 
 export interface Transport {
-  id: number;
+  id: string;
   transport_name: string;
   description: string;
   address: string;
@@ -1260,7 +1261,7 @@ class ApiClient {
   }
 
 
-  async deleteTransport(id: number): Promise<void> {
+  async deleteTransport(id: string): Promise<void> {
     const response = await fetch(`${API_URL}/api/transport/${id}`, {
       method: 'DELETE',
       headers: this.getAuthHeader(),

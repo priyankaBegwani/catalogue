@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, Truck, MapPin, Phone, Building, Upload, Download } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Truck, MapPin, Phone, Building, Upload, Download, FileDown, ChevronDown } from 'lucide-react';
 import { api, Transport } from '../lib/api';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const TransportEntry: React.FC = () => {
   const [transports, setTransports] = useState<Transport[]>([]);
@@ -30,11 +32,30 @@ const TransportEntry: React.FC = () => {
   });
   const [gstError, setGstError] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
     fetchTransports();
     fetchStates();
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showExportMenu && !target.closest('.export-menu-container')) {
+        setShowExportMenu(false);
+      }
+    };
+
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportMenu]);
 
   const fetchStates = async () => {
     try {
@@ -81,6 +102,75 @@ const TransportEntry: React.FC = () => {
       city: cityName,
       pincode: selectedCity?.zipcode || formData.pincode
     });
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      setExportLoading(true);
+      const response = await fetch('/api/transport/export/excel', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const { data } = await response.json();
+      
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Transport');
+      
+      XLSX.writeFile(workbook, `Transport_${new Date().toISOString().split('T')[0]}.xlsx`);
+      setShowExportMenu(false);
+    } catch (err) {
+      setError('Failed to export to Excel');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      setExportLoading(true);
+      const response = await fetch('/api/transport/export/pdf', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const { data } = await response.json();
+      
+      const doc = new jsPDF();
+      
+      doc.setFontSize(18);
+      doc.text('Transport Options', 14, 20);
+      
+      const tableData = data.map((item: any) => [
+        item.transport_name,
+        item.phone_number,
+        `${item.city}, ${item.state}`,
+        item.gst_number,
+        item.created_at
+      ]);
+      
+      (doc as any).autoTable({
+        head: [['Transport Name', 'Phone', 'Location', 'GST Number', 'Created Date']],
+        body: tableData,
+        startY: 30,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+      
+      doc.save(`Transport_${new Date().toISOString().split('T')[0]}.pdf`);
+      setShowExportMenu(false);
+    } catch (err) {
+      setError('Failed to export to PDF');
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const fetchTransports = async () => {
@@ -154,7 +244,7 @@ const TransportEntry: React.FC = () => {
     setShowCreateForm(true);
   };
 
-  const handleDelete = async (id: number, transportName: string) => {
+  const handleDelete = async (id: string, transportName: string) => {
     if (!confirm(`Are you sure you want to delete transport option "${transportName}"?`)) return;
 
     try {
@@ -382,7 +472,7 @@ const TransportEntry: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-8">
       <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -399,19 +489,41 @@ const TransportEntry: React.FC = () => {
             Import Excel
           </button>
           <button
-            onClick={generateSampleExcel}
-            className="flex items-center justify-center rounded-lg bg-gray-600 px-4 py-2 text-white transition-colors duration-200 hover:bg-gray-700"
-          >
-            <Download className="mr-2 h-5 w-5" />
-            Sample Excel
-          </button>
-          <button
             onClick={() => setShowCreateForm(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
           >
             <Plus className="mr-2 h-5 w-5" />
             New Transport
           </button>
+          <div className="relative export-menu-container">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              disabled={exportLoading}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+            >
+              <FileDown className="mr-2 h-5 w-5" />
+              {exportLoading ? 'Exporting...' : 'Export'}
+              <ChevronDown className="ml-2 h-4 w-4" />
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
+                <button
+                  onClick={handleExportExcel}
+                  className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-100 flex items-center transition-colors"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export to Excel
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-100 flex items-center transition-colors"
+                >
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Export to PDF
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
