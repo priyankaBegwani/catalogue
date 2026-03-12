@@ -107,125 +107,124 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
     <>
       <header className="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-40 shadow-sm sm:h-20">
         <div className="h-full sm:px-4 md:px-6">
-          {/* Mobile Layout: Stacked */}
-          <div className="sm:hidden flex flex-col">
-            {/* First row: Logo */}
-            <div className="flex items-center justify-center py-[5px] border-b border-gray-100">
+          {/* Mobile Layout: Single Row */}
+          <div className="sm:hidden flex items-center justify-between h-16 px-3 relative">
+            {/* Left: Hamburger Menu */}
+            <button
+              onClick={onToggleSidebar}
+              className="p-2 hover:bg-gray-100 rounded-xl transition-colors flex-shrink-0"
+              aria-label="Toggle menu"
+            >
+              {isSidebarOpen ? <X size={20} className="text-gray-700" /> : <Menu size={20} className="text-gray-700" />}
+            </button>
+
+            {/* Center: Logo */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center pointer-events-none">
               <img
                 src={branding.logoUrl}
                 alt={branding.brandName}
-                style={{ height: '6rem' }}
-                className="w-auto object-contain max-w-[240px]"
+                style={{ height: '3.5rem' }}
+                className="w-auto object-contain max-w-[140px]"
               />
             </div>
             
-            {/* Second row: Menu and Actions */}
-            <div className="flex items-center justify-between h-12 px-2">
+            {/* Right: Action Icons */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Wishlist */}
               <button
-                onClick={onToggleSidebar}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-                aria-label="Toggle menu"
+                onClick={() => setWishlistModalOpen(true)}
+                className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
+                title="Wishlist"
               >
-                {isSidebarOpen ? <X size={20} className="text-gray-700" /> : <Menu size={20} className="text-gray-700" />}
+                <Heart className="w-5 h-5" />
+                {wishlistCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-lg text-[10px]">
+                    {wishlistCount}
+                  </span>
+                )}
               </button>
-              
-              <div className="flex items-center gap-1">
-                {/* Wishlist */}
+
+              {/* Cart */}
+              <button
+                onClick={() => setCartModalOpen(true)}
+                className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
+                title="Shopping Cart"
+              >
+                <ShoppingCart className="w-5 h-5" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-lg text-[10px]">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Profile Dropdown */}
+              <div className="relative" ref={profileDropdownRef}>
                 <button
-                  onClick={() => setWishlistModalOpen(true)}
-                  className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
-                  title="Wishlist"
+                  onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                  className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-xl transition-all"
+                  title="Profile"
                 >
-                  <Heart className="w-5 h-5" />
-                  {wishlistCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-lg text-[10px]">
-                      {wishlistCount}
-                    </span>
-                  )}
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg text-sm">
+                    {user?.full_name?.charAt(0).toUpperCase() || 'U'}
+                  </div>
                 </button>
 
-                {/* Cart */}
-                <button
-                  onClick={() => setCartModalOpen(true)}
-                  className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
-                  title="Shopping Cart"
-                >
-                  <ShoppingCart className="w-5 h-5" />
-                  {cartCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-lg text-[10px]">
-                      {cartCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Profile Dropdown */}
-                <div className="relative" ref={profileDropdownRef}>
-                  <button
-                    onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                    className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-xl transition-all"
-                    title="Profile"
+                {profileDropdownOpen && (
+                  <div 
+                    className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
                   >
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg text-sm">
-                      {user?.full_name?.charAt(0).toUpperCase() || 'U'}
+                    <div className="px-4 py-3 border-b border-gray-200">
+                      <p className="text-sm text-gray-500">Signed in as</p>
+                      <p className="text-base font-semibold text-gray-900 mt-1">{user?.full_name}</p>
+                      <p className="text-xs text-gray-500 capitalize mt-1 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                        {user?.role}
+                      </p>
                     </div>
-                  </button>
 
-                  {profileDropdownOpen && (
-                    <div 
-                      className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onTouchStart={(e) => e.stopPropagation()}
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigate('/orders');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
                     >
-                      <div className="px-4 py-3 border-b border-gray-200">
-                        <p className="text-sm text-gray-500">Signed in as</p>
-                        <p className="text-base font-semibold text-gray-900 mt-1">{user?.full_name}</p>
-                        <p className="text-xs text-gray-500 capitalize mt-1 flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                          {user?.role}
-                        </p>
-                      </div>
+                      <Package className="w-5 h-5 text-gray-500" />
+                      <span className="font-medium">Your Orders</span>
+                    </button>
 
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigate('/profile');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <User className="w-5 h-5 text-gray-500" />
+                      <span className="font-medium">Profile Settings</span>
+                    </button>
+
+                    <div className="border-t border-gray-200 mt-2 pt-2">
                       <button
                         onClick={(e) => {
                           e.preventDefault();
-                          navigate('/orders');
+                          logout();
                           setProfileDropdownOpen(false);
                         }}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                        className="w-full px-4 py-3 flex items-center gap-3 text-red-600 hover:bg-red-50 transition-colors rounded-lg mx-2"
+                        style={{ width: 'calc(100% - 1rem)' }}
                       >
-                        <Package className="w-5 h-5 text-gray-500" />
-                        <span className="font-medium">Your Orders</span>
+                        <LogOut className="w-5 h-5" />
+                        <span className="font-medium">Sign Out</span>
                       </button>
-
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          navigate('/profile');
-                          setProfileDropdownOpen(false);
-                        }}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <User className="w-5 h-5 text-gray-500" />
-                        <span className="font-medium">Profile Settings</span>
-                      </button>
-
-                      <div className="border-t border-gray-200 mt-2 pt-2">
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            logout();
-                            setProfileDropdownOpen(false);
-                          }}
-                          className="w-full px-4 py-3 flex items-center gap-3 text-red-600 hover:bg-red-50 transition-colors rounded-lg mx-2"
-                          style={{ width: 'calc(100% - 1rem)' }}
-                        >
-                          <LogOut className="w-5 h-5" />
-                          <span className="font-medium">Sign Out</span>
-                        </button>
-                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

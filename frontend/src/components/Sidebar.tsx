@@ -167,16 +167,10 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
 
   return (
     <>
-      {/* Overlay - shows on mobile when open, and on desktop when open but not pinned */}
-      {(isOpen || (isPinned && window.innerWidth < 1024)) && (
+      {/* Overlay - shows only on mobile/tablet when sidebar is open */}
+      {isOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={onClose}
-        />
-      )}
-      {isOpen && !isPinned && (
-        <div
-          className="hidden lg:block fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={onClose}
         />
       )}
