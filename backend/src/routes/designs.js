@@ -1,20 +1,13 @@
 import express from 'express';
-import { supabase, config } from '../config.js';
+import { supabase } from '../config.js';
 import { authenticateUser, optionalAuth } from '../middleware/auth.js';
 import { deleteFromR2, getPublicUrl } from '../config/r2.js';
-import { deleteFromSupabase, generateSupabaseSignedGetUrl } from '../config/supabaseStorage.js';
-import { deleteFromLocalStorage } from '../config/localStorage.js';
 
 const router = express.Router();
 
 // Helper function to convert image URLs to signed URLs
-async function convertToSignedUrls(imageUrls) {
+function convertToSignedUrls(imageUrls) {
   if (!imageUrls || imageUrls.length === 0) return imageUrls;
-
-  // Only generate signed URLs for storage types that require it
-  if (config.storageType !== 'cdn' && config.storageType !== 'supabase') {
-    return imageUrls;
-  }
 
   const signedUrls = [];
   for (const imageUrl of imageUrls) {
@@ -24,15 +17,8 @@ async function convertToSignedUrls(imageUrls) {
       
       if (keyStartIndex !== -1) {
         const key = urlParts.slice(keyStartIndex).join('/');
-        if (config.storageType === 'cdn') {
-          const publicUrl = getPublicUrl(key);
-          signedUrls.push(publicUrl);
-        } else if (config.storageType === 'supabase') {
-          const signedUrl = await generateSupabaseSignedGetUrl(key, 3600);
-          signedUrls.push(signedUrl);
-        } else {
-          signedUrls.push(imageUrl);
-        }
+        const publicUrl = getPublicUrl(key);
+        signedUrls.push(publicUrl);
       } else {
         signedUrls.push(imageUrl);
       }
@@ -109,6 +95,91 @@ router.get('/fabric-types', optionalAuth, async (req, res) => {
   }
 });
 
+// Search endpoint - optimized for fast searching across all fields
+router.get('/search', optionalAuth, async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.trim().length === 0) {
+      return res.json([]);
+    }
+
+    const searchTerm = `%${q.toLowerCase().trim()}%`;
+
+    // Use database search with ILIKE for case-insensitive partial matching
+    const { data: designs, error } = await supabase
+      .from('designs')
+      .select(`
+        *,
+        category:design_categories(id, name),
+        fabric_type:fabric_types(id, name),
+        brand:brands(id, name),
+        design_colors(*)
+      `)
+      .or(`design_no.ilike.${searchTerm},name.ilike.${searchTerm},description.ilike.${searchTerm}`)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('Search error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Additional filtering for related fields (category, brand, fabric, colors)
+    let filteredDesigns = designs || [];
+    
+    // Filter by category name, brand name, fabric type, or color names
+    const lowerQ = q.toLowerCase().trim();
+    filteredDesigns = filteredDesigns.filter(design => {
+      // Already matched by database query
+      if (design.design_no?.toLowerCase().includes(lowerQ) ||
+          design.name?.toLowerCase().includes(lowerQ) ||
+          design.description?.toLowerCase().includes(lowerQ)) {
+        return true;
+      }
+      
+      // Check category
+      if (design.category?.name?.toLowerCase().includes(lowerQ)) {
+        return true;
+      }
+      
+      // Check brand
+      if (design.brand?.name?.toLowerCase().includes(lowerQ)) {
+        return true;
+      }
+      
+      // Check fabric type
+      if (design.fabric_type?.name?.toLowerCase().includes(lowerQ)) {
+        return true;
+      }
+      
+      // Check color names
+      if (design.design_colors?.some(color => 
+        color.color_name?.toLowerCase().includes(lowerQ)
+      )) {
+        return true;
+      }
+      
+      return false;
+    });
+
+    // Convert image URLs to signed URLs
+    const designsWithSignedUrls = filteredDesigns.map(design => ({
+      ...design,
+      design_colors: design.design_colors?.map(color => ({
+        ...color,
+        image_urls: convertToSignedUrls(color.image_urls || []),
+        video_urls: color.video_urls || []
+      })) || []
+    }));
+
+    res.json(designsWithSignedUrls);
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({ error: 'Failed to search designs' });
+  }
+});
+
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { category_id, fabric_type_id, brand_id, style_id, active_only } = req.query;
@@ -122,7 +193,6 @@ router.get('/', optionalAuth, async (req, res) => {
           id,
           color_name,
           color_code,
-          price,
           in_stock,
           stock_quantity,
           size_quantities,
@@ -204,9 +274,9 @@ router.get('/', optionalAuth, async (req, res) => {
     if (!isAuthenticated) {
       const sanitizedDesigns = designsWithSignedUrls.map(design => ({
         ...design,
+        price: null,
         design_colors: design.design_colors?.map(color => ({
           ...color,
-          price: null,
           stock_quantity: null,
           size_quantities: null
         }))
@@ -234,7 +304,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
           id,
           color_name,
           color_code,
-          price,
           in_stock,
           stock_quantity,
           size_quantities,
@@ -279,9 +348,9 @@ router.get('/:id', optionalAuth, async (req, res) => {
     if (!isAuthenticated) {
       const sanitizedDesign = {
         ...design,
+        price: null,
         design_colors: design.design_colors?.map(color => ({
           ...color,
-          price: null,
           stock_quantity: null,
           size_quantities: null
         }))
@@ -302,7 +371,7 @@ router.post('/', authenticateUser, async (req, res) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { design_no, name, description, category_id, style_id, fabric_type_id, available_sizes, colors } = req.body;
+    const { design_no, name, description, category_id, style_id, fabric_type_id, available_sizes, price, colors } = req.body;
 
     if (!design_no || !name) {
       return res.status(400).json({ error: 'Design number and name are required' });
@@ -318,6 +387,7 @@ router.post('/', authenticateUser, async (req, res) => {
         style_id: style_id || null,
         fabric_type_id: fabric_type_id || null,
         available_sizes: available_sizes || [],
+        price: price || 0,
         created_by: req.user.id
       })
       .select()
@@ -332,7 +402,6 @@ router.post('/', authenticateUser, async (req, res) => {
         design_id: design.id,
         color_name: color.color_name,
         color_code: color.color_code || null,
-        price: color.price || 0,
         in_stock: color.in_stock !== undefined ? color.in_stock : true,
         stock_quantity: color.stock_quantity || 0,
         size_quantities: color.size_quantities || { S: 0, M: 0, L: 0, XL: 0, XXL: 0, XXXL: 0 },
@@ -353,7 +422,18 @@ router.post('/', authenticateUser, async (req, res) => {
       .from('designs')
       .select(`
         *,
-        design_colors (*)
+        design_colors (
+          id,
+          design_id,
+          color_name,
+          color_code,
+          in_stock,
+          stock_quantity,
+          size_quantities,
+          image_urls,
+          created_at,
+          updated_at
+        )
       `)
       .eq('id', design.id)
       .single();
@@ -372,7 +452,7 @@ router.put('/:id', authenticateUser, async (req, res) => {
     }
 
     const { id } = req.params;
-    const { design_no, name, description, category_id, style_id, fabric_type_id, available_sizes, is_active } = req.body;
+    const { design_no, name, description, category_id, style_id, fabric_type_id, available_sizes, price, is_active } = req.body;
 
     const updateData = {};
     if (design_no !== undefined) updateData.design_no = design_no;
@@ -382,6 +462,7 @@ router.put('/:id', authenticateUser, async (req, res) => {
     if (style_id !== undefined) updateData.style_id = style_id || null;
     if (fabric_type_id !== undefined) updateData.fabric_type_id = fabric_type_id || null;
     if (available_sizes !== undefined) updateData.available_sizes = available_sizes;
+    if (price !== undefined) updateData.price = price;
     if (is_active !== undefined) updateData.is_active = is_active;
 
     const { data: design, error } = await supabase
@@ -390,7 +471,18 @@ router.put('/:id', authenticateUser, async (req, res) => {
       .eq('id', id)
       .select(`
         *,
-        design_colors (*)
+        design_colors (
+          id,
+          design_id,
+          color_name,
+          color_code,
+          in_stock,
+          stock_quantity,
+          size_quantities,
+          image_urls,
+          created_at,
+          updated_at
+        )
       `)
       .single();
 
@@ -447,18 +539,8 @@ router.delete('/:id', authenticateUser, async (req, res) => {
               if (keyStartIndex !== -1) {
                 const key = urlParts.slice(keyStartIndex).join('/');
                 
-                // Delete from appropriate storage
-                switch (config.storageType) {
-                  case 'cdn':
-                    await deleteFromR2(key);
-                    break;
-                  case 'supabase':
-                    await deleteFromSupabase(key);
-                    break;
-                  case 'local':
-                    await deleteFromLocalStorage(key);
-                    break;
-                }
+                // Delete from R2
+                await deleteFromR2(key);
               }
             } catch (deleteError) {
               console.error(`Failed to delete image ${imageUrl}:`, deleteError);
@@ -493,7 +575,7 @@ router.post('/:id/colors', authenticateUser, async (req, res) => {
     }
 
     const { id } = req.params;
-    const { color_name, color_code, price, in_stock, stock_quantity, size_quantities, image_urls } = req.body;
+    const { color_name, color_code, in_stock, stock_quantity, size_quantities, image_urls } = req.body;
 
     if (!color_name) {
       return res.status(400).json({ error: 'Color name is required' });
@@ -505,7 +587,6 @@ router.post('/:id/colors', authenticateUser, async (req, res) => {
         design_id: id,
         color_name,
         color_code: color_code || null,
-        price: price || 0,
         in_stock: in_stock !== undefined ? in_stock : true,
         stock_quantity: stock_quantity || 0,
         size_quantities: size_quantities || { S: 0, M: 0, L: 0, XL: 0, XXL: 0, XXXL: 0 },
@@ -532,12 +613,11 @@ router.put('/colors/:colorId', authenticateUser, async (req, res) => {
     }
 
     const { colorId } = req.params;
-    const { color_name, color_code, price, in_stock, stock_quantity, size_quantities, image_urls } = req.body;
+    const { color_name, color_code, in_stock, stock_quantity, size_quantities, image_urls } = req.body;
 
     const updateData = {};
     if (color_name !== undefined) updateData.color_name = color_name;
     if (color_code !== undefined) updateData.color_code = color_code;
-    if (price !== undefined) updateData.price = price;
     if (in_stock !== undefined) updateData.in_stock = in_stock;
     if (stock_quantity !== undefined) updateData.stock_quantity = stock_quantity;
     if (size_quantities !== undefined) updateData.size_quantities = size_quantities;
@@ -595,18 +675,8 @@ router.delete('/colors/:colorId', authenticateUser, async (req, res) => {
           if (keyStartIndex !== -1) {
             const key = urlParts.slice(keyStartIndex).join('/');
             
-            // Delete from appropriate storage
-            switch (config.storageType) {
-              case 'cdn':
-                await deleteFromR2(key);
-                break;
-              case 'supabase':
-                await deleteFromSupabase(key);
-                break;
-              case 'local':
-                await deleteFromLocalStorage(key);
-                break;
-            }
+            // Delete from R2
+            await deleteFromR2(key);
           }
         } catch (deleteError) {
           console.error(`Failed to delete image ${imageUrl}:`, deleteError);

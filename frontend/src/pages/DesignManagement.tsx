@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api, Design, Brand, DesignStyle } from '../lib/api';
-import { Plus, Trash2, ImageIcon, Package, MessageCircle, CheckSquare, Square } from 'lucide-react';
+import { Plus, Trash2, ImageIcon, Package, MessageCircle, CheckSquare, Square, Search, X } from 'lucide-react';
 import { AddDesignModal, ViewDesignModal, ErrorAlert } from '../components';
 
 export function DesignManagement() {
@@ -19,6 +19,16 @@ export function DesignManagement() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedDesigns, setSelectedDesigns] = useState<Set<string>>(new Set());
   const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
+  const [masterSearch, setMasterSearch] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const [displayedDesigns, setDisplayedDesigns] = useState<Design[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const DESIGNS_PER_PAGE = 20;
 
   const loadDesigns = useCallback(async () => {
     try {
@@ -62,20 +72,181 @@ export function DesignManagement() {
     loadStyles();
   }, [loadDesigns, loadBrands, loadStyles]);
 
+  // Reset pagination when filters change
   useEffect(() => {
-    // Apply brand and style filters
-    let filtered = designs;
+    setPage(1);
+    setDisplayedDesigns(filteredDesigns.slice(0, DESIGNS_PER_PAGE));
+    setHasMore(filteredDesigns.length > DESIGNS_PER_PAGE);
+  }, [filteredDesigns]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting && hasMore) {
+          loadMoreDesigns();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentRef = loadMoreRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [hasMore, page, filteredDesigns]);
+
+  const loadMoreDesigns = () => {
+    const nextPage = page + 1;
+    const startIndex = 0;
+    const endIndex = nextPage * DESIGNS_PER_PAGE;
+    const newDisplayedDesigns = filteredDesigns.slice(startIndex, endIndex);
     
+    setDisplayedDesigns(newDisplayedDesigns);
+    setPage(nextPage);
+    setHasMore(endIndex < filteredDesigns.length);
+  };
+
+  // Generate autocomplete suggestions
+  useEffect(() => {
+    if (!masterSearch.trim()) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const debounceTimer = setTimeout(() => {
+      const searchTerm = masterSearch.toLowerCase().trim();
+      const suggestionSet = new Set<string>();
+
+      designs.forEach(design => {
+        // Add design numbers
+        if (design.design_no?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.design_no);
+        }
+        
+        // Add design names
+        if (design.name?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.name);
+        }
+        
+        // Add category names
+        if (design.category?.name?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.category.name);
+        }
+        
+        // Add brand names
+        if (design.brand?.name?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.brand.name);
+        }
+        
+        // Add fabric types - check nested object
+        if (design.fabric_type?.name?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.fabric_type.name);
+        }
+        
+        // Add color names
+        design.design_colors?.forEach(color => {
+          if (color.color_name?.toLowerCase().includes(searchTerm)) {
+            suggestionSet.add(color.color_name);
+          }
+        });
+      });
+
+      const sortedSuggestions = Array.from(suggestionSet)
+        .sort((a, b) => {
+          // Prioritize exact starts
+          const aStarts = a.toLowerCase().startsWith(searchTerm);
+          const bStarts = b.toLowerCase().startsWith(searchTerm);
+          if (aStarts && !bStarts) return -1;
+          if (!aStarts && bStarts) return 1;
+          return a.localeCompare(b);
+        })
+        .slice(0, 8);
+
+      setSuggestions(sortedSuggestions);
+      setShowSuggestions(sortedSuggestions.length > 0);
+      setIsSearching(false);
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [masterSearch, designs]);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    // Apply filters
+    let filtered = [...designs];
+    
+    // Master search - search across all fields (applied first for best results)
+    if (masterSearch.trim()) {
+      const searchTerm = masterSearch.toLowerCase().trim();
+      filtered = filtered.filter(design => {
+        // Search in design number
+        if (design.design_no?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in design name
+        if (design.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in description
+        if (design.description?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in category name - check nested object
+        if (design.category?.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in brand name - check both nested object and ID lookup
+        if (design.brand?.name?.toLowerCase().includes(searchTerm)) return true;
+        const brand = brands.find(b => b.id === design.brand_id);
+        if (brand?.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in fabric type - check nested object
+        if (design.fabric_type?.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in style name - check both nested object and ID lookup
+        if (design.style?.name?.toLowerCase().includes(searchTerm)) return true;
+        const style = styles.find(s => s.id === design.style_id);
+        if (style?.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in color names
+        if (design.design_colors?.some(color => 
+          color.color_name?.toLowerCase().includes(searchTerm)
+        )) return true;
+        
+        return false;
+      });
+    }
+    
+    // Apply brand filter
     if (selectedBrand) {
       filtered = filtered.filter(d => d.brand_id === selectedBrand);
     }
     
+    // Apply style filter
     if (selectedStyle) {
       filtered = filtered.filter(d => d.style_id === selectedStyle);
     }
     
     setFilteredDesigns(filtered);
-  }, [designs, selectedBrand, selectedStyle]);
+  }, [designs, selectedBrand, selectedStyle, masterSearch, brands, styles]);
 
 
   const handleDelete = useCallback(async (id: string) => {
@@ -112,8 +283,7 @@ export function DesignManagement() {
   }, [loadDesigns]);
 
   const getMinPrice = (design: Design) => {
-    if (!design.design_colors || design.design_colors.length === 0) return 0;
-    return Math.min(...design.design_colors.map(c => c.price));
+    return design.price || 0;
   };
 
   const toggleDesignSelection = useCallback((designId: string) => {
@@ -179,7 +349,7 @@ export function DesignManagement() {
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl sm:text-3xl font-bold text-primary">Design Management</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Manage product designs and color variants</p>
         </div>
@@ -220,6 +390,82 @@ export function DesignManagement() {
             <span>Add Design</span>
           </button>
         </div>
+      </div>
+      
+      {/* Master Search Bar - Elegant & Responsive with Autocomplete */}
+      <div className="relative mb-6" ref={searchRef}>
+        <div className="relative group">
+          <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
+            <Search className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-focus-within:text-primary transition-colors duration-200" />
+          </div>
+          <input
+            type="text"
+            value={masterSearch}
+            onChange={(e) => setMasterSearch(e.target.value)}
+            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+            placeholder="Search products..."
+            className="w-full pl-10 sm:pl-12 pr-10 sm:pr-12 py-2.5 sm:py-3.5 text-sm sm:text-base border-2 border-gray-200 rounded-xl sm:rounded-2xl bg-white shadow-sm hover:shadow-md focus:shadow-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 placeholder:text-gray-400"
+            autoComplete="off"
+          />
+          {masterSearch && (
+            <button
+              onClick={() => {
+                setMasterSearch('');
+                setShowSuggestions(false);
+              }}
+              className="absolute inset-y-0 right-0 pr-3 sm:pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+              aria-label="Clear search"
+            >
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          )}
+        </div>
+        
+        {/* Autocomplete Suggestions Dropdown */}
+        {showSuggestions && suggestions.length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-primary border-opacity-20 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden" style={{ zIndex: 9999 }}>
+            <div className="max-h-80 overflow-y-auto py-2">
+              {suggestions.map((suggestion, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setMasterSearch(suggestion);
+                    setShowSuggestions(false);
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm sm:text-base hover:bg-primary hover:bg-opacity-10 transition-colors duration-150 flex items-center gap-3 group"
+                >
+                  <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 group-hover:text-primary transition-colors" />
+                  <span className="text-gray-700 group-hover:text-gray-900 font-medium">
+                    {suggestion}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {masterSearch && !showSuggestions && (
+          <div className="mt-3 flex items-center justify-between px-1 animate-fadeIn">
+            <div className="flex items-center gap-2">
+              {isSearching ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-xs sm:text-sm text-gray-500 font-medium">Searching...</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                  <span className="text-xs sm:text-sm text-gray-600 font-medium">
+                    {filteredDesigns.length} result{filteredDesigns.length !== 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+            </div>
+            <span className="text-xs text-gray-500 hidden sm:inline">
+              Searching for: <span className="font-semibold text-gray-700">"{masterSearch}"</span>
+            </span>
+          </div>
+        )}
       </div>
       
       {/* Select Designs Checkbox */}
@@ -276,7 +522,7 @@ export function DesignManagement() {
       <ErrorAlert message={error} onDismiss={() => setError('')} className="mb-6" />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-        {filteredDesigns.map((design) => (
+        {displayedDesigns.map((design) => (
           <DesignCard
             key={design.id}
             design={design}
@@ -289,6 +535,25 @@ export function DesignManagement() {
             onToggleSelection={() => toggleDesignSelection(design.id)}
           />
         ))}
+        
+        {/* Infinite Scroll Trigger */}
+        {hasMore && (
+          <div ref={loadMoreRef} className="col-span-full flex justify-center py-8">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-sm text-gray-500">Loading more designs...</span>
+            </div>
+          </div>
+        )}
+        
+        {/* End of Results */}
+        {!hasMore && displayedDesigns.length > 0 && (
+          <div className="col-span-full flex justify-center py-6">
+            <div className="text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-full">
+              ✓ All {filteredDesigns.length} designs loaded
+            </div>
+          </div>
+        )}
       </div>
 
       {designs.length === 0 && (
@@ -619,7 +884,7 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
           <div className="mb-2 p-1.5 bg-gray-50 rounded border border-gray-200">
           
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-primary">₹{selectedColor.price}</span>
+              <span className="text-xs font-bold text-primary">₹{design.price}</span>
               <span className={`text-[10px] font-medium flex items-center gap-0.5 ${
                 selectedColorStock > 0 ? 'text-gray-600' : 'text-gray-400'
               }`}>

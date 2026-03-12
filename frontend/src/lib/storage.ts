@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+import { API_URL } from '../config/backend';
 
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('access_token');

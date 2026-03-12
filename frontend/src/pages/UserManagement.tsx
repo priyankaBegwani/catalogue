@@ -545,6 +545,7 @@ function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) {
   const [formData, setFormData] = useState({
     full_name: user.full_name,
     party_id: user.party_id || '',
+    can_order_individual_sizes: user.can_order_individual_sizes ?? false,
   });
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(false);
@@ -571,6 +572,7 @@ function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) {
     try {
       await api.updateUser(user.id, {
         full_name: formData.full_name,
+        can_order_individual_sizes: formData.can_order_individual_sizes,
         ...(user.role === 'retailer' && { party_id: formData.party_id })
       });
       onSuccess();
@@ -644,6 +646,26 @@ function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) {
             </div>
           )}
 
+          {user.role !== 'admin' && (
+            <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+              <input
+                type="checkbox"
+                id="can_order_individual_sizes"
+                checked={formData.can_order_individual_sizes}
+                onChange={(e) => setFormData({ ...formData, can_order_individual_sizes: e.target.checked })}
+                className="mt-1 h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+              />
+              <div className="flex-1">
+                <label htmlFor="can_order_individual_sizes" className="block text-xs sm:text-sm font-medium text-gray-700 cursor-pointer">
+                  Allow Individual Size Selection
+                </label>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Enable this to allow the user to order individual sizes in addition to size sets when adding items to cart.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex space-x-2 sm:space-x-3 pt-3 sm:pt-4">
             <button
               type="button"
@@ -679,6 +701,7 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
     full_name: '',
     role: 'retailer' as 'admin' | 'retailer' | 'guest',
     party_id: '',
+    can_order_individual_sizes: false,
   });
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(false);
@@ -802,6 +825,26 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {formData.role !== 'admin' && (
+            <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+              <input
+                type="checkbox"
+                id="create_can_order_individual_sizes"
+                checked={formData.can_order_individual_sizes}
+                onChange={(e) => setFormData({ ...formData, can_order_individual_sizes: e.target.checked })}
+                className="mt-1 h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+              />
+              <div className="flex-1">
+                <label htmlFor="create_can_order_individual_sizes" className="block text-xs sm:text-sm font-medium text-gray-700 cursor-pointer">
+                  Allow Individual Size Selection
+                </label>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Enable this to allow the user to order individual sizes in addition to size sets when adding items to cart.
+                </p>
+              </div>
             </div>
           )}
 

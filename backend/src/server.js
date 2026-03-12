@@ -1,9 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import { config } from './config.js';
 import { globalErrorHandler } from './utils/errorHandler.js';
 import authRoutes from './routes/auth.js';
@@ -18,9 +15,6 @@ import locationRoutes from './routes/locations.js';
 import ordersRoutes from './routes/orders.js';
 import adminRoutes from './routes/admin.js';
 import brandsRoutes from './routes/brands.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const app = express();
 
@@ -37,11 +31,6 @@ if (process.env.NODE_ENV === 'development') {
     next();
   });
 }
-
-// Serve static files from uploads directory (for local storage)
-const uploadsPath = path.join(__dirname, '../uploads');
-app.use('/uploads', express.static(uploadsPath));
-console.log(`Serving static files from: ${uploadsPath}`);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);

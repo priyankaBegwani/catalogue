@@ -182,6 +182,11 @@ router.post('/checkout',
         ),
         color:design_colors!cart_items_color_id_fkey (
           color_name
+        ),
+        size_set:size_sets!cart_items_size_set_id_fkey (
+          id,
+          name,
+          sizes
         )
       `)
       .eq('user_id', req.user.id);
@@ -223,13 +228,72 @@ router.post('/checkout',
       return res.status(500).json({ error: 'Failed to create order' });
     }
 
-    // Transform cart items to order items
-    const orderItemsData = cartItems.map(item => ({
-      order_id: order.id,
-      design_number: item.design?.design_no || '',
-      color: item.color?.color_name || '',
-      sizes_quantities: item.sizes_quantities || []
-    }));
+    // Transform cart items to order items.
+    // We preserve what the user ordered by tracking:
+    // - Whether items came from size sets or individual sizes
+    // - The size set name if applicable
+    // - All sizes and quantities
+    // We group by design_number + color + size_set_name to keep set orders separate from individual orders
+    const grouped = new Map();
+
+    for (const item of cartItems) {
+      const design_number = item.design?.design_no || '';
+      const color = item.color?.color_name || '';
+      const is_from_size_set = item.is_set_order || false;
+      const size_set_name = is_from_size_set ? (item.size_set?.name || '') : '';
+      
+      // Group by design + color + size_set_name to keep set orders separate
+      const key = `${design_number}__${color}__${size_set_name}`;
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          order_id: order.id,
+          design_number,
+          color,
+          is_from_size_set,
+          size_set_name,
+          sizes_quantities: []
+        });
+      }
+
+      const group = grouped.get(key);
+
+      const rowQty = Number(item.quantity) || 0;
+      if (rowQty <= 0) continue;
+
+      if (item.is_set_order) {
+        const sizes = Array.isArray(item.size_set?.sizes) ? item.size_set.sizes : [];
+        for (const size of sizes) {
+          if (!size) continue;
+          group.sizes_quantities.push({ size, quantity: rowQty });
+        }
+      } else {
+        const size = item.size || '';
+        if (size) {
+          group.sizes_quantities.push({ size, quantity: rowQty });
+        }
+      }
+    }
+
+    // Merge duplicate sizes within a grouped item
+    const orderItemsData = Array.from(grouped.values()).map(group => {
+      const merged = new Map();
+      for (const sq of group.sizes_quantities) {
+        const prev = merged.get(sq.size) || 0;
+        merged.set(sq.size, prev + (Number(sq.quantity) || 0));
+      }
+      return {
+        order_id: group.order_id,
+        design_number: group.design_number,
+        color: group.color,
+        // TODO: Uncomment these fields after applying migration 20260310000003_add_size_set_info_to_order_items.sql
+        // is_from_size_set: group.is_from_size_set,
+        // size_set_name: group.size_set_name || null,
+        sizes_quantities: Array.from(merged.entries())
+          .filter(([, qty]) => qty > 0)
+          .map(([size, quantity]) => ({ size, quantity }))
+      };
+    });
 
     // Create order items
     const { data: items, error: itemsError } = await supabase

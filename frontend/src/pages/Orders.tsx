@@ -94,7 +94,7 @@ const Orders: React.FC = () => {
   
   const refreshDesigns = async () => {
     try {
-      const data = await api.getDesigns(undefined, undefined, true); // Only fetch active designs
+      const data = await api.getDesigns(undefined, undefined, undefined, undefined, true); // Only fetch active designs
       const normalizedDesigns = data.map((design: any) => {
         const designNumber = design.design_number ?? design.design_no ?? design.designNo ?? '';
         const normalizedColors = (design.design_colors ?? design.colors ?? []).map((color: any) => ({
@@ -405,24 +405,20 @@ const Orders: React.FC = () => {
     const itemsForDesign = (order.order_items || []).filter(item => item.design_number === designNumber);
     if (itemsForDesign.length === 0) return '';
 
-    const byColor: Record<string, { size: string; quantity: number }[]> = {};
-    itemsForDesign.forEach(item => {
-      const colorKey = item.color || 'No color';
-      if (!byColor[colorKey]) {
-        byColor[colorKey] = [];
-      }
-      (item.sizes_quantities || []).forEach(sq => {
-        if (sq.quantity > 0) {
-          byColor[colorKey].push({ size: sq.size, quantity: sq.quantity });
-        }
-      });
-    });
-
     const parts: string[] = [];
-    Object.entries(byColor).forEach(([color, sizes]) => {
-      if (sizes.length === 0) return;
-      const sizeText = sizes.map(s => `${s.size}×${s.quantity}`).join(', ');
-      parts.push(`${color}: ${sizeText}`);
+    itemsForDesign.forEach(item => {
+      const color = item.color || 'No color';
+      const orderType = item.is_from_size_set 
+        ? `📦 ${item.size_set_name || 'Set'}` 
+        : '🔢 Individual';
+      const sizeText = (item.sizes_quantities || [])
+        .filter(sq => sq.quantity > 0)
+        .map(sq => `${sq.size}×${sq.quantity}`)
+        .join(', ');
+      
+      if (sizeText) {
+        parts.push(`${color} (${orderType}): ${sizeText}`);
+      }
     });
 
     return parts.join(' | ');
@@ -522,6 +518,7 @@ const Orders: React.FC = () => {
                 <tr>
                   <th>Design Number</th>
                   <th>Color</th>
+                  <th>Order Type</th>
                   <th>Sizes & Quantities</th>
                   <th>Total Qty</th>
                 </tr>
@@ -529,10 +526,14 @@ const Orders: React.FC = () => {
               <tbody>
                 ${order.order_items.map(item => {
                   const totalQty = item.sizes_quantities?.reduce((sum, sq) => sum + sq.quantity, 0) || 0;
+                  const orderType = item.is_from_size_set 
+                    ? `<span style="background: #e3f2fd; border: 1px solid #2196f3; padding: 3px 8px; border-radius: 3px; font-size: 11px;">📦 Set: ${item.size_set_name || 'Unknown'}</span>`
+                    : `<span style="background: #f3e5f5; border: 1px solid #9c27b0; padding: 3px 8px; border-radius: 3px; font-size: 11px;">🔢 Individual</span>`;
                   return `
                     <tr>
                       <td><strong>${item.design_number}</strong></td>
                       <td>${item.color}</td>
+                      <td>${orderType}</td>
                       <td>
                         ${item.sizes_quantities?.map(sq => `<span class="size-badge">${sq.size} × ${sq.quantity}</span>`).join(' ') || 'No sizes'}
                       </td>
@@ -628,6 +629,7 @@ const Orders: React.FC = () => {
                     <tr>
                       <th>Design</th>
                       <th>Color</th>
+                      <th>Type</th>
                       <th>Sizes & Quantities</th>
                       <th>Total</th>
                     </tr>
@@ -635,10 +637,14 @@ const Orders: React.FC = () => {
                   <tbody>
                     ${order.order_items.map(item => {
                       const totalQty = item.sizes_quantities?.reduce((sum, sq) => sum + sq.quantity, 0) || 0;
+                      const orderType = item.is_from_size_set 
+                        ? `<span style="background: #e3f2fd; border: 1px solid #2196f3; padding: 2px 6px; border-radius: 3px; font-size: 10px;">📦 ${item.size_set_name || 'Set'}</span>`
+                        : `<span style="background: #f3e5f5; border: 1px solid #9c27b0; padding: 2px 6px; border-radius: 3px; font-size: 10px;">🔢 Indiv.</span>`;
                       return `
                         <tr>
                           <td><strong>${item.design_number}</strong></td>
                           <td>${item.color}</td>
+                          <td>${orderType}</td>
                           <td>
                             ${item.sizes_quantities?.map(sq => `<span class="size-badge">${sq.size} × ${sq.quantity}</span>`).join(' ') || 'No sizes'}
                           </td>
@@ -777,18 +783,62 @@ const Orders: React.FC = () => {
     <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
       <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
-          <p className="mt-1 text-gray-600">Manage and track all orders with multiple design items</p>
+          <p className="mt-1 text-sm sm:text-base text-gray-600">Manage and track all orders with multiple design items</p>
         </div>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="mt-4 sm:mt-0 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
-        >
-          <Plus className="mr-2 h-5 w-5" />
-          New Order
-        </button>
+        
+        {/* Compact Action Buttons - Icon-based */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="bg-blue-600 text-white p-2 sm:px-3 sm:py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center group relative"
+            title="New Order"
+          >
+            <Plus className="h-5 w-5" />
+            <span className="hidden lg:inline ml-2 text-sm">New</span>
+          </button>
+          
+          <button 
+            onClick={printAllOrders}
+            className="bg-green-600 text-white p-2 sm:px-3 sm:py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center group relative"
+            title="Print Page"
+          >
+            <Printer className="h-5 w-5" />
+            <span className="hidden lg:inline ml-2 text-sm">Print</span>
+          </button>
+          
+          {/* Export Orders Dropdown */}
+          <div className="relative export-menu-container">
+            <button 
+              onClick={() => setShowExportMenu(prev => !prev)}
+              className="bg-purple-600 text-white p-2 sm:px-3 sm:py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 flex items-center group relative"
+              title="Export Orders"
+            >
+              <Download className="h-5 w-5" />
+              <span className="hidden lg:inline ml-2 text-sm">Export</span>
+              <ChevronDown className="h-3.5 w-3.5 ml-1" />
+            </button>
+            
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-lg z-10">
+                <button
+                  onClick={handleExportAll}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-t-md"
+                >
+                  Export All Orders
+                </button>
+                <button
+                  onClick={handleExportFiltered}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-b-md border-t border-gray-200"
+                >
+                  Export Filtered Orders
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -802,50 +852,6 @@ const Orders: React.FC = () => {
           </button>
         </div>
       )}
-
-      {/* Print and Pagination Controls */}
-      <div className="rounded-lg bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-2">
-            <button 
-              onClick={printAllOrders}
-              className="flex items-center rounded-lg bg-green-600 text-white px-4 py-2 transition-colors duration-200 hover:bg-green-700"
-            >
-              <Printer className="mr-2 h-5 w-5" />
-              Print Page
-            </button>
-            
-            {/* Export Orders Dropdown */}
-            <div className="relative export-menu-container">
-              <button 
-                onClick={() => setShowExportMenu(prev => !prev)}
-                className="flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 transition-colors duration-200 hover:bg-blue-700"
-              >
-                <Download className="mr-2 h-5 w-5" />
-                Export Orders
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </button>
-              
-              {showExportMenu && (
-                <div className="absolute left-0 top-full mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-lg z-10">
-                  <button
-                    onClick={handleExportAll}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-t-md"
-                  >
-                    Export All Orders
-                  </button>
-                  <button
-                    onClick={handleExportFiltered}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-b-md border-t border-gray-200"
-                  >
-                    Export Filtered Orders
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Orders Table */}
       <div className="rounded-lg bg-white shadow-sm overflow-visible">

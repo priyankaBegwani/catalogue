@@ -12,7 +12,6 @@ interface AddDesignModalProps {
 interface ColorData {
   color_name: string;
   color_code: string;
-  price: number | '';
   in_stock: boolean;
   stock_quantity: number;
   size_quantities: {
@@ -40,6 +39,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     brand_id: '',
     available_sizes: [] as string[],
     whatsapp_image_url: '',
+    price: 0,
   });
   const [categories, setCategories] = useState<DesignCategory[]>([]);
   const [styles, setStyles] = useState<DesignStyle[]>([]);
@@ -53,7 +53,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
   const [error, setError] = useState('');
   const prevCategoryRef = useRef<string>('');
   const colorNameRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const colorPriceRefs = useRef<Array<HTMLInputElement | null>>([]);
   const sizeInputRefs = useRef<Array<Record<string, HTMLInputElement | null>>>([]);
   const formRef = useRef<HTMLFormElement | null>(null);
   const colorsSectionRef = useRef<HTMLDivElement | null>(null);
@@ -64,14 +63,8 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     }
   };
 
-  const focusNextField = (index: number, currentField: 'name' | 'price') => {
+  const focusNextField = (index: number, currentField: 'name') => {
     if (currentField === 'name') {
-      const priceInput = colorPriceRefs.current[index];
-      if (priceInput) {
-        priceInput.focus();
-        scrollInputIntoView(priceInput);
-      }
-    } else if (currentField === 'price') {
       const sizeInputs = sizeInputRefs.current[index];
       const firstSizeInput = sizeInputs ? sizeInputs['S'] : null;
       if (firstSizeInput) {
@@ -83,7 +76,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
 
   useEffect(() => {
     colorNameRefs.current = colorNameRefs.current.slice(0, colors.length);
-    colorPriceRefs.current = colorPriceRefs.current.slice(0, colors.length);
     sizeInputRefs.current = sizeInputRefs.current.slice(0, colors.length);
   }, [colors.length]);
 
@@ -94,8 +86,8 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     if (editingDesign) {
       // Pre-populate form with existing design data
       setFormData({
-        design_no: editingDesign.design_no,
-        name: editingDesign.name,
+        design_no: editingDesign.design_no || '',
+        name: editingDesign.name || '',
         description: editingDesign.description || '',
         category_id: editingDesign.category_id || '',
         style_id: editingDesign.style_id || '',
@@ -103,6 +95,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         brand_id: editingDesign.brand_id || '',
         available_sizes: editingDesign.available_sizes || [],
         whatsapp_image_url: editingDesign.whatsapp_image_url || '',
+        price: editingDesign.price || 0,
       });
       prevCategoryRef.current = editingDesign.category_id || '';
       // Load styles for the editing design's category
@@ -132,7 +125,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
           return {
             color_name: color.color_name,
             color_code: color.color_code || '#000000',
-            price: typeof color.price === 'number' ? color.price : 0,
             in_stock: color.in_stock,
             stock_quantity: color.stock_quantity,
             size_quantities: sizeQuantities || {
@@ -156,16 +148,21 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
 
   const loadCategories = async () => {
     try {
+      console.log('Loading categories...');
       const data = await api.getDesignCategories();
+      console.log('Categories loaded:', data);
       setCategories(data);
     } catch (err) {
       console.error('Failed to load categories:', err);
+      setError('Failed to load categories. Please check if the backend is running.');
     }
   };
 
   const loadStyles = async (categoryId: string) => {
     try {
+      console.log('Loading styles for category:', categoryId);
       const data = await api.getDesignStyles(categoryId);
+      console.log('Styles loaded:', data);
       setStyles(data);
     } catch (err) {
       console.error('Failed to load styles:', err);
@@ -175,19 +172,25 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
 
   const loadFabricTypes = async () => {
     try {
+      console.log('Loading fabric types...');
       const data = await api.getFabricTypes();
+      console.log('Fabric types loaded:', data);
       setFabricTypes(data);
     } catch (err) {
       console.error('Failed to load fabric types:', err);
+      setError('Failed to load fabric types. Please check if the backend is running.');
     }
   };
 
   const loadBrands = async () => {
     try {
+      console.log('Loading brands...');
       const data = await api.getBrands();
+      console.log('Brands loaded:', data);
       setBrands(data);
     } catch (err) {
       console.error('Failed to load brands:', err);
+      setError('Failed to load brands. Please check if the backend is running.');
     }
   };
 
@@ -230,7 +233,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
   const createEmptyColor = (): ColorData => ({
     color_name: '',
     color_code: '#000000',
-    price: '',
     in_stock: true,
     stock_quantity: 0,
     size_quantities: {
@@ -271,7 +273,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
   const handleRemoveColor = (index: number) => {
     setColors(colors.filter((_, i) => i !== index));
     colorNameRefs.current.splice(index, 1);
-    colorPriceRefs.current.splice(index, 1);
     sizeInputRefs.current.splice(index, 1);
   };
 
@@ -344,7 +345,8 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         style_id: formData.style_id || undefined,
         fabric_type_id: formData.fabric_type_id || undefined,
         available_sizes: formData.available_sizes,
-        whatsapp_image_url: formData.whatsapp_image_url || undefined
+        whatsapp_image_url: formData.whatsapp_image_url || undefined,
+        price: formData.price || 0
       };
 
       const colorsWithImages = await Promise.all(
@@ -373,7 +375,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
           return {
             color_name: color.color_name,
             color_code: color.color_code || undefined,
-            price: typeof color.price === 'number' ? color.price : 0,
             in_stock: color.in_stock,
             stock_quantity: color.stock_quantity,
             size_quantities: color.size_quantities,
@@ -400,7 +401,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
               await api.updateDesignColor(existingColor.id, {
                 color_name: color.color_name,
                 color_code: color.color_code,
-                price: color.price,
                 in_stock: color.in_stock,
                 stock_quantity: color.stock_quantity,
                 size_quantities: color.size_quantities,
@@ -447,50 +447,51 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
             </div>
           )}
 
-          {/* Brand - First Field */}
-          <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-              Brand
-            </label>
-            <select
-              value={formData.brand_id}
-              onChange={(e) => setFormData({ ...formData, brand_id: e.target.value })}
-              className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="">Select a brand</option>
-              {brands.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Brand and Category - Side by side on desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Brand
+              </label>
+              <select
+                value={formData.brand_id}
+                onChange={(e) => setFormData({ ...formData, brand_id: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                <option value="">Select a brand</option>
+                {brands.map((brand) => (
+                  <option key={brand.id} value={brand.id}>
+                    {brand.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Category - Second Field */}
-          <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-              Category *
-            </label>
-            <select
-              value={formData.category_id}
-              onChange={(e) => {
-                const newCategory = e.target.value;
-                setFormData(prev => ({
-                  ...prev,
-                  category_id: newCategory,
-                  style_id: newCategory === prev.category_id ? prev.style_id : ''
-                }));
-              }}
-              required
-              className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="">Select a category</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Category *
+              </label>
+              <select
+                value={formData.category_id}
+                onChange={(e) => {
+                  const newCategory = e.target.value;
+                  setFormData(prev => ({
+                    ...prev,
+                    category_id: newCategory,
+                    style_id: newCategory === prev.category_id ? prev.style_id : ''
+                  }));
+                }}
+                required
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                <option value="">Select a category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Design Name and Design Number */}
@@ -579,6 +580,24 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
               className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
               placeholder="Brief description of the design"
             />
+          </div>
+
+          {/* Price - Common for all colors */}
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+              Price (₹) *
+            </label>
+            <input
+              type="number"
+              value={formData.price}
+              onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+              required
+              min="0"
+              step="0.01"
+              className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              placeholder="0.00"
+            />
+            <p className="text-xs text-gray-500 mt-1">This price applies to all color variants</p>
           </div>
 
           {/* WhatsApp Sharing Image */}
@@ -690,27 +709,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Price (₹) *
-                      </label>
-                      <input
-                        type="number"
-                        value={color.price}
-                        onChange={(e) =>
-                          handleColorChange(index, 'price', parseFloat(e.target.value) || 0)
-                        }
-                        required
-                        min="0"
-                        step="0.01"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                        placeholder="0.00"
-                        ref={(el) => {
-                          colorPriceRefs.current[index] = el || null;
-                        }}
-                      />
-                    </div>
-
-                    <div className="col-span-2">
                       <label className="flex items-center space-x-2 text-xs font-medium text-gray-700">
                         <input
                           type="checkbox"

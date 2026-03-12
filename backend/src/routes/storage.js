@@ -2,9 +2,6 @@ import express from 'express';
 import multer from 'multer';
 import { authenticateUser, optionalAuth } from '../middleware/auth.js';
 import { uploadToR2, deleteFromR2, getPublicUrl } from '../config/r2.js';
-import { generateSupabaseUploadUrl, deleteFromSupabase } from '../config/supabaseStorage.js';
-import { generateLocalStoragePath, saveToLocalStorage, deleteFromLocalStorage } from '../config/localStorage.js';
-import { config } from '../config.js';
 
 const router = express.Router();
 
@@ -30,34 +27,13 @@ router.post('/upload', authenticateUser, upload.single('file'), async (req, res)
 
     const key = `designs/${sanitizedDesignNo}/${sanitizedColorName}/${timestamp}.${fileExt}`;
 
-    let publicUrl;
-
-    // Select storage based on configuration
-    switch (config.storageType) {
-      case 'cdn':
-        const r2Result = await uploadToR2(req.file.buffer, key, req.file.mimetype);
-        publicUrl = r2Result.publicUrl;
-        break;
-
-      case 'supabase':
-        // Supabase still uses presigned URLs - keep existing logic
-        const supabaseResult = await generateSupabaseUploadUrl(key);
-        // Upload to Supabase here if needed
-        publicUrl = supabaseResult.publicUrl;
-        break;
-
-      case 'local':
-        publicUrl = await saveToLocalStorage(req.file.buffer, key);
-        break;
-
-      default:
-        throw new Error(`Invalid storage type: ${config.storageType}`);
-    }
+    // Upload to R2
+    const r2Result = await uploadToR2(req.file.buffer, key, req.file.mimetype);
 
     res.json({
-      publicUrl,
+      publicUrl: r2Result.publicUrl,
       key,
-      storageType: config.storageType,
+      storageType: 'cdn',
       message: 'File uploaded successfully'
     });
   } catch (error) {
@@ -87,23 +63,8 @@ router.delete('/delete', authenticateUser, async (req, res) => {
 
     const key = urlParts.slice(keyStartIndex).join('/');
 
-    // Select storage based on configuration
-    switch (config.storageType) {
-      case 'cdn':
-        await deleteFromR2(key);
-        break;
-
-      case 'supabase':
-        await deleteFromSupabase(key);
-        break;
-
-      case 'local':
-        await deleteFromLocalStorage(key);
-        break;
-
-      default:
-        throw new Error(`Invalid storage type: ${config.storageType}`);
-    }
+    // Delete from R2
+    await deleteFromR2(key);
 
     res.json({ message: 'Image deleted successfully' });
   } catch (error) {
@@ -131,27 +92,8 @@ router.post('/signed-url', optionalAuth, async (req, res) => {
 
     const key = urlParts.slice(keyStartIndex).join('/');
 
-    let signedUrl;
-
-    // Generate signed URL based on storage type
-    switch (config.storageType) {
-      case 'cdn':
-        signedUrl = getPublicUrl(key); // Use public CDN URL
-        break;
-      
-      case 'supabase':
-        // For Supabase, return the original URL as it handles auth differently
-        signedUrl = imageUrl;
-        break;
-      
-      case 'local':
-        // For local storage, return the original URL
-        signedUrl = imageUrl;
-        break;
-      
-      default:
-        return res.status(400).json({ error: 'Invalid storage type' });
-    }
+    // Get public URL from R2
+    const signedUrl = getPublicUrl(key);
 
     res.json({ signedUrl });
   } catch (error) {
@@ -179,21 +121,7 @@ router.post('/signed-urls-batch', optionalAuth, async (req, res) => {
         
         if (keyStartIndex !== -1) {
           const key = urlParts.slice(keyStartIndex).join('/');
-          
-          let signedUrl;
-          
-          switch (config.storageType) {
-            case 'cdn':
-              signedUrl = getPublicUrl(key); // Use public CDN URL
-              break;
-            case 'supabase':
-            case 'local':
-              signedUrl = imageUrl;
-              break;
-            default:
-              signedUrl = imageUrl;
-          }
-          
+          const signedUrl = getPublicUrl(key);
           signedUrls.push({ originalUrl: imageUrl, signedUrl });
         } else {
           signedUrls.push({ originalUrl: imageUrl, signedUrl: imageUrl });

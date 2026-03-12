@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+import { API_URL } from '../config/backend';
 
 export interface LoginCredentials {
   email: string;
@@ -17,6 +17,7 @@ export interface UserProfile {
     name: string | null;
   } | null;
   is_active: boolean;
+  can_order_individual_sizes?: boolean;
   created_at: string;
   updated_at: string;
   last_login_at?: string | null;
@@ -93,6 +94,7 @@ export interface Design {
   brand_id?: string | null;
   available_sizes: string[];
   whatsapp_image_url?: string;
+  price: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -113,7 +115,6 @@ export interface DesignColor {
   design_id: string;
   color_name: string;
   color_code: string | null;
-  price: number;
   in_stock: boolean;
   stock_quantity: number;
   size_quantities?: {
@@ -242,6 +243,8 @@ export interface OrderItem {
   design_number: string;
   color: string;
   sizes_quantities: { size: string; quantity: number }[];
+  is_from_size_set?: boolean;
+  size_set_name?: string | null;
 }
 
 export interface OrderRemark {
@@ -436,7 +439,7 @@ class ApiClient {
 
   async updateUser(
     id: string,
-    updates: { full_name?: string; is_active?: boolean; party_id?: string }
+    updates: { full_name?: string; is_active?: boolean; party_id?: string; can_order_individual_sizes?: boolean }
   ): Promise<UserProfile> {
     const response = await fetch(`${API_URL}/api/users/${id}`, {
       method: 'PATCH',
@@ -718,6 +721,24 @@ class ApiClient {
 
 
   
+  async searchDesigns(query: string): Promise<Design[]> {
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    const response = await fetch(`${API_URL}/api/designs/search?q=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      headers: this.getAuthHeader(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to search designs');
+    }
+
+    return await response.json();
+  }
+
   async deleteDesign(id: string): Promise<void> {
     const response = await fetch(`${API_URL}/api/designs/${id}`, {
       method: 'DELETE',

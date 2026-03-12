@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile, Brand, DesignStyle } from '../lib/api';
-import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, Phone, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck, Plus, Minus } from 'lucide-react';
+import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, Phone, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck, Plus, Minus, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getWhatsAppUrl, useBranding } from '../hooks/useBranding';
 import { AddToCartModal } from '../components/AddToCartModal';
@@ -190,6 +190,7 @@ export function Catalogue() {
   const { user, isAdmin } = useAuth();
   const branding = useBranding();
   const [designs, setDesigns] = useState<Design[]>([]);
+  const [allDesigns, setAllDesigns] = useState<Design[]>([]); // For autocomplete - unfiltered
   const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([]);
   const [categories, setCategories] = useState<DesignCategory[]>([]);
   const [fabricTypes, setFabricTypes] = useState<FabricType[]>([]);
@@ -223,12 +224,23 @@ export function Catalogue() {
   const [showAddToCartModal, setShowAddToCartModal] = useState(false);
   const [addCartDesign, setAddCartDesign] = useState<Design | null>(null);
   const [addCartColorIndex, setAddCartColorIndex] = useState(0);
+  const [masterSearch, setMasterSearch] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const [displayedDesigns, setDisplayedDesigns] = useState<Design[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const DESIGNS_PER_PAGE = 20;
 
   useEffect(() => {
     loadCategories();
     loadFabricTypes();
     loadBrands();
     loadFiltersFromUrl();
+    loadAllDesigns(); // Load all designs for autocomplete
     // Load price visibility setting
     const savedShowPrice = localStorage.getItem('show_price_to_customers') !== 'false';
     setShowPriceToCustomers(savedShowPrice);
@@ -275,7 +287,144 @@ export function Catalogue() {
 
   useEffect(() => {
     applyFilters();
-  }, [designs, filters]);
+  }, [designs, filters, masterSearch, categories, brands, fabricTypes, styles]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setPage(1);
+    setDisplayedDesigns(filteredDesigns.slice(0, DESIGNS_PER_PAGE));
+    setHasMore(filteredDesigns.length > DESIGNS_PER_PAGE);
+  }, [filteredDesigns]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting && hasMore) {
+          loadMoreDesigns();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentRef = loadMoreRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [hasMore, page, filteredDesigns]);
+
+  const loadMoreDesigns = () => {
+    const nextPage = page + 1;
+    const startIndex = 0;
+    const endIndex = nextPage * DESIGNS_PER_PAGE;
+    const newDisplayedDesigns = filteredDesigns.slice(startIndex, endIndex);
+    
+    setDisplayedDesigns(newDisplayedDesigns);
+    setPage(nextPage);
+    setHasMore(endIndex < filteredDesigns.length);
+  };
+
+  // Generate autocomplete suggestions
+  useEffect(() => {
+    if (!masterSearch.trim()) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const debounceTimer = setTimeout(() => {
+      const searchTerm = masterSearch.toLowerCase().trim();
+      const suggestionSet = new Set<string>();
+
+      // Use allDesigns for autocomplete to include all products, not just filtered ones
+      const searchSource = allDesigns.length > 0 ? allDesigns : designs;
+      searchSource.forEach(design => {
+        // Add design numbers
+        if (design.design_no?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.design_no);
+        }
+        
+        // Add design names
+        if (design.name?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.name);
+        }
+        
+        // Add category names - check nested object
+        if (design.category?.name?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.category.name);
+        }
+        
+        // Add brand names - check nested object
+        if (design.brand?.name?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.brand.name);
+        }
+        
+        // Add fabric types - check both nested object and ID lookup
+        if (design.fabric_type?.name?.toLowerCase().includes(searchTerm)) {
+          suggestionSet.add(design.fabric_type.name);
+        }
+        // Also check fabricTypes array by ID
+        if (design.fabric_type_id) {
+          const fabricType = fabricTypes.find(f => f.id === design.fabric_type_id);
+          if (fabricType?.name?.toLowerCase().includes(searchTerm)) {
+            suggestionSet.add(fabricType.name);
+          }
+        }
+        
+        // Add color names
+        design.design_colors?.forEach(color => {
+          if (color.color_name?.toLowerCase().includes(searchTerm)) {
+            suggestionSet.add(color.color_name);
+          }
+        });
+      });
+
+      const sortedSuggestions = Array.from(suggestionSet)
+        .sort((a, b) => {
+          // Prioritize exact starts
+          const aStarts = a.toLowerCase().startsWith(searchTerm);
+          const bStarts = b.toLowerCase().startsWith(searchTerm);
+          if (aStarts && !bStarts) return -1;
+          if (!aStarts && bStarts) return 1;
+          return a.localeCompare(b);
+        })
+        .slice(0, 8);
+
+      console.log('🔍 Search term:', searchTerm);
+      console.log('📊 Filtered designs:', designs.length);
+      console.log('🌍 All designs (for autocomplete):', allDesigns.length);
+      console.log('🏭 Fabric types loaded:', fabricTypes.length);
+      console.log('💡 Suggestions generated:', sortedSuggestions);
+      console.log('✅ Show dropdown:', sortedSuggestions.length > 0);
+      
+      setSuggestions(sortedSuggestions);
+      setShowSuggestions(sortedSuggestions.length > 0);
+      setIsSearching(false);
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [masterSearch, designs, fabricTypes, allDesigns]);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     // Extract unique colors from all designs
@@ -329,6 +478,21 @@ export function Catalogue() {
     }
   };
 
+  const loadAllDesigns = async () => {
+    try {
+      const data = await api.getDesigns(
+        undefined, // No category filter
+        undefined, // No fabric filter
+        undefined, // No brand filter
+        undefined, // No style filter
+        true // Only fetch active designs for catalogue
+      );
+      setAllDesigns(data);
+    } catch (err) {
+      console.error('Failed to load all designs for autocomplete:', err);
+    }
+  };
+
   const loadDesigns = async () => {
     try {
       setLoading(true);
@@ -366,12 +530,53 @@ export function Catalogue() {
   };
 
   const getMinPrice = (design: Design) => {
-    if (!design.design_colors || design.design_colors.length === 0) return 0;
-    return Math.min(...design.design_colors.map(c => c.price));
+    return design.price || 0;
   };
 
   const applyFilters = () => {
     let filtered = [...designs];
+
+    // Master search - search across all fields
+    if (masterSearch.trim()) {
+      const searchTerm = masterSearch.toLowerCase().trim();
+      filtered = filtered.filter(design => {
+        // Search in design number
+        if (design.design_no?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in design name
+        if (design.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in description
+        if (design.description?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in category name - check both nested object and ID lookup
+        if (design.category?.name?.toLowerCase().includes(searchTerm)) return true;
+        const category = categories.find(c => c.id === design.category_id);
+        if (category?.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in brand name - check both nested object and ID lookup
+        if (design.brand?.name?.toLowerCase().includes(searchTerm)) return true;
+        const brand = brands.find(b => b.id === design.brand_id);
+        if (brand?.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in fabric type - check both nested object and ID lookup
+        if (design.fabric_type?.name?.toLowerCase().includes(searchTerm)) return true;
+        const fabric = fabricTypes.find(f => f.id === design.fabric_type_id);
+        if (fabric?.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in style name - check both nested object and ID lookup
+        if (design.style?.name?.toLowerCase().includes(searchTerm)) return true;
+        const style = styles.find(s => s.id === design.style_id);
+        if (style?.name?.toLowerCase().includes(searchTerm)) return true;
+        
+        // Search in color names
+        if (design.design_colors?.some(color => 
+          color.color_name?.toLowerCase().includes(searchTerm)
+        )) return true;
+        
+        return false;
+      });
+    }
 
     // Filter by categories
     if (filters.categories.length > 0) {
@@ -680,7 +885,7 @@ export function Catalogue() {
       }
       
       if (selectedColor) {
-        message += `💰 *Price:* ₹${selectedColor.price.toLocaleString()}/piece\n`;
+        message += `💰 *Price:* ₹${design.price.toLocaleString()}/piece\n`;
       }
       
       message += `🎨 *Colors Available:* ${colorCount} variant${colorCount > 1 ? 's' : ''}\n`;
@@ -742,7 +947,7 @@ export function Catalogue() {
         fallbackMessage += `🧵 Fabric: ${design.fabric_type.name}\n`;
       }
       if (selectedColor) {
-        fallbackMessage += `💰 Price: ₹${selectedColor.price.toLocaleString()}/piece\n`;
+        fallbackMessage += `💰 Price: ₹${design.price.toLocaleString()}/piece\n`;
       }
       if (shareUserMessage.trim()) {
         fallbackMessage += `\n💬 My Query:\n${shareUserMessage.trim()}\n`;
@@ -859,10 +1064,86 @@ export function Catalogue() {
 
       <div className="mb-6 sm:mb-8">
         <div className="flex items-center justify-between mb-4">
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary mb-2">{branding.brandName} Collection</h1>
             <p className="text-sm sm:text-base lg:text-lg text-gray-600">Discover our premium collection of ethnic wear</p>
           </div>
+        </div>
+        
+        {/* Master Search Bar - Elegant & Responsive with Autocomplete */}
+        <div className="relative mb-6" ref={searchRef}>
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
+              <Search className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-focus-within:text-primary transition-colors duration-200" />
+            </div>
+            <input
+              type="text"
+              value={masterSearch}
+              onChange={(e) => setMasterSearch(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              placeholder="Search products..."
+              className="w-full pl-10 sm:pl-12 pr-10 sm:pr-12 py-2.5 sm:py-3.5 text-sm sm:text-base border-2 border-gray-200 rounded-xl sm:rounded-2xl bg-white shadow-sm hover:shadow-md focus:shadow-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 placeholder:text-gray-400"
+              autoComplete="off"
+            />
+            {masterSearch && (
+              <button
+                onClick={() => {
+                  setMasterSearch('');
+                  setShowSuggestions(false);
+                }}
+                className="absolute inset-y-0 right-0 pr-3 sm:pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            )}
+          </div>
+          
+          {/* Autocomplete Suggestions Dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-primary border-opacity-20 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden" style={{ zIndex: 9999 }}>
+              <div className="max-h-80 overflow-y-auto py-2">
+                {suggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setMasterSearch(suggestion);
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full px-4 py-2.5 text-left text-sm sm:text-base hover:bg-primary hover:bg-opacity-10 transition-colors duration-150 flex items-center gap-3 group"
+                  >
+                    <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 group-hover:text-primary transition-colors" />
+                    <span className="text-gray-700 group-hover:text-gray-900 font-medium">
+                      {suggestion}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {masterSearch && !showSuggestions && (
+            <div className="mt-3 flex items-center justify-between px-1 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                {isSearching ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs sm:text-sm text-gray-500 font-medium">Searching...</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                    <span className="text-xs sm:text-sm text-gray-600 font-medium">
+                      {filteredDesigns.length} result{filteredDesigns.length !== 1 ? 's' : ''}
+                    </span>
+                  </>
+                )}
+              </div>
+              <span className="text-xs text-gray-500 hidden sm:inline">
+                Searching for: <span className="font-semibold text-gray-700">"{masterSearch}"</span>
+              </span>
+            </div>
+          )}
         </div>
         
         {/* Bulk Selection Controls */}
@@ -1243,7 +1524,7 @@ export function Catalogue() {
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
-              {filteredDesigns.map((design) => (
+              {displayedDesigns.map((design) => (
                 <DesignCard
                   key={design.id}
                   design={design}
@@ -1259,6 +1540,25 @@ export function Catalogue() {
                   onAddToCart={openAddToCartModal}
                 />
               ))}
+              
+              {/* Infinite Scroll Trigger */}
+              {hasMore && (
+                <div ref={loadMoreRef} className="col-span-full flex justify-center py-8">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-sm text-gray-500">Loading more designs...</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* End of Results */}
+              {!hasMore && displayedDesigns.length > 0 && (
+                <div className="col-span-full flex justify-center py-6">
+                  <div className="text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-full">
+                    ✓ All {filteredDesigns.length} designs loaded
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </main>
@@ -1477,7 +1777,7 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
       }
       
       if (selectedColor) {
-        message += `💰 *Price:* ₹${selectedColor.price.toLocaleString()}/piece\n`;
+        message += `💰 *Price:* ₹${design.price.toLocaleString()}/piece\n`;
       }
       
       message += `🎨 *Colors Available:* ${colorCount} variant${colorCount > 1 ? 's' : ''}\n`;
@@ -1533,7 +1833,7 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         fallbackMessage += `🧵 Fabric: ${design.fabric_type.name}\n`;
       }
       if (selectedColor) {
-        fallbackMessage += `💰 Price: ₹${selectedColor.price.toLocaleString()}/piece\n`;
+        fallbackMessage += `💰 Price: ₹${design.price.toLocaleString()}/piece\n`;
       }
       fallbackMessage += `\n🔗 View: ${productLink}\n`;
       fallbackMessage += `\n💬 Contact us for more details!`;
@@ -1775,9 +2075,9 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
 
         {/* Price */}
         <div className="flex items-baseline justify-between">
-          {shouldShowPrice && selectedColor?.price ? (
+          {shouldShowPrice && design.price ? (
             <span className="text-lg sm:text-xl font-bold text-primary">
-              ₹{selectedColor.price.toLocaleString()}
+              ₹{design.price.toLocaleString()}
             </span>
           ) : !isAuthenticated ? (
             <span className="text-sm text-gray-600 font-medium">
@@ -2334,8 +2634,8 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                               <span className={colorTotalStock > 0 ? 'text-green-600' : 'text-red-600'}>
                                 {colorTotalStock > 0 ? `${colorTotalStock}` : 'Out'}
                               </span>
-                              {isAuthenticated && color.price ? (
-                                <span className="font-bold text-primary">₹{color.price.toLocaleString()}</span>
+                              {isAuthenticated && design.price ? (
+                                <span className="font-bold text-primary">₹{design.price.toLocaleString()}</span>
                               ) : (
                                 <span className="text-xs text-gray-500">🔐 Login</span>
                               )}
@@ -2354,9 +2654,9 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
               <div className="bg-gradient-to-br from-primary/5 to-blue-50 rounded-lg p-3 border border-primary/20">
                 {selectedColor && (
                   <div className="flex items-baseline gap-2 mb-2">
-                    {isAuthenticated && selectedColor.price ? (
+                    {isAuthenticated && design.price ? (
                       <>
-                        <span className="text-2xl sm:text-3xl font-bold text-primary">₹{selectedColor.price.toLocaleString()}</span>
+                        <span className="text-2xl sm:text-3xl font-bold text-primary">₹{design.price.toLocaleString()}</span>
                         <span className="text-xs text-gray-600">per piece</span>
                       </>
                     ) : (

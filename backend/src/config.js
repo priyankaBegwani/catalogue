@@ -1,23 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import path from 'path';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: join(__dirname, '../../.env') });
+// Load .env from root directory (two levels up from backend/src)
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 export const config = {
   supabaseUrl: process.env.VITE_SUPABASE_URL,
   supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY,
   supabaseServiceKey: process.env.VITE_SUPABASE_SERVICE_KEY,
-  port: process.env.PORT || 3001,
-  // Storage type: 'cdn', 'supabase', or 'local'
-  // - 'cdn': Use Cloudflare R2 (production)
-  // - 'supabase': Use Supabase Storage (fallback)
-  // - 'local': Use local filesystem (development/testing)
-  storageType: process.env.STORAGE_TYPE || 'local'
+  port: process.env.PORT || 3001
 };
 
 export const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);

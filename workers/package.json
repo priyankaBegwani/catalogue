@@ -1,0 +1,22 @@
+{
+  "name": "catalogue-worker",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Cloudflare Workers backend for catalogue application",
+  "main": "src/index.js",
+  "scripts": {
+    "sync-env": "node scripts/load-env.js",
+    "predev": "npm run sync-env",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "dependencies": {
+    "hono": "^4.0.0",
+    "@supabase/supabase-js": "^2.57.4",
+    "@aws-sdk/client-s3": "^3.0.0"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

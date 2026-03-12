@@ -1,263 +1,236 @@
-import { Heart, Award, Users, Target, Mail, Phone, MapPin, Facebook, Instagram, Twitter, Linkedin } from 'lucide-react';
+import { Heart, Award, Target, Mail, Phone, MapPin, Facebook, Instagram, Twitter, Linkedin, Sparkles, TrendingUp, Shield, CheckCircle } from 'lucide-react';
 
 export function AboutUs() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-700 text-white">
-        <div className="absolute inset-0 bg-black/20"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-          <div className="text-center">
-            <h1 className="text-5xl font-bold mb-6 bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">
-              About Indie Craft
+    <div className="min-h-screen bg-white">
+      {/* Hero Section - Brand Introduction */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(0,0,0,.05) 35px, rgba(0,0,0,.05) 70px)' }}></div>
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-32">
+          <div className="text-center max-w-4xl mx-auto">
+            <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full mb-6 shadow-sm">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-slate-700">Premium Men's Ethnic Wear</span>
+            </div>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 mb-6 leading-tight">
+              Where Heritage Meets <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-indigo-600">Modern Style</span>
             </h1>
-            <p className="text-xl text-blue-100 max-w-3xl mx-auto leading-relaxed">
-              Where traditional craftsmanship meets contemporary design. We are dedicated to bringing you 
-              exquisite, handcrafted pieces that tell stories of heritage, artistry, and passion.
+            <p className="text-lg sm:text-xl text-slate-700 leading-relaxed max-w-3xl mx-auto">
+              IndieCraft blends Indian heritage with contemporary design to create premium ethnic wear for modern men. From Bengal and Assam to across India, we craft pieces that celebrate your culture with confidence and style.
             </p>
           </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-slate-50 to-transparent"></div>
       </section>
 
       {/* Our Story Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <h2 className="text-4xl font-bold text-slate-900 mb-6">Our Story</h2>
-              <div className="space-y-4 text-slate-600 leading-relaxed">
+      <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="inline-block bg-blue-100 text-primary px-4 py-1 rounded-full text-sm font-medium mb-4">
+              Our Story
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-6">From Passion to Purpose</h2>
+          </div>
+          <div className="grid lg:grid-cols-2 gap-8 items-center">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 shadow-lg">
+              <div className="space-y-4 text-slate-700 leading-relaxed">
                 <p>
-                  Founded in 2020, Indie Craft began as a small workshop with a big dream: to preserve 
-                  traditional craftsmanship while embracing modern design sensibilities. Our journey started 
-                  with just three artisans and a shared passion for creating beautiful, meaningful pieces.
+                  IndieCraft was born in Kolkata from a simple vision: create ethnic wear that modern Indian men actually want to wear. Traditional enough to honor our roots, contemporary enough for today's lifestyle.
                 </p>
                 <p>
-                  Today, we've grown into a collective of over 50 skilled artisans, designers, and 
-                  craftspeople, each bringing their unique expertise and cultural heritage to every 
-                  piece we create. From hand-woven textiles to intricately carved woodwork, our 
-                  collection celebrates the diversity of traditional crafts.
-                </p>
-                <p>
-                  We believe that every piece should have a story to tell. That's why we work closely 
-                  with our artisans, ensuring that their techniques, traditions, and cultural narratives 
-                  are preserved and celebrated in every creation.
+                  Founded by entrepreneurs passionate about Indian textiles, we work with skilled tailors to craft premium kurtas that fit perfectly and feel exceptional. Every piece reflects our commitment to quality, authenticity, and style.
                 </p>
               </div>
             </div>
-            <div className="relative">
-              <div className="aspect-square bg-gradient-to-br from-blue-100 to-purple-100 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center p-8">
-                    <Heart className="w-24 h-24 text-blue-600 mx-auto mb-4" />
-                    <p className="text-slate-600 font-medium">Crafted with Love</p>
-                  </div>
-                </div>
-              </div>
+            <div className="bg-white rounded-2xl p-8 shadow-lg border-l-4 border-primary">
+              <p className="text-slate-700 text-lg font-medium italic">
+                "We're helping men rediscover the confidence that comes from wearing something truly well-made—connecting heritage with modern life."
+              </p>
+              <p className="text-slate-600 mt-4 text-sm">— IndieCraft Founders</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Values Section */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">Our Values</h2>
-            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-              The principles that guide everything we do, from sourcing materials to customer service.
-            </p>
+      {/* Mission & Vision Section */}
+      <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
+        <div className="max-w-5xl mx-auto text-center">
+          <div className="inline-block bg-blue-100 text-primary px-4 py-1 rounded-full text-sm font-medium mb-4">
+            Our Mission
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-6">Redefining Men's Ethnic Wear</h2>
+          <p className="text-lg text-slate-700 leading-relaxed max-w-3xl mx-auto mb-8">
+            We're on a mission to make ethnic wear the first choice for modern Indian men—delivering exceptional craftsmanship, timeless designs, and uncompromising quality that celebrates culture with confidence.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
+            <div className="bg-white rounded-xl p-6 shadow-md">
+              <Target className="w-8 h-8 text-primary mx-auto mb-3" />
+              <h3 className="font-bold text-slate-900 mb-2">Today</h3>
+              <p className="text-sm text-slate-600">Premium ethnic wear for everyday confidence</p>
+            </div>
+            <div className="bg-white rounded-xl p-6 shadow-md">
+              <TrendingUp className="w-8 h-8 text-indigo-600 mx-auto mb-3" />
+              <h3 className="font-bold text-slate-900 mb-2">Tomorrow</h3>
+              <p className="text-sm text-slate-600">India's most trusted ethnic wear brand</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Brand Values Section */}
+      <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-10">
+            <div className="inline-block bg-blue-100 text-primary px-4 py-1 rounded-full text-sm font-medium mb-4">
+              Our Values
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">What Drives Us</h2>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="text-center group">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                <Heart className="w-8 h-8 text-white" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-slate-50 rounded-xl p-6 text-center">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary to-indigo-600 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <Award className="w-6 h-6 text-white" />
               </div>
-              <h3 className="text-xl font-semibold text-slate-900 mb-3">Artisan First</h3>
-              <p className="text-slate-600">
-                We prioritize our artisans' welfare, ensuring fair wages, safe working conditions, 
-                and recognition for their incredible skills.
-              </p>
+              <h3 className="font-bold text-slate-900 mb-2">Craftsmanship</h3>
+              <p className="text-sm text-slate-600">Traditional techniques meet modern precision</p>
             </div>
             
-            <div className="text-center group">
-              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                <Award className="w-8 h-8 text-white" />
+            <div className="bg-slate-50 rounded-xl p-6 text-center">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <Shield className="w-6 h-6 text-white" />
               </div>
-              <h3 className="text-xl font-semibold text-slate-900 mb-3">Quality Excellence</h3>
-              <p className="text-slate-600">
-                Every piece undergoes rigorous quality checks to ensure it meets our exacting 
-                standards of craftsmanship and durability.
-              </p>
+              <h3 className="font-bold text-slate-900 mb-2">Authenticity</h3>
+              <p className="text-sm text-slate-600">Genuine fabrics, honest practices</p>
             </div>
             
-            <div className="text-center group">
-              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                <Users className="w-8 h-8 text-white" />
+            <div className="bg-slate-50 rounded-xl p-6 text-center">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <CheckCircle className="w-6 h-6 text-white" />
               </div>
-              <h3 className="text-xl font-semibold text-slate-900 mb-3">Community Focus</h3>
-              <p className="text-slate-600">
-                We believe in building sustainable communities by supporting local artisans and 
-                preserving traditional craft techniques.
-              </p>
+              <h3 className="font-bold text-slate-900 mb-2">Quality</h3>
+              <p className="text-sm text-slate-600">Premium fabrics, perfect fit, lasting comfort</p>
             </div>
             
-            <div className="text-center group">
-              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                <Target className="w-8 h-8 text-white" />
+            <div className="bg-slate-50 rounded-xl p-6 text-center">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <Heart className="w-6 h-6 text-white" />
               </div>
-              <h3 className="text-xl font-semibold text-slate-900 mb-3">Sustainability</h3>
-              <p className="text-slate-600">
-                We're committed to environmentally responsible practices, from sustainable material 
-                sourcing to eco-friendly packaging.
-              </p>
+              <h3 className="font-bold text-slate-900 mb-2">Cultural Pride</h3>
+              <p className="text-sm text-slate-600">Celebrating Indian heritage with style</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-8 text-center">
-            <div>
-              <div className="text-4xl font-bold mb-2">50+</div>
-              <div className="text-blue-100">Artisans</div>
+      {/* Journey Section */}
+      <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="inline-block bg-blue-100 text-primary px-4 py-1 rounded-full text-sm font-medium mb-4">
+              Our Journey
             </div>
-            <div>
-              <div className="text-4xl font-bold mb-2">10,000+</div>
-              <div className="text-blue-100">Happy Customers</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold mb-2">25+</div>
-              <div className="text-blue-100">Craft Traditions</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold mb-2">15+</div>
-              <div className="text-blue-100">Countries Served</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Team Section */}
-      <section className="py-20 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">Meet Our Team</h2>
-            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-              The passionate individuals behind Indie Craft, dedicated to bringing you the best in 
-              traditional craftsmanship.
-            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Building IndieCraft</h2>
+            <p className="text-slate-600">From a small idea to a growing brand</p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-              <div className="aspect-square bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
-                <div className="w-32 h-32 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-3xl font-bold">
-                  JD
-                </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-xl p-6 text-center shadow-md">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-bold">
+                1
               </div>
-              <div className="p-6 text-center">
-                <h3 className="text-xl font-semibold text-slate-900 mb-1">Jane Doe</h3>
-                <p className="text-slate-600 mb-3">Founder & Creative Director</p>
-                <p className="text-slate-500 text-sm">
-                  With over 15 years in design and craftsmanship, Jane leads our creative vision 
-                  and ensures every piece meets our exacting standards.
-                </p>
-              </div>
+              <h3 className="font-bold text-slate-900 mb-2">The Beginning</h3>
+              <p className="text-sm text-slate-600">Founded in Kolkata with a vision to redefine ethnic wear</p>
             </div>
             
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-              <div className="aspect-square bg-gradient-to-br from-green-100 to-emerald-100 flex items-center justify-center">
-                <div className="w-32 h-32 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white text-3xl font-bold">
-                  RS
-                </div>
+            <div className="bg-white rounded-xl p-6 text-center shadow-md">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-bold">
+                2
               </div>
-              <div className="p-6 text-center">
-                <h3 className="text-xl font-semibold text-slate-900 mb-1">Raj Singh</h3>
-                <p className="text-slate-600 mb-3">Master Artisan</p>
-                <p className="text-slate-500 text-sm">
-                  A third-generation craftsman, Raj brings traditional techniques and contemporary 
-                  design sensibilities to every creation.
-                </p>
-              </div>
+              <h3 className="font-bold text-slate-900 mb-2">First Collection</h3>
+              <p className="text-sm text-slate-600">Launched premium kurtas loved across Bengal & Assam</p>
             </div>
             
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-              <div className="aspect-square bg-gradient-to-br from-orange-100 to-red-100 flex items-center justify-center">
-                <div className="w-32 h-32 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white text-3xl font-bold">
-                  AC
-                </div>
+            <div className="bg-white rounded-xl p-6 text-center shadow-md">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-bold">
+                3
               </div>
-              <div className="p-6 text-center">
-                <h3 className="text-xl font-semibold text-slate-900 mb-1">Alice Chen</h3>
-                <p className="text-slate-600 mb-3">Operations Manager</p>
-                <p className="text-slate-500 text-sm">
-                  Alice ensures smooth operations from artisan workshops to your doorstep, maintaining 
-                  our commitment to quality and timely delivery.
-                </p>
-              </div>
+              <h3 className="font-bold text-slate-900 mb-2">Going Digital</h3>
+              <p className="text-sm text-slate-600">Online store launch reaching customers nationwide</p>
             </div>
+            
+            <div className="bg-white rounded-xl p-6 text-center shadow-md">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-bold">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-slate-900 mb-2">Growing Strong</h3>
+              <p className="text-sm text-slate-600">Expanding collection and building trust across India</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Closing Section */}
+      <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-primary via-indigo-700 to-purple-800 text-white">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl sm:text-4xl font-bold mb-4">Experience IndieCraft</h2>
+          <p className="text-lg text-blue-100 leading-relaxed mb-8 max-w-2xl mx-auto">
+            Discover ethnic wear that celebrates your heritage with modern confidence. Quality craftsmanship, authentic designs, perfect fit.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <a href="/catalogue" className="bg-white text-primary px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors">
+              Shop Now
+            </a>
+            <a href="#contact" className="bg-indigo-700 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-800 transition-colors border-2 border-white/30">
+              Contact Us
+            </a>
           </div>
         </div>
       </section>
 
       {/* Contact Section */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">Get In Touch</h2>
-            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-              We'd love to hear from you. Whether you have questions, feedback, or want to 
-              collaborate, we're here to help.
-            </p>
+      <section id="contact" className="py-16 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-bold text-slate-900 mb-2">Get In Touch</h2>
+            <p className="text-slate-600">We're here to help with any questions</p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-8 mb-12">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Mail className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Email</h3>
-              <p className="text-slate-600">hello@indiecraft.com</p>
-              <p className="text-slate-600">support@indiecraft.com</p>
+          <div className="grid sm:grid-cols-3 gap-6 mb-8">
+            <div className="text-center bg-slate-50 rounded-xl p-6">
+              <Mail className="w-8 h-8 text-primary mx-auto mb-3" />
+              <h3 className="font-bold text-slate-900 mb-2">Email</h3>
+              <p className="text-sm text-slate-600">hello@indiecraft.in</p>
             </div>
             
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Phone className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Phone</h3>
-              <p className="text-slate-600">+91 98765 43210</p>
-              <p className="text-slate-600">Mon-Sat: 9AM-6PM</p>
+            <div className="text-center bg-slate-50 rounded-xl p-6">
+              <Phone className="w-8 h-8 text-primary mx-auto mb-3" />
+              <h3 className="font-bold text-slate-900 mb-2">Phone</h3>
+              <p className="text-sm text-slate-600">+91 98765 43210</p>
             </div>
             
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <MapPin className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Visit Us</h3>
-              <p className="text-slate-600">123 Craft Street</p>
-              <p className="text-slate-600">Mumbai, Maharashtra 400001</p>
+            <div className="text-center bg-slate-50 rounded-xl p-6">
+              <MapPin className="w-8 h-8 text-primary mx-auto mb-3" />
+              <h3 className="font-bold text-slate-900 mb-2">Location</h3>
+              <p className="text-sm text-slate-600">Kolkata, West Bengal</p>
             </div>
           </div>
           
           <div className="text-center">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Follow Us</h3>
-            <div className="flex justify-center gap-4">
-              <a href="#" className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white hover:scale-110 transition-transform">
-                <Facebook className="w-6 h-6" />
+            <div className="flex justify-center gap-3">
+              <a href="#" className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white hover:bg-blue-700 transition-colors">
+                <Facebook className="w-5 h-5" />
               </a>
-              <a href="#" className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center text-white hover:scale-110 transition-transform">
-                <Instagram className="w-6 h-6" />
+              <a href="#" className="w-10 h-10 bg-pink-600 rounded-lg flex items-center justify-center text-white hover:bg-pink-700 transition-colors">
+                <Instagram className="w-5 h-5" />
               </a>
-              <a href="#" className="w-12 h-12 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl flex items-center justify-center text-white hover:scale-110 transition-transform">
-                <Twitter className="w-6 h-6" />
+              <a href="#" className="w-10 h-10 bg-sky-500 rounded-lg flex items-center justify-center text-white hover:bg-sky-600 transition-colors">
+                <Twitter className="w-5 h-5" />
               </a>
-              <a href="#" className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center text-white hover:scale-110 transition-transform">
-                <Linkedin className="w-6 h-6" />
+              <a href="#" className="w-10 h-10 bg-blue-700 rounded-lg flex items-center justify-center text-white hover:bg-blue-800 transition-colors">
+                <Linkedin className="w-5 h-5" />
               </a>
             </div>
           </div>

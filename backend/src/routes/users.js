@@ -37,7 +37,7 @@ router.post('/',
   authenticateUser, 
   requireAdmin, 
   asyncHandler(async (req, res) => {
-    const { email, password, full_name, role, party_id } = req.body;
+    const { email, password, full_name, role, party_id, can_order_individual_sizes } = req.body;
 
     // Validate required fields
     validateRequired(req.body, ['email', 'password', 'full_name', 'role']);
@@ -61,7 +61,8 @@ router.post('/',
       user_metadata: {
         full_name,
         role,
-        party_id: party_id || null
+        party_id: party_id || null,
+        can_order_individual_sizes: can_order_individual_sizes ?? false
       }
     });
 
@@ -94,7 +95,7 @@ router.patch('/:id',
   requireAdmin, 
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { full_name, is_active, party_id } = req.body;
+    const { full_name, is_active, party_id, can_order_individual_sizes } = req.body;
 
     validateUUID(id, 'User ID');
 
@@ -102,6 +103,7 @@ router.patch('/:id',
     if (full_name !== undefined) updates.full_name = full_name;
     if (is_active !== undefined) updates.is_active = is_active;
     if (party_id !== undefined) updates.party_id = party_id;
+    if (can_order_individual_sizes !== undefined) updates.can_order_individual_sizes = can_order_individual_sizes;
 
     if (Object.keys(updates).length === 0) {
       throw new AppError('No valid fields to update', 400);
