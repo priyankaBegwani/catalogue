@@ -168,9 +168,15 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
   return (
     <>
       {/* Overlay - shows on mobile when open, and on desktop when open but not pinned */}
+      {(isOpen || (isPinned && window.innerWidth < 1024)) && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
       {isOpen && !isPinned && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          className="hidden lg:block fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={onClose}
         />
       )}
@@ -178,7 +184,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
       {/* Sidebar */}
       <aside
         className={`fixed top-0 left-0 h-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white z-50 transition-all duration-300 ease-in-out shadow-2xl ${
-          isOpen || isPinned ? 'translate-x-0' : '-translate-x-full'
+          isOpen ? 'translate-x-0' : '-translate-x-full'
         } ${isPinned ? 'lg:translate-x-0' : ''}`}
         style={{ width: '280px' }}
       >
