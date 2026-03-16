@@ -8,7 +8,8 @@ import {
   User,
   Package,
   Menu,
-  X
+  X,
+  MoreVertical
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { CartModal } from './CartModal';
@@ -29,7 +30,9 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
   const [cartModalOpen, setCartModalOpen] = useState(false);
   const [wishlistModalOpen, setWishlistModalOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileActionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadCartCount();
@@ -47,15 +50,18 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
     };
   }, []);
 
-  // Handle click outside to close profile dropdown
+  // Handle click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event: Event) => {
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
         setProfileDropdownOpen(false);
       }
+      if (mobileActionsRef.current && !mobileActionsRef.current.contains(event.target as Node)) {
+        setMobileActionsOpen(false);
+      }
     };
 
-    if (profileDropdownOpen) {
+    if (profileDropdownOpen || mobileActionsOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('touchstart', handleClickOutside);
     }
@@ -64,7 +70,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [profileDropdownOpen]);
+  }, [profileDropdownOpen, mobileActionsOpen]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -124,108 +130,122 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                 src={branding.logoUrl}
                 alt={branding.brandName}
                 style={{ height: '5.5rem' }}
-                className="w-auto object-contain max-w-[160px]"
+                className="w-auto object-contain max-w-[150px]"
               />
             </div>
             
-            {/* Right: Action Icons */}
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {/* Wishlist */}
+            {/* Right: Mobile Actions Dropdown */}
+            <div className="relative" ref={mobileActionsRef}>
               <button
-                onClick={() => setWishlistModalOpen(true)}
-                className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
-                title="Wishlist"
+                onClick={() => setMobileActionsOpen(!mobileActionsOpen)}
+                className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all"
+                title="Menu"
               >
-                <Heart className="w-5 h-5" />
-                {wishlistCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-lg text-[10px]">
-                    {wishlistCount}
-                  </span>
+                <MoreVertical className="w-5 h-5" />
+                {(cartCount > 0 || wishlistCount > 0) && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
                 )}
               </button>
 
-              {/* Cart */}
-              <button
-                onClick={() => setCartModalOpen(true)}
-                className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
-                title="Shopping Cart"
-              >
-                <ShoppingCart className="w-5 h-5" />
-                {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-lg text-[10px]">
-                    {cartCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Profile Dropdown */}
-              <div className="relative" ref={profileDropdownRef}>
-                <button
-                  onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                  className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-xl transition-all"
-                  title="Profile"
+              {mobileActionsOpen && (
+                <div 
+                  className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                 >
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg text-sm">
-                    {user?.full_name?.charAt(0).toUpperCase() || 'U'}
+                  {/* User Info */}
+                  <div className="px-4 py-3 border-b border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg">
+                        {user?.full_name?.charAt(0).toUpperCase() || 'U'}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{user?.full_name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+                      </div>
+                    </div>
                   </div>
-                </button>
 
-                {profileDropdownOpen && (
-                  <div 
-                    className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
+                  {/* Wishlist */}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setWishlistModalOpen(true);
+                      setMobileActionsOpen(false);
+                    }}
+                    className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="px-4 py-3 border-b border-gray-200">
-                      <p className="text-sm text-gray-500">Signed in as</p>
-                      <p className="text-base font-semibold text-gray-900 mt-1">{user?.full_name}</p>
-                      <p className="text-xs text-gray-500 capitalize mt-1 flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        {user?.role}
-                      </p>
-                    </div>
+                    <Heart className="w-5 h-5 text-pink-500" />
+                    <span className="font-medium">Wishlist</span>
+                    {wishlistCount > 0 && (
+                      <span className="ml-auto bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                        {wishlistCount}
+                      </span>
+                    )}
+                  </button>
 
+                  {/* Cart */}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCartModalOpen(true);
+                      setMobileActionsOpen(false);
+                    }}
+                    className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <ShoppingCart className="w-5 h-5 text-blue-500" />
+                    <span className="font-medium">Shopping Cart</span>
+                    {cartCount > 0 && (
+                      <span className="ml-auto bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                        {cartCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <div className="border-t border-gray-200 my-2"></div>
+
+                  {/* Your Orders */}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigate('/orders');
+                      setMobileActionsOpen(false);
+                    }}
+                    className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Package className="w-5 h-5 text-gray-500" />
+                    <span className="font-medium">Your Orders</span>
+                  </button>
+
+                  {/* Profile Settings */}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigate('/profile');
+                      setMobileActionsOpen(false);
+                    }}
+                    className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <User className="w-5 h-5 text-gray-500" />
+                    <span className="font-medium">Profile Settings</span>
+                  </button>
+
+                  <div className="border-t border-gray-200 mt-2 pt-2">
                     <button
                       onClick={(e) => {
                         e.preventDefault();
-                        navigate('/orders');
-                        setProfileDropdownOpen(false);
+                        logout();
+                        setMobileActionsOpen(false);
                       }}
-                      className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                      className="w-full px-4 py-3 flex items-center gap-3 text-red-600 hover:bg-red-50 transition-colors rounded-lg mx-2"
+                      style={{ width: 'calc(100% - 1rem)' }}
                     >
-                      <Package className="w-5 h-5 text-gray-500" />
-                      <span className="font-medium">Your Orders</span>
+                      <LogOut className="w-5 h-5" />
+                      <span className="font-medium">Sign Out</span>
                     </button>
-
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        navigate('/profile');
-                        setProfileDropdownOpen(false);
-                      }}
-                      className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      <User className="w-5 h-5 text-gray-500" />
-                      <span className="font-medium">Profile Settings</span>
-                    </button>
-
-                    <div className="border-t border-gray-200 mt-2 pt-2">
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          logout();
-                          setProfileDropdownOpen(false);
-                        }}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-red-600 hover:bg-red-50 transition-colors rounded-lg mx-2"
-                        style={{ width: 'calc(100% - 1rem)' }}
-                      >
-                        <LogOut className="w-5 h-5" />
-                        <span className="font-medium">Sign Out</span>
-                      </button>
-                    </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
 

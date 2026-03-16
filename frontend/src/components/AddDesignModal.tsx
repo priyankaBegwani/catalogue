@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api, DesignCategory, DesignStyle, FabricType, Design, Brand } from '../lib/api';
 import { uploadDesignImage } from '../lib/storage';
-import { X, Plus, Trash2, Upload, Video, MessageCircle } from 'lucide-react';
+import { X, Plus, Trash2, Upload, Video, MessageCircle, Lightbulb, Copy, Edit } from 'lucide-react';
 
 interface AddDesignModalProps {
   onClose: () => void;
@@ -51,6 +51,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
   const [uploadingImages, setUploadingImages] = useState(false);
   const [uploadingWhatsAppImage, setUploadingWhatsAppImage] = useState(false);
   const [error, setError] = useState('');
+  const [showSampleDescriptions, setShowSampleDescriptions] = useState(false);
   const prevCategoryRef = useRef<string>('');
   const colorNameRefs = useRef<Array<HTMLInputElement | null>>([]);
   const sizeInputRefs = useRef<Array<Record<string, HTMLInputElement | null>>>([]);
@@ -344,6 +345,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         category_id: formData.category_id || undefined,
         style_id: formData.style_id || undefined,
         fabric_type_id: formData.fabric_type_id || undefined,
+        brand_id: formData.brand_id || undefined,
         available_sizes: formData.available_sizes,
         whatsapp_image_url: formData.whatsapp_image_url || undefined,
         price: formData.price || 0
@@ -570,9 +572,110 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
           </div>
 
           <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-              Description
-            </label>
+            <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700">
+                Description
+              </label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowSampleDescriptions(!showSampleDescriptions)}
+                  className="p-1 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-full transition-colors"
+                  title="View sample descriptions"
+                >
+                  <Lightbulb className="w-4 h-4" />
+                </button>
+                
+                {showSampleDescriptions && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowSampleDescriptions(false)}
+                    />
+                    <div className="absolute left-0 top-8 z-50 w-80 bg-white rounded-lg shadow-xl border border-gray-200 p-4 max-h-96 overflow-y-auto">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Sample Descriptions</h4>
+                        <button
+                          type="button"
+                          onClick={() => setShowSampleDescriptions(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {[
+                          {
+                            title: 'Product Description Template',
+                            text: `**Product Details**
+Colour: Navy Blue
+Solid
+Mandarin Collar
+Long, Regular Sleeves
+Straight shape with Regular style
+Knee Length with Straight hem
+Machine Weave Regular Cotton
+
+**Size & Fit**
+The model (height 6') is wearing a size M
+
+**Material & Care**
+Dry Clean
+
+**Specifications**
+Sleeve Length: Long Sleeves
+Shape: Straight
+Neck: Mandarin Collar
+Design Styling: Regular
+Slit Detail: Side Slits
+Length: Knee Length
+Hemline: Straight
+Colour Family: Earthy
+Weave Pattern: Regular
+Weave Type: Machine Weave
+Number of Items: 1
+Package Contains: 1 Kurta
+Net Quantity: 1`
+                          }
+                        ].map((sample, idx) => (
+                          <div key={idx} className="border border-gray-200 rounded-lg p-3 hover:border-primary transition-colors">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <h5 className="text-xs font-semibold text-gray-700">{sample.title}</h5>
+                              <div className="flex gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(sample.text);
+                                    setShowSampleDescriptions(false);
+                                  }}
+                                  className="p-1 text-gray-500 hover:text-primary hover:bg-gray-100 rounded transition-colors"
+                                  title="Copy to clipboard"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFormData({ ...formData, description: sample.text });
+                                    setShowSampleDescriptions(false);
+                                  }}
+                                  className="p-1 text-gray-500 hover:text-primary hover:bg-gray-100 rounded transition-colors"
+                                  title="Use this description"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-600 leading-relaxed">{sample.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}

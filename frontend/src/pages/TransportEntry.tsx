@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, Truck, MapPin, Phone, Building, Upload, Download, FileDown, ChevronDown } from 'lucide-react';
 import { api, Transport } from '../lib/api';
 import * as XLSX from 'xlsx';
+import { Breadcrumb } from '../components';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -472,7 +473,8 @@ const TransportEntry: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pb-2 sm:pb-8">
+      <Breadcrumb />
       <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">

@@ -177,7 +177,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white z-50 transition-all duration-300 ease-in-out shadow-2xl ${
+        className={`fixed top-0 left-0 h-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white z-50 transition-all duration-300 ease-in-out shadow-2xl flex flex-col ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } ${isPinned ? 'lg:translate-x-0' : ''}`}
         style={{ width: '280px' }}
@@ -218,7 +218,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-6 px-4">
+        <nav className="flex-1 overflow-y-auto scrollbar-hide py-6 px-4">
           <div className="space-y-1">
             {navigationStructure.map((item) => {
               if (item.type === 'item') {

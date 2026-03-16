@@ -666,6 +666,154 @@ router.put('/:id', authenticateUser, async (req, res) => {
   }
 });
 
+// Add items to existing order (for substitute designs)
+router.post('/:id/items', authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { items } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items array is required' });
+    }
+
+    // Validate items
+    const validItems = items.filter(item =>
+      item.design_number && item.color &&
+      item.sizes_quantities && Array.isArray(item.sizes_quantities) &&
+      item.sizes_quantities.length > 0
+    );
+
+    if (validItems.length === 0) {
+      return res.status(400).json({ error: 'No valid items provided' });
+    }
+
+    for (const item of validItems) {
+      for (const sq of item.sizes_quantities) {
+        if (!sq.size || !sq.quantity || sq.quantity <= 0) {
+          return res.status(400).json({ error: 'Each size must have a valid quantity greater than 0' });
+        }
+      }
+    }
+
+    // Verify order exists and user has access
+    let orderQuery = supabase.from('orders').select('id').eq('id', id);
+    if (req.profile?.role !== 'admin') {
+      orderQuery = orderQuery.eq('user_id', req.user.id);
+    }
+    const { data: order, error: orderError } = await orderQuery.single();
+    if (orderError || !order) {
+      return res.status(404).json({ error: 'Order not found or access denied' });
+    }
+
+    const orderItemsData = validItems.map(item => ({
+      order_id: id,
+      design_number: item.design_number,
+      color: item.color,
+      sizes_quantities: item.sizes_quantities,
+      is_substitute: true
+    }));
+
+    const { data: newItems, error: insertError } = await supabase
+      .from('order_items')
+      .insert(orderItemsData)
+      .select();
+
+    if (insertError) {
+      // Try without is_substitute if column doesn't exist
+      const fallbackData = validItems.map(item => ({
+        order_id: id,
+        design_number: item.design_number,
+        color: item.color,
+        sizes_quantities: item.sizes_quantities
+      }));
+      const { data: fallbackItems, error: fallbackError } = await supabase
+        .from('order_items')
+        .insert(fallbackData)
+        .select();
+      if (fallbackError) {
+        console.error('Order items insert error:', fallbackError);
+        return res.status(500).json({ error: 'Failed to add items to order' });
+      }
+      return res.status(201).json({ message: 'Items added to order', items: fallbackItems });
+    }
+
+    res.status(201).json({ message: 'Items added to order', items: newItems });
+  } catch (error) {
+    console.error('Add order items error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete a single order item (admin only)
+router.delete('/:orderId/items/:itemId', authenticateUser, async (req, res) => {
+  try {
+    const { orderId, itemId } = req.params;
+
+    if (req.profile?.role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can delete order items' });
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('id', orderId)
+      .single();
+    if (orderError || !order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const { error } = await supabase
+      .from('order_items')
+      .delete()
+      .eq('id', itemId)
+      .eq('order_id', orderId);
+
+    if (error) {
+      console.error('Delete order item error:', error);
+      return res.status(500).json({ error: 'Failed to delete order item' });
+    }
+
+    res.json({ message: 'Order item deleted successfully' });
+  } catch (error) {
+    console.error('Delete order item error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update order item sizes (for removing a specific size) - admin only
+router.patch('/:orderId/items/:itemId', authenticateUser, async (req, res) => {
+  try {
+    const { orderId, itemId } = req.params;
+    const { sizes_quantities } = req.body;
+
+    if (req.profile?.role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can update order items' });
+    }
+
+    if (!sizes_quantities || !Array.isArray(sizes_quantities)) {
+      return res.status(400).json({ error: 'sizes_quantities array is required' });
+    }
+
+    const { data, error } = await supabase
+      .from('order_items')
+      .update({ sizes_quantities })
+      .eq('id', itemId)
+      .eq('order_id', orderId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Update order item error:', error);
+      return res.status(500).json({ error: 'Failed to update order item' });
+    }
+
+    res.json({ message: 'Order item updated', item: data });
+  } catch (error) {
+    console.error('Update order item error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Delete order (cascades to order_items)
 router.delete('/:id', authenticateUser, async (req, res) => {
   try {

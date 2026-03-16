@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api, UserProfile, Party } from '../lib/api';
 import { User, Building2, MapPin, Phone, Mail, Edit2, Save, X, Shield, Calendar } from 'lucide-react';
+import { Breadcrumb } from '../components';
 
 export function ProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -132,8 +133,9 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-2 sm:py-8">
+    <div className="min-h-screen bg-gray-50 pb-2 sm:pb-8">
       <div className="max-w-5xl mx-auto px-3 sm:px-4 lg:px-6">
+        <Breadcrumb />
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>

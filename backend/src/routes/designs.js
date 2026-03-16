@@ -182,7 +182,7 @@ router.get('/search', optionalAuth, async (req, res) => {
 
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { category_id, fabric_type_id, brand_id, style_id, active_only } = req.query;
+    const { category_id, fabric_type_id, brand_id, style_id, active_only, created_month } = req.query;
     const isAuthenticated = !!req.user;
 
     let query = supabase
@@ -244,6 +244,24 @@ router.get('/', optionalAuth, async (req, res) => {
 
     if (style_id) {
       query = query.eq('style_id', style_id);
+    }
+
+    if (created_month) {
+      const monthStr = String(created_month);
+      const match = monthStr.match(/^(\d{4})-(\d{2})$/);
+      if (!match) {
+        return res.status(400).json({ error: 'Invalid created_month format. Use YYYY-MM' });
+      }
+
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+        return res.status(400).json({ error: 'Invalid created_month value. Use YYYY-MM' });
+      }
+
+      const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+      const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
+      query = query.gte('created_at', start.toISOString()).lt('created_at', end.toISOString());
     }
 
     // Filter only active designs for catalogue view
@@ -371,7 +389,7 @@ router.post('/', authenticateUser, async (req, res) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { design_no, name, description, category_id, style_id, fabric_type_id, available_sizes, price, colors } = req.body;
+    const { design_no, name, description, category_id, style_id, fabric_type_id, brand_id, available_sizes, price, colors } = req.body;
 
     if (!design_no || !name) {
       return res.status(400).json({ error: 'Design number and name are required' });
@@ -386,6 +404,7 @@ router.post('/', authenticateUser, async (req, res) => {
         category_id: category_id || null,
         style_id: style_id || null,
         fabric_type_id: fabric_type_id || null,
+        brand_id: brand_id || null,
         available_sizes: available_sizes || [],
         price: price || 0,
         created_by: req.user.id
@@ -452,7 +471,7 @@ router.put('/:id', authenticateUser, async (req, res) => {
     }
 
     const { id } = req.params;
-    const { design_no, name, description, category_id, style_id, fabric_type_id, available_sizes, price, is_active } = req.body;
+    const { design_no, name, description, category_id, style_id, fabric_type_id, brand_id, available_sizes, price, is_active } = req.body;
 
     const updateData = {};
     if (design_no !== undefined) updateData.design_no = design_no;
@@ -461,6 +480,7 @@ router.put('/:id', authenticateUser, async (req, res) => {
     if (category_id !== undefined) updateData.category_id = category_id;
     if (style_id !== undefined) updateData.style_id = style_id || null;
     if (fabric_type_id !== undefined) updateData.fabric_type_id = fabric_type_id || null;
+    if (brand_id !== undefined) updateData.brand_id = brand_id || null;
     if (available_sizes !== undefined) updateData.available_sizes = available_sizes;
     if (price !== undefined) updateData.price = price;
     if (is_active !== undefined) updateData.is_active = is_active;

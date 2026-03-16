@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { api, Order } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
+import { Breadcrumb } from '../components';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -201,7 +202,7 @@ const Dashboard: React.FC = () => {
     // Merge new layouts with existing ones to preserve hidden widget dimensions
     const mergedLayouts: { [key: string]: Layout[] } = {};
     Object.keys(layouts).forEach(breakpoint => {
-      const existingLayouts = currentLayouts[breakpoint] || [];
+      const existingLayouts = (currentLayouts as { [key: string]: Layout[] })[breakpoint] || [];
       const newLayouts = layouts[breakpoint] || [];
       
       // Create a map of existing layouts
@@ -270,7 +271,7 @@ const Dashboard: React.FC = () => {
   // Filter layouts to only include visible widgets
   const visibleLayouts: { [key: string]: Layout[] } = {};
   Object.keys(currentLayouts).forEach(breakpoint => {
-    visibleLayouts[breakpoint] = currentLayouts[breakpoint].filter(layout => 
+    visibleLayouts[breakpoint] = (currentLayouts as { [key: string]: Layout[] })[breakpoint].filter(layout => 
       visibleWidgets.some(w => w.i === layout.i)
     );
   });
@@ -287,16 +288,18 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/30 p-2 sm:p-4 md:p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Dashboard
-            </h1>
-            <p className="text-gray-600 mt-2 text-lg">Overview of your catalogue management system</p>
-          </div>
+    <div className="px-4 sm:px-6 pb-4 sm:pb-6 max-w-7xl mx-auto">
+      <Breadcrumb />
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/30 p-2 sm:p-4 md:p-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                Dashboard
+              </h1>
+              <p className="text-gray-600 mt-2 text-lg">Overview of your catalogue management system</p>
+            </div>
           <div className="flex items-center gap-3">
             <button
               onClick={fetchDashboardData}
@@ -643,6 +646,7 @@ const Dashboard: React.FC = () => {
           </div>
         )}
       </ResponsiveGridLayout>
+      </div>
     </div>
   );
 };

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api, UserProfile, Party, LoginHistory } from '../lib/api';
 import { UserPlus, Edit2, XCircle, CheckCircle, Trash2, Users, Clock, UserX, Activity, LogIn } from 'lucide-react';
 import { formatDate, getRelativeTime } from '../utils/dateUtils';
-import { ErrorAlert } from '../components';
+import { ErrorAlert, Breadcrumb } from '../components';
 
 type TabType = 'users' | 'login-history' | 'inactive-users';
 
@@ -96,7 +96,8 @@ export function UserManagement() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pb-2 sm:pb-8">
+      <Breadcrumb />
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
         <div>

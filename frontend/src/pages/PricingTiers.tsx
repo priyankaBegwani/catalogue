@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, Info, Award, TrendingUp, Users, Zap, Edit2, Plus, Trash2 } from 'lucide-react';
 import { PricingTierConfig, VolumeTier, RelationshipTier, TierModel } from '../types/pricing';
 import { getPricingConfig, savePricingConfig } from '../utils/pricingTiers';
+import { Breadcrumb } from '../components';
 
 export function PricingTiers() {
   const [config, setConfig] = useState<PricingTierConfig>(getPricingConfig());
@@ -40,8 +41,9 @@ export function PricingTiers() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/30 py-2 sm:py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/30 pb-2 sm:pb-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
+        <Breadcrumb />
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">

@@ -1,21 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile, Brand, DesignStyle } from '../lib/api';
-import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, Phone, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck, Plus, Minus, Search } from 'lucide-react';
+import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck, Plus, Search, ArrowLeft, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getWhatsAppUrl, useBranding } from '../hooks/useBranding';
 import { AddToCartModal } from '../components/AddToCartModal';
+import { Breadcrumb } from '../components';
+import {
+  DesktopFiltersSidebar,
+  FilterState,
+  MobileFiltersSheet,
+  getActiveFilterCount
+} from '../components/CatalogueLikeFilters';
 
 export type DesignTag = 'new-arrival' | 'trending' | 'best-seller' | 'fast-repeat' | 'ready-to-ship' | 'low-stock';
-
-interface FilterState {
-  categories: string[];
-  brands: string[];
-  priceRange: { min: number; max: number };
-  colors: string[];
-  designNo: string;
-  sortBy: 'name' | 'price_low' | 'price_high' | 'newest' | 'popularity';
-  tags: DesignTag[];
-}
 
 // Utility function to calculate design tags
 function getDesignTags(design: Design): DesignTag[] {
@@ -204,7 +201,7 @@ export function Catalogue() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [showSortModal, setShowSortModal] = useState(false);
+  const [showSortSheet, setShowSortSheet] = useState(false);
   const [availableColors, setAvailableColors] = useState<string[]>([]);
   const [showPriceToCustomers, setShowPriceToCustomers] = useState(true);
   const [filters, setFilters] = useState<FilterState>({
@@ -235,6 +232,24 @@ export function Catalogue() {
   const [hasMore, setHasMore] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const DESIGNS_PER_PAGE = 20;
+  const [selectedCreatedMonth, setSelectedCreatedMonth] = useState<string>('');
+
+  const availableCreatedMonths = useMemo(() => {
+    const monthMap = new Map<string, string>();
+
+    for (const design of designs) {
+      if (!design.created_at) continue;
+      const dt = new Date(design.created_at);
+      if (Number.isNaN(dt.getTime())) continue;
+      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+      const label = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(dt);
+      monthMap.set(key, label);
+    }
+
+    return Array.from(monthMap.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([value, label]) => ({ value, label }));
+  }, [designs]);
 
   useEffect(() => {
     loadCategories();
@@ -288,7 +303,7 @@ export function Catalogue() {
 
   useEffect(() => {
     applyFilters();
-  }, [designs, filters, masterSearch, categories, brands, fabricTypes, styles]);
+  }, [designs, filters, masterSearch, categories, brands, fabricTypes, styles, selectedCreatedMonth]);
 
   // Reset pagination when filters change
   useEffect(() => {
@@ -471,7 +486,8 @@ export function Catalogue() {
         const data = await api.getDesignStyles(selectedCategory);
         setStyles(data);
       } else {
-        setStyles([]);
+        const data = await api.getDesignStyles();
+        setStyles(data);
       }
     } catch (err) {
       console.error('Failed to load styles:', err);
@@ -614,6 +630,17 @@ export function Catalogue() {
       });
     }
 
+    // Filter by created month
+    if (selectedCreatedMonth) {
+      filtered = filtered.filter((design) => {
+        if (!design.created_at) return false;
+        const dt = new Date(design.created_at);
+        if (Number.isNaN(dt.getTime())) return false;
+        const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+        return key === selectedCreatedMonth;
+      });
+    }
+
     // Sort
     switch (filters.sortBy) {
       case 'name':
@@ -677,6 +704,11 @@ export function Catalogue() {
       sortBy: 'newest',
       tags: []
     });
+    setSelectedCategory('');
+    setSelectedFabricType('');
+    setSelectedBrand('');
+    setSelectedStyle('');
+    setSelectedCreatedMonth('');
   };
 
   // Toggle highlight tag preset - allows multiple selection
@@ -700,12 +732,7 @@ export function Catalogue() {
     }
   };
 
-  const activeFilterCount = 
-    filters.categories.length + 
-    filters.colors.length + 
-    filters.tags.length + 
-    (filters.designNo ? 1 : 0) +
-    (filters.priceRange.min > 0 || filters.priceRange.max < 100000 ? 1 : 0);
+  const activeFilterCount = getActiveFilterCount(filters, selectedFabricType, selectedBrand, selectedStyle, selectedCreatedMonth);
 
   const toggleDesignSelection = (designId: string) => {
     setSelectedDesigns(prev => {
@@ -1028,7 +1055,83 @@ export function Catalogue() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-8">
+    <>
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 lg:pb-6">
+      {/* Breadcrumb and Search Bar - Inline on Desktop */}
+      <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <Breadcrumb />
+        
+        {/* Search Bar - Inline with Breadcrumb on Desktop */}
+        <div className="relative sm:w-80 lg:w-96" ref={searchRef}>
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="w-4 h-4 text-gray-400 group-focus-within:text-primary transition-colors duration-200" />
+            </div>
+            <input
+              type="text"
+              value={masterSearch}
+              onChange={(e) => setMasterSearch(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              placeholder="Search products..."
+              className="w-full pl-9 pr-9 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm hover:shadow focus:shadow-md focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 placeholder:text-gray-400"
+              autoComplete="off"
+            />
+            {masterSearch && (
+              <button
+                onClick={() => {
+                  setMasterSearch('');
+                  setShowSuggestions(false);
+                }}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          
+          {/* Autocomplete Suggestions Dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-primary border-opacity-20 rounded-xl shadow-2xl overflow-hidden z-[9999]">
+              <div className="max-h-80 overflow-y-auto py-2">
+                {suggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setMasterSearch(suggestion);
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full px-4 py-2.5 text-left text-sm hover:bg-primary hover:bg-opacity-10 transition-colors duration-150 flex items-center gap-3 group"
+                  >
+                    <Search className="w-3.5 h-3.5 text-gray-400 group-hover:text-primary transition-colors" />
+                    <span className="text-gray-700 group-hover:text-gray-900 font-medium">
+                      {suggestion}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {masterSearch && !showSuggestions && (
+            <div className="mt-2 flex items-center gap-2 px-1 animate-fadeIn">
+              {isSearching ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-xs text-gray-500 font-medium">Searching...</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                  <span className="text-xs text-gray-600 font-medium">
+                    {filteredDesigns.length} result{filteredDesigns.length !== 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
       {/* Floating WhatsApp Button for Mobile - Positioned higher to avoid bottom buttons */}
       <div className="fixed bottom-24 right-4 z-50 lg:hidden">
         <button
@@ -1071,94 +1174,8 @@ export function Catalogue() {
         </button>
       </div>
 
-      {/* Mobile: Searchbar at top, no heading */}
+      {/* Tag Pills - Text Only (1-2 rows max) */}
       <div className="mb-4 sm:mb-6">
-        {/* Desktop: Show heading */}
-        <div className="hidden sm:flex items-center justify-between mb-4">
-          <div className="flex-1">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary mb-2">{branding.brandName} Collection</h1>
-            <p className="text-sm sm:text-base lg:text-lg text-gray-600">Discover our premium collection of ethnic wear</p>
-          </div>
-        </div>
-        
-        {/* Master Search Bar - Elegant & Responsive with Autocomplete */}
-        <div className="relative mb-3 sm:mb-6" ref={searchRef}>
-          <div className="relative group">
-            <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
-              <Search className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-focus-within:text-primary transition-colors duration-200" />
-            </div>
-            <input
-              type="text"
-              value={masterSearch}
-              onChange={(e) => setMasterSearch(e.target.value)}
-              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-              placeholder="Search products..."
-              className="w-full pl-10 sm:pl-12 pr-10 sm:pr-12 py-2.5 sm:py-3.5 text-sm sm:text-base border-2 border-gray-200 rounded-xl sm:rounded-2xl bg-white shadow-sm hover:shadow-md focus:shadow-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 placeholder:text-gray-400"
-              autoComplete="off"
-            />
-            {masterSearch && (
-              <button
-                onClick={() => {
-                  setMasterSearch('');
-                  setShowSuggestions(false);
-                }}
-                className="absolute inset-y-0 right-0 pr-3 sm:pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
-                aria-label="Clear search"
-              >
-                <X className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            )}
-          </div>
-          
-          {/* Autocomplete Suggestions Dropdown */}
-          {showSuggestions && suggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-primary border-opacity-20 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden" style={{ zIndex: 9999 }}>
-              <div className="max-h-80 overflow-y-auto py-2">
-                {suggestions.map((suggestion, index) => (
-                  <button
-                    key={index}
-                    onClick={() => {
-                      setMasterSearch(suggestion);
-                      setShowSuggestions(false);
-                    }}
-                    className="w-full px-4 py-2.5 text-left text-sm sm:text-base hover:bg-primary hover:bg-opacity-10 transition-colors duration-150 flex items-center gap-3 group"
-                  >
-                    <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 group-hover:text-primary transition-colors" />
-                    <span className="text-gray-700 group-hover:text-gray-900 font-medium">
-                      {suggestion}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {masterSearch && !showSuggestions && (
-            <div className="mt-3 flex items-center justify-between px-1 animate-fadeIn">
-              <div className="flex items-center gap-2">
-                {isSearching ? (
-                  <>
-                    <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-xs sm:text-sm text-gray-500 font-medium">Searching...</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
-                    <span className="text-xs sm:text-sm text-gray-600 font-medium">
-                      {filteredDesigns.length} result{filteredDesigns.length !== 1 ? 's' : ''}
-                    </span>
-                  </>
-                )}
-              </div>
-              <span className="text-xs text-gray-500 hidden sm:inline">
-                Searching for: <span className="font-semibold text-gray-700">"{masterSearch}"</span>
-              </span>
-            </div>
-          )}
-        </div>
-        
-        {/* Tag Pills - Text Only (1-2 rows max) */}
-        <div className="mb-3 sm:mb-4">
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {highlightTags.map((tag) => {
               const isActive = filters.tags.some(t => tag.filterPreset.tags?.includes(t));
@@ -1180,574 +1197,213 @@ export function Catalogue() {
           </div>
         </div>
 
-        {/* Brand Filter - Easy Selection */}
-        {brands.length > 0 && (
-          <div className="mb-3 sm:mb-4">
-            <select
-              value={selectedBrand}
-              onChange={(e) => setSelectedBrand(e.target.value)}
-              className="w-full sm:w-auto max-w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-primary focus:border-primary bg-white truncate"
-            >
-              <option value="">All Brands</option>
-              {brands.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Bulk Selection Controls */}
-        {bulkSelectionMode && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-medium text-blue-900">
-                  {selectedDesigns.size} of {filteredDesigns.length} designs selected
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={selectAllDesigns}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    Select All
-                  </button>
-                  <span className="text-blue-300">|</span>
-                  <button
-                    onClick={clearSelection}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    Clear Selection
-                  </button>
-                </div>
-              </div>
-              <button
-                onClick={shareBulkOnWhatsApp}
-                disabled={selectedDesigns.size === 0}
-                className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <MessageSquare className="w-4 h-4" />
-                Share Selected ({selectedDesigns.size})
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Mobile: Sort Modal */}
-      {showSortModal && (
-        <div className="lg:hidden fixed inset-0 z-50 flex items-end" onClick={() => setShowSortModal(false)}>
-          <div className="absolute inset-0 bg-black bg-opacity-50"></div>
-          <div 
-            className="relative w-full bg-white rounded-t-3xl shadow-2xl max-h-[60vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between z-10">
-              <h2 className="text-lg font-bold text-gray-900">Sort By</h2>
-              <button onClick={() => setShowSortModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4">
-              <div className="space-y-2">
-                {[
-                  { value: 'newest', label: 'Newly Added' },
-                  { value: 'popularity', label: 'Popularity' },
-                  { value: 'price_low', label: 'Price: Low to High' },
-                  { value: 'price_high', label: 'Price: High to Low' },
-                  { value: 'name', label: 'Name (A-Z)' }
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setFilters({ ...filters, sortBy: option.value as any });
-                      setShowSortModal(false);
-                    }}
-                    className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                      filters.sortBy === option.value
-                        ? 'border-primary bg-primary/5 text-primary font-semibold'
-                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile: Bottom Filter Sheet (Ecom-style) */}
-      {showFilters && (
-        <div className="lg:hidden fixed inset-0 z-50 flex items-end" onClick={() => setShowFilters(false)}>
-          <div className="absolute inset-0 bg-black bg-opacity-50"></div>
-          <div 
-            className="relative w-full bg-white rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between z-10">
-              <h2 className="text-lg font-bold text-gray-900">Filter & Sort</h2>
-              <button onClick={() => setShowFilters(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 space-y-6">
-              {/* Categories */}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Categories</h3>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {categories.map((category) => (
-                    <label key={category.id} className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.categories.includes(category.id)}
-                        onChange={() => toggleCategoryFilter(category.id)}
-                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                      />
-                      <span className="text-sm text-gray-700">{category.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Price Range */}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Price Range</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">Min</label>
-                    <input
-                      type="number"
-                      value={filters.priceRange.min}
-                      onChange={(e) => setFilters({
-                        ...filters,
-                        priceRange: { ...filters.priceRange, min: Number(e.target.value) }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                      placeholder="₹0"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">Max</label>
-                    <input
-                      type="number"
-                      value={filters.priceRange.max}
-                      onChange={(e) => setFilters({
-                        ...filters,
-                        priceRange: { ...filters.priceRange, max: Number(e.target.value) }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                      placeholder="₹100000"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Colors */}
-              {availableColors.length > 0 && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Colors</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {availableColors.map((color) => (
-                      <label key={color} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filters.colors.includes(color)}
-                          onChange={() => toggleColorFilter(color)}
-                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">{color}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Fabric Type */}
-              {fabricTypes.length > 0 && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Fabric Type</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {fabricTypes.map((fabricType) => (
-                      <label key={fabricType.id} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={selectedFabricType === fabricType.id}
-                          onChange={() => setSelectedFabricType(fabricType.id)}
-                          className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">{fabricType.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Brand */}
-              {brands.length > 0 && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Brand</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {brands.map((brand) => (
-                      <label key={brand.id} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={selectedBrand === brand.id}
-                          onChange={() => setSelectedBrand(brand.id)}
-                          className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">{brand.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Style */}
-              {styles.length > 0 && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Style</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {styles.map((style) => (
-                      <label key={style.id} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={selectedStyle === style.id}
-                          onChange={() => setSelectedStyle(style.id)}
-                          className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">{style.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 flex gap-3">
-              <button
-                onClick={clearFilters}
-                className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
-              >
-                Clear All
-              </button>
-              <button
-                onClick={() => setShowFilters(false)}
-                className="flex-1 px-4 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-primary-dark transition"
-              >
-                Apply Filters
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MobileFiltersSheet
+        isOpen={showFilters}
+        onClose={() => setShowFilters(false)}
+        categories={categories}
+        fabricTypes={fabricTypes}
+        brands={brands}
+        styles={styles}
+        availableColors={availableColors}
+        filters={filters}
+        setFilters={setFilters}
+        selectedFabricType={selectedFabricType}
+        setSelectedFabricType={setSelectedFabricType}
+        selectedBrand={selectedBrand}
+        setSelectedBrand={setSelectedBrand}
+        selectedStyle={selectedStyle}
+        setSelectedStyle={setSelectedStyle}
+        selectedCreatedMonth={selectedCreatedMonth}
+        setSelectedCreatedMonth={setSelectedCreatedMonth}
+        availableCreatedMonths={availableCreatedMonths}
+        onClearAll={clearFilters}
+        showBrand={false}
+        showStyle={true}
+        showFabric={true}
+      />
 
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Sidebar Filters */}
-        <aside className={`lg:block lg:w-64 flex-shrink-0 ${showFilters ? 'block' : 'hidden'}`}>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sticky top-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                <Filter className="w-5 h-5 mr-2" />
-                Filters
-              </h2>
-              {activeFilterCount > 0 && (
-                <button
-                  onClick={clearFilters}
-                  className="text-sm text-primary hover:text-primary-dark font-medium"
-                >
-                  Clear All
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-6">
-              {/* Sort By */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Sort By</h3>
-                <select
-                  value={filters.sortBy}
-                  onChange={(e) => setFilters({ ...filters, sortBy: e.target.value as any })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                >
-                  <option value="newest">Newly Added</option>
-                  <option value="popularity">Popularity</option>
-                  <option value="price_low">Price: Low to High</option>
-                  <option value="price_high">Price: High to Low</option>
-                  <option value="name">Name (A-Z)</option>
-                </select>
-              </div>
-
-              {/* Categories */}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Categories</h3>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {categories.map((category) => (
-                    <label key={category.id} className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.categories.includes(category.id)}
-                        onChange={() => toggleCategoryFilter(category.id)}
-                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                      />
-                      <span className="text-sm text-gray-700">{category.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Price Range */}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Price Range</h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">Min Price</label>
-                    <input
-                      type="number"
-                      value={filters.priceRange.min}
-                      onChange={(e) => setFilters({
-                        ...filters,
-                        priceRange: { ...filters.priceRange, min: Number(e.target.value) }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="₹0"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">Max Price</label>
-                    <input
-                      type="number"
-                      value={filters.priceRange.max}
-                      onChange={(e) => setFilters({
-                        ...filters,
-                        priceRange: { ...filters.priceRange, max: Number(e.target.value) }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="₹100000"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Colors */}
-              {availableColors.length > 0 && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Colors</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {availableColors.map((color) => (
-                      <label key={color} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filters.colors.includes(color)}
-                          onChange={() => toggleColorFilter(color)}
-                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">{color}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Tags */}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Tags</h3>
-                <div className="space-y-2">
-                  {(Object.keys(tagConfig) as DesignTag[]).map((tag) => {
-                    const config = tagConfig[tag];
-                    const Icon = config.icon;
-                    return (
-                      <label key={tag} className="flex items-center space-x-2 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={filters.tags.includes(tag)}
-                          onChange={() => toggleTagFilter(tag)}
-                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                        />
-                        <span className={`inline-flex items-center gap-1.5 text-sm ${config.color} group-hover:opacity-80 transition`}>
-                          <Icon className="w-3.5 h-3.5" />
-                          {config.label}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Fabric Type */}
-              {fabricTypes.length > 0 && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Fabric Type</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {fabricTypes.map((fabricType) => (
-                      <label key={fabricType.id} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={selectedFabricType === fabricType.id}
-                          onChange={() => setSelectedFabricType(fabricType.id)}
-                          className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">{fabricType.name}</span>
-                      </label>
-                    ))}
-                    {selectedFabricType && (
-                      <button
-                        onClick={() => setSelectedFabricType('')}
-                        className="text-xs text-primary hover:text-primary-dark mt-2"
-                      >
-                        Clear filter
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Brand */}
-              {brands.length > 0 && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Brand</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {brands.map((brand) => (
-                      <label key={brand.id} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={selectedBrand === brand.id}
-                          onChange={() => setSelectedBrand(brand.id)}
-                          className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">{brand.name}</span>
-                      </label>
-                    ))}
-                    {selectedBrand && (
-                      <button
-                        onClick={() => setSelectedBrand('')}
-                        className="text-xs text-primary hover:text-primary-dark mt-2"
-                      >
-                        Clear filter
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Style */}
-              {styles.length > 0 && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Style</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {styles.map((style) => (
-                      <label key={style.id} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={selectedStyle === style.id}
-                          onChange={() => setSelectedStyle(style.id)}
-                          className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">{style.name}</span>
-                      </label>
-                    ))}
-                    {selectedStyle && (
-                      <button
-                        onClick={() => setSelectedStyle('')}
-                        className="text-xs text-primary hover:text-primary-dark mt-2"
-                      >
-                        Clear filter
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Design Number Search */}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Design Number</h3>
-                <input
-                  type="text"
-                  value={filters.designNo}
-                  onChange={(e) => setFilters({ ...filters, designNo: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                  placeholder="Search by design no..."
-                />
-              </div>
-            </div>
-          </div>
-        </aside>
+        <DesktopFiltersSidebar
+          categories={categories}
+          fabricTypes={fabricTypes}
+          brands={brands}
+          styles={styles}
+          availableColors={availableColors}
+          filters={filters}
+          setFilters={setFilters}
+          selectedFabricType={selectedFabricType}
+          setSelectedFabricType={setSelectedFabricType}
+          selectedBrand={selectedBrand}
+          setSelectedBrand={setSelectedBrand}
+          selectedStyle={selectedStyle}
+          setSelectedStyle={setSelectedStyle}
+          selectedCreatedMonth={selectedCreatedMonth}
+          setSelectedCreatedMonth={setSelectedCreatedMonth}
+          availableCreatedMonths={availableCreatedMonths}
+          onClearAll={clearFilters}
+          showBrand={false}
+          showStyle={true}
+          showFabric={true}
+        />
 
         {/* Main Content */}
         <main className="flex-1">
-          {/* Desktop: Select Designs Button */}
-          <div className="hidden sm:block mb-5">
-            <button
-              onClick={() => setBulkSelectionMode(!bulkSelectionMode)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-                bulkSelectionMode 
-                  ? 'bg-primary text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {bulkSelectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-              {bulkSelectionMode ? 'Selection Mode' : 'Select Designs'}
-            </button>
-          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            {/* Brand Tabs Header */}
+            {brands.length > 0 && (
+              <div className="border-b border-gray-200 bg-gray-50 px-3 sm:px-4 rounded-t-xl">
+                <div className="flex items-end justify-between gap-3">
+                  <div className="flex items-end gap-2 overflow-x-auto scrollbar-hide">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBrand('')}
+                      className={`-mb-px px-4 py-3 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+                        !selectedBrand
+                          ? 'border-primary text-gray-900 bg-white rounded-t-lg'
+                          : 'border-transparent text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      All Brands
+                    </button>
+                    {brands.map((brand) => (
+                      <button
+                        key={brand.id}
+                        type="button"
+                        onClick={() => setSelectedBrand(brand.id)}
+                        className={`-mb-px px-4 py-3 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+                          selectedBrand === brand.id
+                            ? 'border-primary text-gray-900 bg-white rounded-t-lg'
+                            : 'border-transparent text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        {brand.name}
+                      </button>
+                    ))}
+                  </div>
 
-          {/* Results Count & Share Button */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <div className="text-sm text-gray-600">
-              Showing {filteredDesigns.length} of {designs.length} designs
-            </div>
-            
-            {(activeFilterCount > 0 || filteredDesigns.length < designs.length) && (
-              <button
-                onClick={shareFilteredCatalogue}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-all duration-200 shadow-md hover:shadow-lg"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>Share Selection</span>
-              </button>
+                  {filteredDesigns.length > 0 && (
+                    <div className="hidden sm:flex items-center pb-2">
+                      <label className="inline-flex items-center gap-2 text-sm text-gray-700 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+                          checked={bulkSelectionMode}
+                          onChange={() => {
+                            const next = !bulkSelectionMode;
+                            setBulkSelectionMode(next);
+                            if (!next) {
+                              clearSelection();
+                            }
+                          }}
+                        />
+                        <span>Select Designs</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              
+              </div>
             )}
-          </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
+            {/* Enclosed Content */}
+            <div className="p-3 sm:p-4">
+              {/* Results Count & Share Button */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                {designs.length > 0 && (
+                  <div className="text-sm text-gray-600">
+                    Showing {filteredDesigns.length} of {designs.length} designs
+                  </div>
+                )}
 
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="text-gray-500">Loading designs...</div>
-            </div>
-          ) : filteredDesigns.length === 0 ? (
-            <div className="text-center py-12 sm:py-16">
-              <p className="text-gray-500 text-base sm:text-lg">No designs found matching your filters</p>
-              {activeFilterCount > 0 && (
-                <button
-                  onClick={clearFilters}
-                  className="mt-4 text-primary hover:text-primary-dark font-medium"
-                >
-                  Clear all filters
-                </button>
+                {filteredDesigns.length > 0 && (activeFilterCount > 0 || filteredDesigns.length < designs.length) && (
+                  <button
+                    onClick={shareFilteredCatalogue}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Share Selection</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Bulk Selection Controls */}
+              {bulkSelectionMode && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm font-medium text-blue-900">
+                        {selectedDesigns.size} of {filteredDesigns.length} designs selected
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={selectAllDesigns}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Select All
+                        </button>
+                        <span className="text-blue-300">|</span>
+                        <button
+                          onClick={clearSelection}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Clear Selection
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      onClick={shareBulkOnWhatsApp}
+                      disabled={selectedDesigns.size === 0}
+                      className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      Share Selected ({selectedDesigns.size})
+                    </button>
+                  </div>
+                </div>
               )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
-              {displayedDesigns.map((design) => (
-                <DesignCard
-                  key={design.id}
-                  design={design}
-                  onQuickView={() => setSelectedDesign(design)}
-                  bulkSelectionMode={bulkSelectionMode}
-                  isSelected={selectedDesigns.has(design.id)}
-                  onToggleSelection={() => toggleDesignSelection(design.id)}
-                  onShareClick={(design) => {
-                    setPendingShareDesign(design);
-                    setShareType('design');
-                    setShowShareDialog(true);
-                  }}
-                  onAddToCart={openAddToCartModal}
-                />
-              ))}
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+                  {error}
+                </div>
+              )}
+
+              {loading ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-gray-500">Loading designs...</div>
+                </div>
+              ) : filteredDesigns.length === 0 ? (
+                <div className="text-center py-12 sm:py-16">
+                  <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 text-base sm:text-lg font-medium">No designs found matching your filters</p>
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={clearFilters}
+                      className="mt-4 text-primary hover:text-primary-dark font-medium"
+                    >
+                      Clear all filters
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                  {displayedDesigns.map((design) => (
+                    <DesignCard
+                      key={design.id}
+                      design={design}
+                      onQuickView={() => setSelectedDesign(design)}
+                      bulkSelectionMode={bulkSelectionMode}
+                      isSelected={selectedDesigns.has(design.id)}
+                      onToggleSelection={() => toggleDesignSelection(design.id)}
+                      onShareClick={(design) => {
+                        setPendingShareDesign(design);
+                        setShareType('design');
+                        setShowShareDialog(true);
+                      }}
+                      onAddToCart={openAddToCartModal}
+                    />
+                  ))}
               
               {/* Infinite Scroll Trigger */}
               {hasMore && (
@@ -1767,8 +1423,11 @@ export function Catalogue() {
                   </div>
                 </div>
               )}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </main>
       </div>
 
@@ -1865,12 +1524,63 @@ export function Catalogue() {
           </div>
         </div>
       )}
+    </div>
+
+      {/* Mobile Sort Sheet */}
+      {showSortSheet && (
+        <div className="lg:hidden fixed inset-0 z-50 flex items-end" onClick={() => setShowSortSheet(false)}>
+          <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+          <div className="relative w-full bg-white rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto scrollbar-hide" onClick={(e) => e.stopPropagation()} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between z-10">
+              <h2 className="text-lg font-bold text-gray-900">Sort By</h2>
+              <button onClick={() => setShowSortSheet(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4">
+              {[
+                { value: 'newest', label: 'Newly Added' },
+                { value: 'popularity', label: 'Popularity' },
+                { value: 'price_low', label: 'Price: Low to High' },
+                { value: 'price_high', label: 'Price: High to Low' },
+                { value: 'name', label: 'Name (A-Z)' }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setFilters({ ...filters, sortBy: option.value as any });
+                    setShowSortSheet(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 transition-all ${
+                    filters.sortBy === option.value
+                      ? 'bg-primary/10 text-primary font-semibold'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4">
+              <button
+                onClick={() => setShowSortSheet(false)}
+                className="w-full px-4 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-primary-dark transition"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile: Bottom Fixed Filter & Sort Buttons - Two separate buttons */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-2xl">
         <div className="flex gap-2 p-3">
           <button
-            onClick={() => setShowFilters(true)}
+            onClick={() => setShowFilters(!showFilters)}
             className="flex-1 bg-gray-900 text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-gray-800 transition-all"
           >
             <Filter className="w-5 h-5" />
@@ -1882,14 +1592,14 @@ export function Catalogue() {
             )}
           </button>
           <button
-            onClick={() => setShowSortModal(true)}
+            onClick={() => setShowSortSheet(!showSortSheet)}
             className="flex-1 bg-primary text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-primary-dark transition-all"
           >
             <span>Sort</span>
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -1987,93 +1697,6 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
     }
   };
 
-  // Legacy fallback for direct share (not used with dialog)
-  const directShareOnWhatsApp = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    try {
-      // Generate product link (adjust domain as needed)
-      const productLink = `${window.location.origin}/catalogue?design=${design.id}`;
-      
-      // Build comprehensive message
-      let message = `✨ *${design.name}*\n\n`;
-      message += `📋 *Design Code:* ${design.design_no}\n`;
-      
-      if (design.fabric_type) {
-        message += `🧵 *Fabric:* ${design.fabric_type.name}\n`;
-      }
-      
-      if (design.category) {
-        message += `📁 *Category:* ${design.category.name}\n`;
-      }
-      
-      if (selectedColor) {
-        message += `💰 *Price:* ₹${design.price.toLocaleString()}/piece\n`;
-      }
-      
-      message += `🎨 *Colors Available:* ${colorCount} variant${colorCount > 1 ? 's' : ''}\n`;
-      
-      // MOQ (Minimum Order Quantity) - you can adjust this based on your business logic
-      message += `📦 *MOQ:* Contact for details\n`;
-      
-      if (design.description) {
-        message += `\n📝 ${design.description}\n`;
-      }
-      
-      message += `\n🔗 *View Product:*\n${productLink}\n`;
-      message += `\n💬 *Interested? Contact us for more details!*`;
-      
-      // Check if Web Share API is available and we have images
-      if (navigator.share && selectedColorImages.length > 0) {
-        // Try to load and share actual images with the message
-        try {
-          const imageUrl = selectedColorImages[0];
-          const response = await fetch(imageUrl);
-          const blob = await response.blob();
-          const file = new File([blob], `${design.design_no}.jpg`, { type: 'image/jpeg' });
-          
-          // Use Web Share API with image and text
-          await navigator.share({
-            title: `${design.name} - ${design.design_no}`,
-            text: message,
-            files: [file]
-          });
-          return;
-        } catch (shareError) {
-          console.warn('Web Share API failed, falling back to WhatsApp URL:', shareError);
-        }
-      }
-      
-      // Fallback to WhatsApp Web/App with image URL
-      if (selectedColorImages.length > 0) {
-        // Include first image URL in the message
-        message += `\n\n📸 *Product Image:*\n${selectedColorImages[0]}`;
-      }
-      
-      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
-      window.open(whatsappUrl, '_blank');
-      
-    } catch (error) {
-      console.error('Error sharing:', error);
-      
-      // Final fallback - simple message with essential info
-      const productLink = `${window.location.origin}/catalogue?design=${design.id}`;
-      let fallbackMessage = `✨ *${design.name}*\n\n`;
-      fallbackMessage += `📋 Design Code: ${design.design_no}\n`;
-      if (design.fabric_type) {
-        fallbackMessage += `🧵 Fabric: ${design.fabric_type.name}\n`;
-      }
-      if (selectedColor) {
-        fallbackMessage += `💰 Price: ₹${design.price.toLocaleString()}/piece\n`;
-      }
-      fallbackMessage += `\n🔗 View: ${productLink}\n`;
-      fallbackMessage += `\n💬 Contact us for more details!`;
-      
-      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(fallbackMessage)}`;
-      window.open(whatsappUrl, '_blank');
-    }
-  };
-
   // Auto-play slideshow
   useEffect(() => {
     if (selectedColorImages.length > 1) {
@@ -2119,7 +1742,11 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         onQuickView();
       } else {
         // Swipe left - Share
-        shareOnWhatsApp(e as any);
+        if (onShareClick) {
+          onShareClick(design);
+        } else {
+          shareOnWhatsApp(e as any);
+        }
       }
     }
     
@@ -2215,7 +1842,14 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         <div className="absolute inset-0 bg-black bg-opacity-0 sm:group-hover:bg-opacity-20 transition duration-300 flex items-center justify-center">
           <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition duration-300">
             <button
-              onClick={shareOnWhatsApp}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onShareClick) {
+                  onShareClick(design);
+                } else {
+                  shareOnWhatsApp(e as any);
+                }
+              }}
               className="bg-green-500 text-white w-11 h-11 sm:w-12 sm:h-12 sm:px-4 sm:py-3 text-sm sm:text-base rounded-full font-semibold flex items-center justify-center shadow-lg hover:bg-green-600 transition min-w-[44px] min-h-[44px]"
               title="Swipe left or tap to share"
             >
@@ -2347,8 +1981,12 @@ interface DesignQuickViewProps {
   onClose: () => void;
 }
 
-function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
+function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProps) {
+  const [currentDesign, setCurrentDesign] = useState(initialDesign);
+  const [designHistory, setDesignHistory] = useState<Design[]>([]);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { user, isAdmin } = useAuth();
+  const isAuthenticated = !!user;
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [sizeQuantities, setSizeQuantities] = useState<Record<string, number>>({});
@@ -2367,9 +2005,46 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
   const [touchDistance, setTouchDistance] = useState(0);
   const [isTouchZooming, setIsTouchZooming] = useState(false);
   const [viewMode, setViewMode] = useState<'individual' | 'sets'>('individual'); // Admin toggle state
+  const [showSizeSelection, setShowSizeSelection] = useState(false);
+  const [showDescription, setShowDescription] = useState(false);
+  const [similarDesigns, setSimilarDesigns] = useState<Design[]>([]);
+  
+  const design = currentDesign;
   const selectedColor = design.design_colors?.[selectedColorIndex];
   const selectedImage = selectedColor?.image_urls?.[selectedImageIndex];
-  const isAuthenticated = !!user;
+
+  // Generate dynamic description based on selected color, style, and fabric
+  const dynamicDescription = useMemo(() => {
+    const colorName = selectedColor?.color_name || '';
+    const styleName = design.style?.name || '';
+    const fabricName = design.fabric_type?.name || '';
+    const baseDescription = design.description || '';
+
+    if (baseDescription.includes('**Product Details**') || baseDescription.includes('Product Details')) {
+      let updatedDescription = baseDescription;
+
+      if (colorName) {
+        updatedDescription = updatedDescription.replace(/Colour:\s*[^\n]*/, `Colour: ${colorName}`);
+      }
+
+      if (fabricName) {
+        updatedDescription = updatedDescription.replace(/Machine Weave [^\n]*/, `Machine Weave ${fabricName}`);
+      }
+
+      return updatedDescription;
+    }
+
+    const enhancements: string[] = [];
+    if (colorName) enhancements.push(`Available in ${colorName}`);
+    if (styleName) enhancements.push(`${styleName} style`);
+    if (fabricName) enhancements.push(`Made with premium ${fabricName}`);
+
+    if (enhancements.length > 0) {
+      return `${baseDescription}\n\n${enhancements.join('. ')}.`;
+    }
+
+    return baseDescription;
+  }, [design.description, design.style?.name, design.fabric_type?.name, selectedColor?.color_name]);
 
   // Load user profile and size sets
   useEffect(() => {
@@ -2395,6 +2070,27 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
     };
     loadUserData();
   }, []);
+
+  // Load similar designs based on category and style
+  useEffect(() => {
+    const loadSimilarDesigns = async () => {
+      try {
+        const allDesigns = await api.getDesigns();
+        const similar = allDesigns
+          .filter(d => 
+            d.id !== design.id && (
+              (design.category && d.category?.id === design.category.id) ||
+              (design.style && d.style?.id === design.style.id)
+            )
+          )
+          .slice(0, 6);
+        setSimilarDesigns(similar);
+      } catch (err) {
+        console.error('Failed to load similar designs:', err);
+      }
+    };
+    loadSimilarDesigns();
+  }, [design.id, design.category, design.style]);
 
   // Parse size_quantities if it's a string (from database)
   let parsedSizeQuantities = selectedColor?.size_quantities;
@@ -2675,35 +2371,73 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
     }
   };
 
+  const handleViewSimilarDesign = (similarDesign: Design) => {
+    setDesignHistory([...designHistory, currentDesign]);
+    setCurrentDesign(similarDesign);
+    setSelectedColorIndex(0);
+    setSelectedImageIndex(0);
+    setSizeQuantities({});
+    setSetQuantities({});
+    setShowSizeSelection(false);
+    setShowDescription(false);
+    setZoomLevel(1);
+    setPanPosition({ x: 0, y: 0 });
+    
+    setTimeout(() => {
+      scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 0);
+  };
+
+  const handleGoBack = () => {
+    if (designHistory.length > 0) {
+      const previousDesign = designHistory[designHistory.length - 1];
+      setCurrentDesign(previousDesign);
+      setDesignHistory(designHistory.slice(0, -1));
+      setSelectedColorIndex(0);
+      setSelectedImageIndex(0);
+      setSizeQuantities({});
+      setSetQuantities({});
+      setShowSizeSelection(false);
+      setShowDescription(false);
+      setZoomLevel(1);
+      setPanPosition({ x: 0, y: 0 });
+      
+      setTimeout(() => {
+        scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 0);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4 overflow-y-auto" onClick={onClose}>
       <div 
-        className="bg-white rounded-xl shadow-2xl w-full max-w-6xl my-auto max-h-[95vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-none sm:rounded-xl shadow-2xl w-full max-w-6xl my-auto h-full sm:max-h-[95vh] overflow-hidden flex flex-col relative"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Compact Header */}
-        <div className="px-3 py-2 sm:px-4 sm:py-3 border-b border-gray-200 bg-gradient-to-r from-primary to-blue-600 text-white flex items-center justify-between">
-          <div className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3">
-            <h2 className="text-base sm:text-lg font-bold truncate">{design.name}</h2>
-            <span className="text-xs sm:text-sm opacity-90 hidden sm:inline">#{design.design_no}</span>
-            {design.category && (
-              <span className="text-xs px-2 py-0.5 bg-white bg-opacity-20 rounded-full hidden md:inline">
-                {design.category.name}
-              </span>
-            )}
-          </div>
+        {/* Close Button - Absolute positioned */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 sm:top-4 sm:right-4 z-50 text-gray-400 hover:text-gray-600 bg-white hover:bg-gray-100 rounded-full w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center transition shadow-lg"
+          title="Close"
+        >
+          <X className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+
+        {/* Back Button - Show when viewing similar design */}
+        {designHistory.length > 0 && (
           <button
-            onClick={onClose}
-            className="text-white hover:bg-white hover:bg-opacity-20 rounded-full w-8 h-8 flex items-center justify-center transition flex-shrink-0 ml-2"
-            title="Close"
+            onClick={handleGoBack}
+            className="absolute top-3 left-3 sm:top-4 sm:left-4 z-50 text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-100 rounded-full px-3 py-2 sm:px-4 sm:py-2 flex items-center gap-1.5 sm:gap-2 transition shadow-lg font-medium text-xs sm:text-sm"
+            title="Go back"
           >
-            <X className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="hidden sm:inline">Back</span>
           </button>
-        </div>
+        )}
         
         {/* Message Toast */}
         {message && (
-          <div className={`mx-3 mt-2 p-2 rounded-lg text-xs sm:text-sm font-medium ${
+          <div className={`mx-3 mt-14 sm:mt-3 p-2 rounded-lg text-xs sm:text-sm font-medium z-40 ${
             message.includes('Failed') || message.includes('Error')
               ? 'bg-red-50 text-red-700 border border-red-200'
               : 'bg-green-50 text-green-700 border border-green-200'
@@ -2713,9 +2447,9 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
         )}
 
         {/* Main Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-3 sm:p-4 pb-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+          <div className="p-3 sm:p-4 md:p-6 pb-8 pt-14 sm:pt-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               {/* Left Column - Images */}
               <div className="space-y-2 sm:space-y-3">
                 {/* Main Image with Inline Zoom */}
@@ -2755,7 +2489,7 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                   
                   {/* Image Container */}
                   <div 
-                    className="h-[280px] sm:h-[320px] lg:h-[380px] overflow-hidden rounded-xl touch-none"
+                    className="overflow-hidden rounded-xl touch-none"
                     onWheel={handleWheel}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
@@ -2779,7 +2513,7 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                     <img
                       src={selectedImage}
                       alt={selectedColor?.color_name}
-                      className="w-full h-full object-cover transition-transform duration-200 select-none"
+                      className="w-full object-contain transition-transform duration-200 select-none"
                       style={{
                         transform: `scale(${zoomLevel}) translate(${panPosition.x / zoomLevel}px, ${panPosition.y / zoomLevel}px)`,
                         transformOrigin: 'center center'
@@ -2796,111 +2530,178 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                   )}
                 </div>
               ) : (
-                <div className="aspect-w-3 aspect-h-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex flex-col items-center justify-center h-[280px] sm:h-[320px] lg:h-[380px] border border-gray-200">
+                <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex flex-col items-center justify-center min-h-[280px] border border-gray-200 py-12">
                   <ImageIcon className="w-20 h-20 sm:w-24 sm:h-24 text-gray-400 mb-4" />
                   <span className="text-base sm:text-lg text-gray-500 font-medium">{design.design_no}</span>
                 </div>
                 )}
+              </div>
 
-                {/* Image Thumbnails - Horizontal Scroll */}
-                {selectedColor && selectedColor.image_urls.length > 1 && (
-                  <div className="flex gap-2 overflow-x-auto pb-2">
+            {/* Right Column - Product Details */}
+            <div className="space-y-4">
+              {/* Design Info & Price */}
+              <div>
+                <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-1">{design.name}</h2>
+                <p className="text-xs sm:text-sm text-gray-500 mb-3">Design #{design.design_no}</p>
+                
+                {selectedColor && isAuthenticated && design.price && (
+                  <div className="mb-4">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold text-gray-900" style={{ fontSize: '1.25rem' }}>₹{design.price.toLocaleString()}</span>
+                      <span className="text-xs text-gray-500">per piece</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">Exclusive of taxes</p>
+                  </div>
+                )}
+                {!isAuthenticated && (
+                  <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 mb-4">
+                    <p className="text-sm font-medium text-gray-700">Login to view pricing and place orders</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Image Thumbnails */}
+              {selectedColor && selectedColor.image_urls.length > 1 && (
+                <div>
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-2">Product Images</h3>
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                     {selectedColor.image_urls.map((img, idx) => (
                       <button
                         key={idx}
                         onClick={() => setSelectedImageIndex(idx)}
-                        className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 transition ${
+                        className={`flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-lg overflow-hidden transition-all ${
                           selectedImageIndex === idx
-                            ? 'border-primary ring-2 ring-primary ring-opacity-30'
-                            : 'border-gray-200 hover:border-gray-400'
+                            ? 'ring-2 ring-primary shadow-md'
+                            : 'ring-1 ring-gray-200 hover:ring-gray-300'
                         }`}
                       >
                         <img src={img} alt={`View ${idx + 1}`} className="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Color Variants - Compact */}
-                {design.design_colors && design.design_colors.length > 0 && (
-                  <div className="border-t border-gray-200 pt-2 sm:pt-3">
-                    <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-2">Colors ({design.design_colors.length})</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {design.design_colors.map((color, index) => {
-                        let colorSizeQuantities = color.size_quantities;
-                        if (typeof colorSizeQuantities === 'string') {
-                          try {
-                            colorSizeQuantities = JSON.parse(colorSizeQuantities);
-                          } catch (e) {
-                            colorSizeQuantities = undefined;
-                          }
+              {/* Color Variants */}
+              {design.design_colors && design.design_colors.length > 0 && (
+                <div>
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-2">Available Colors ({design.design_colors.length})</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {design.design_colors.map((color, index) => {
+                      let colorSizeQuantities = color.size_quantities;
+                      if (typeof colorSizeQuantities === 'string') {
+                        try {
+                          colorSizeQuantities = JSON.parse(colorSizeQuantities);
+                        } catch (e) {
+                          colorSizeQuantities = undefined;
                         }
-                        const colorTotalStock = colorSizeQuantities 
-                          ? Object.values(colorSizeQuantities).reduce((sum: number, qty: any) => sum + (Number(qty) || 0), 0)
-                          : 0;
+                      }
+                      const colorTotalStock = colorSizeQuantities 
+                        ? Object.values(colorSizeQuantities).reduce((sum: number, qty: any) => sum + (Number(qty) || 0), 0)
+                        : 0;
 
-                        return (
-                          <button
-                            key={color.id}
-                            onClick={() => {
-                              setSelectedColorIndex(index);
-                              setSelectedImageIndex(0);
-                            }}
-                            className={`p-2 rounded-lg border-2 transition text-left ${
-                              selectedColorIndex === index
-                                ? 'border-primary bg-primary bg-opacity-5'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="flex items-center gap-1.5 mb-1">
-                              {color.color_code && (
-                                <div
-                                  className="w-4 h-4 rounded-full border-2 border-white shadow-sm ring-1 ring-gray-300 flex-shrink-0"
-                                  style={{ backgroundColor: color.color_code }}
-                                />
-                              )}
-                              <span className="text-xs sm:text-sm font-semibold text-gray-900 truncate">{color.color_name}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className={colorTotalStock > 0 ? 'text-green-600' : 'text-red-600'}>
-                                {colorTotalStock > 0 ? `${colorTotalStock}` : 'Out'}
-                              </span>
-                              {isAuthenticated && design.price ? (
-                                <span className="font-bold text-primary">₹{design.price.toLocaleString()}</span>
-                              ) : (
-                                <span className="text-xs text-gray-500">🔐 Login</span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                      return (
+                        <button
+                          key={color.id}
+                          onClick={() => {
+                            setSelectedColorIndex(index);
+                            setSelectedImageIndex(0);
+                          }}
+                          className={`p-2 rounded-lg transition-all text-left ${
+                            selectedColorIndex === index
+                              ? 'ring-2 ring-primary bg-primary/5'
+                              : 'ring-1 ring-gray-200 hover:ring-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            {color.color_code && (
+                              <div
+                                className="w-4 h-4 rounded-full shadow-sm ring-1 ring-white flex-shrink-0"
+                                style={{ backgroundColor: color.color_code }}
+                              />
+                            )}
+                            <span className="text-xs font-semibold text-gray-900 truncate">{color.color_name}</span>
+                          </div>
+                          <span className={`text-xs font-medium ${colorTotalStock > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                            {colorTotalStock > 0 ? `${colorTotalStock} pcs` : 'On order'}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
+                </div>
+              )}
+
+              {/* Product Attributes */}
+              <div className="flex flex-wrap gap-2">
+                {design.category && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                    <span className="font-medium">Category:</span>
+                    <span>{design.category.name}</span>
+                  </span>
+                )}
+                {design.style && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">
+                    <span className="font-medium">Style:</span>
+                    <span>{design.style.name}</span>
+                  </span>
+                )}
+                {design.fabric_type && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded text-xs">
+                    <span className="font-medium">Fabric:</span>
+                    <span>{design.fabric_type.name}</span>
+                  </span>
+                )}
+                {selectedColor && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs">
+                    <span className="font-medium">Color:</span>
+                    <span>{selectedColor.color_name}</span>
+                  </span>
                 )}
               </div>
 
-            {/* Right Column - Product Details */}
-            <div className="space-y-3">
-              {/* Price & Description Combined */}
-              <div className="bg-gradient-to-br from-primary/5 to-blue-50 rounded-lg p-3 border border-primary/20">
-                {selectedColor && (
-                  <div className="flex items-baseline gap-2 mb-2">
-                    {isAuthenticated && design.price ? (
-                      <>
-                        <span className="text-2xl sm:text-3xl font-bold text-primary">₹{design.price.toLocaleString()}</span>
-                        <span className="text-xs text-gray-600">per piece</span>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg font-semibold text-gray-700">🔐 Login to view price</span>
-                      </div>
+              {/* Collapsible Product Description */}
+              {dynamicDescription && (
+                <div className="border-t border-gray-100 pt-4">
+                  <button
+                    onClick={() => setShowDescription(!showDescription)}
+                    className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition"
+                  >
+                    <span className="text-sm font-semibold text-gray-900">Product Details</span>
+                    <ChevronDown className={`w-5 h-5 text-gray-600 transition-transform ${
+                      showDescription ? 'rotate-180' : 'rotate-0'
+                    }`} />
+                  </button>
+                  {showDescription && (
+                    <div className="mt-3 text-xs sm:text-sm text-gray-600 leading-relaxed whitespace-pre-line p-3 bg-gray-50 rounded-lg">
+                      {dynamicDescription}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Collapsible Size Selection */}
+              <div className="border-t border-gray-100 pt-4">
+                <button
+                  onClick={() => setShowSizeSelection(!showSizeSelection)}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                    <span className="text-sm font-semibold text-gray-900">Select Sizes</span>
+                    {totalItemsToAdd > 0 && (
+                      <span className="text-xs font-semibold text-white bg-primary px-2 py-1 rounded-full">
+                        {totalItemsToAdd}
+                      </span>
                     )}
                   </div>
-                )}
-                {design.description && (
-                  <p className="text-xs sm:text-sm text-gray-700 leading-relaxed line-clamp-2">{design.description}</p>
-                )}
-              </div>
+                  <ChevronDown className={`w-5 h-5 text-gray-600 transition-transform ${
+                    showSizeSelection ? 'rotate-180' : 'rotate-0'
+                  }`} />
+                </button>
+
+                {showSizeSelection && (
+                  <div className="mt-3 space-y-4">
 
               {/* Admin Toggle for View Mode - Compact */}
               {isAdmin && sizeSets.length > 0 && effectiveAvailableSizes && effectiveAvailableSizes.length > 0 && (
@@ -3118,82 +2919,102 @@ function DesignQuickView({ design, onClose }: DesignQuickViewProps) {
                   </div>
                 )
               )}
+                  </div>
+                )}
+              </div>
 
-              {/* Action Buttons - Compact */}
+              {/* Action Buttons */}
               {selectedColor && (
-                <div className="space-y-2 pt-2 border-t border-gray-200">
+                <div className="space-y-3">
                   {isAuthenticated ? (
                     <>
                       <button
                         onClick={handleAddToCart}
                         disabled={addingToCart || totalItemsToAdd === 0}
-                        className="w-full bg-gradient-to-r from-primary to-blue-600 text-white py-2.5 sm:py-3 text-sm rounded-lg font-semibold hover:shadow-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="w-full bg-primary text-white py-3 sm:py-4 text-sm sm:text-base rounded-xl font-semibold hover:bg-primary/90 hover:shadow-xl transition-all disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 sm:gap-3 shadow-lg"
                       >
-                        <ShoppingCart className="w-4 h-4" />
+                        <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
                         <span>
                           {addingToCart 
-                            ? 'Adding...' 
+                            ? 'Adding to Cart...' 
                             : totalItemsToAdd === 0 
-                            ? 'Select Size' 
-                            : `Add ${totalItemsToAdd} to Cart`}
+                            ? 'Select Sizes to Continue' 
+                            : `Add ${totalItemsToAdd} Item${totalItemsToAdd > 1 ? 's' : ''} to Cart`}
                         </span>
                       </button>
                       <button
                         onClick={handleAddToWishlist}
                         disabled={addingToWishlist}
-                        className="w-full bg-white border border-gray-300 text-gray-700 py-2 sm:py-2.5 text-sm rounded-lg font-medium hover:border-primary hover:text-primary transition flex items-center justify-center gap-2"
+                        className="w-full bg-white ring-1 ring-gray-300 text-gray-700 py-2.5 sm:py-3.5 text-sm sm:text-base rounded-xl font-semibold hover:ring-primary hover:text-primary hover:shadow-md transition-all flex items-center justify-center gap-2"
                       >
-                        <Heart className="w-4 h-4" />
-                        <span>{addingToWishlist ? 'Adding...' : 'Wishlist'}</span>
+                        <Heart className="w-4 h-4 sm:w-5 sm:h-5" />
+                        <span>{addingToWishlist ? 'Adding to Wishlist...' : 'Add to Wishlist'}</span>
                       </button>
                     </>
                   ) : (
-                    <div className="space-y-2">
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-                        <p className="text-sm font-semibold text-yellow-900 mb-2">🔐 Login Required</p>
-                        <p className="text-xs text-yellow-800 mb-3">
-                          Please login to view prices, add to cart, or save to wishlist.
-                        </p>
-                        <a
-                          href="/login"
-                          className="inline-block bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-primary-dark transition"
-                        >
-                          Login / Sign Up
-                        </a>
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4 sm:p-6 text-center">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2 sm:mb-3">
+                        <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                       </div>
+                      <p className="text-sm sm:text-base font-bold text-gray-900 mb-1 sm:mb-2">Login to Place Order</p>
+                      <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4">
+                        Access pricing, add to cart, and manage your wishlist
+                      </p>
+                      <a
+                        href="/login"
+                        className="inline-block bg-primary text-white px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary/90 hover:shadow-lg transition-all"
+                      >
+                        Login / Sign Up
+                      </a>
                     </div>
                   )}
                 </div>
               )}
+
+              {/* Similar Designs Section */}
+              {similarDesigns.length > 0 && (
+                <div className="border-t border-gray-100 pt-4 sm:pt-5">
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-2 sm:mb-3">View Similar Designs</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
+                    {similarDesigns.map((similarDesign) => {
+                      const firstColor = similarDesign.design_colors?.[0];
+                      const firstImage = firstColor?.image_urls?.[0];
+                      
+                      return (
+                        <button
+                          key={similarDesign.id}
+                          onClick={() => handleViewSimilarDesign(similarDesign)}
+                          className="group relative aspect-square bg-gray-100 rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+                        >
+                          {firstImage ? (
+                            <img 
+                              src={firstImage} 
+                              alt={similarDesign.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <ImageIcon className="w-8 h-8 text-gray-300" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute bottom-0 left-0 right-0 p-2">
+                              <p className="text-xs font-semibold text-white truncate">{similarDesign.name}</p>
+                              <p className="text-xs text-white/80">#{similarDesign.design_no}</p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
             </div>
           </div>
         </div>
       </div>
     </div>
-
-      {/* Mobile: Bottom Fixed Filter & Sort Buttons - Two separate buttons */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-2xl">
-        <div className="flex gap-2 p-3">
-          <button
-            onClick={() => setShowFilters(true)}
-            className="flex-1 bg-gray-900 text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-gray-800 transition-all"
-          >
-            <Filter className="w-5 h-5" />
-            <span>Filter</span>
-            {activeFilterCount > 0 && (
-              <span className="bg-white text-gray-900 text-xs px-2 py-0.5 rounded-full font-bold">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setShowSortModal(true)}
-            className="flex-1 bg-primary text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-primary-dark transition-all"
-          >
-            <span>Sort</span>
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

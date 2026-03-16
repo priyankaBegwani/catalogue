@@ -128,6 +128,14 @@ export function Login({ onShowSetup }: LoginProps) {
       {/* Login Form Container */}
       <div className="flex-1 flex items-center justify-center md:justify-end pt-0 md:pt-0 lg:pt-0 p-4 sm:p-6 md:pr-8 lg:pr-16 relative z-20">
         <div className="w-full max-w-sm">
+          {/* Mobile Tagline - Above Login Card */}
+          <div className="md:hidden text-center mb-4">
+            <p className="text-sm text-white/90 font-light tracking-wide flex items-center justify-center gap-2">
+              <Shield className="w-4 h-4 text-[#ffbd54]" />
+              <span>Secure Wholesale Portal for Verified Retailers</span>
+            </p>
+          </div>
+
           {/* Login Card - Enhanced Shadow on Desktop/Tablet */}
           <div
             className="login-card p-5 sm:p-6"

@@ -1,15 +1,26 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { api, Design, Brand, DesignStyle } from '../lib/api';
-import { Plus, Trash2, ImageIcon, Package, MessageCircle, CheckSquare, Square, Search, X } from 'lucide-react';
-import { AddDesignModal, ViewDesignModal, ErrorAlert } from '../components';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { api, Design, Brand, DesignStyle, DesignCategory, FabricType } from '../lib/api';
+import { Plus, Trash2, ImageIcon, Package, MessageCircle, CheckSquare, Square, Search, X, Filter } from 'lucide-react';
+import { AddDesignModal, ViewDesignModal, ErrorAlert, Breadcrumb } from '../components';
+import {
+  DesktopFiltersSidebar,
+  FilterState,
+  MobileFiltersSheet,
+  getActiveFilterCount,
+  getDesignTags
+} from '../components/CatalogueLikeFilters';
 
 export function DesignManagement() {
   const [designs, setDesigns] = useState<Design[]>([]);
   const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([]);
+  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
+  const [categories, setCategories] = useState<DesignCategory[]>([]);
+  const [fabricTypes, setFabricTypes] = useState<FabricType[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [styles, setStyles] = useState<DesignStyle[]>([]);
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedStyle, setSelectedStyle] = useState<string>('');
+  const [selectedFabricType, setSelectedFabricType] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -19,17 +30,47 @@ export function DesignManagement() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedDesigns, setSelectedDesigns] = useState<Set<string>>(new Set());
   const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
-  const [showSortModal, setShowSortModal] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showSortSheet, setShowSortSheet] = useState(false);
   const [masterSearch, setMasterSearch] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedCreatedMonth, setSelectedCreatedMonth] = useState<string>('');
   const searchRef = useRef<HTMLDivElement>(null);
   const [displayedDesigns, setDisplayedDesigns] = useState<Design[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const DESIGNS_PER_PAGE = 20;
+
+  const [availableColors, setAvailableColors] = useState<string[]>([]);
+  const [filters, setFilters] = useState<FilterState>({
+    categories: [],
+    brands: [],
+    priceRange: { min: 0, max: 100000 },
+    colors: [],
+    designNo: '',
+    sortBy: 'newest',
+    tags: []
+  });
+
+  const availableCreatedMonths = useMemo(() => {
+    const monthMap = new Map<string, string>();
+
+    for (const design of designs) {
+      if (!design.created_at) continue;
+      const dt = new Date(design.created_at);
+      if (Number.isNaN(dt.getTime())) continue;
+      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+      const label = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(dt);
+      monthMap.set(key, label);
+    }
+
+    return Array.from(monthMap.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([value, label]) => ({ value, label }));
+  }, [designs]);
 
   const loadDesigns = useCallback(async () => {
     try {
@@ -52,6 +93,24 @@ export function DesignManagement() {
     }
   }, []);
 
+  const loadCategories = useCallback(async () => {
+    try {
+      const data = await api.getDesignCategories();
+      setCategories(data);
+    } catch (err) {
+      console.error('Failed to load categories:', err);
+    }
+  }, []);
+
+  const loadFabricTypes = useCallback(async () => {
+    try {
+      const data = await api.getFabricTypes();
+      setFabricTypes(data);
+    } catch (err) {
+      console.error('Failed to load fabric types:', err);
+    }
+  }, []);
+
   const loadStyles = useCallback(async () => {
     try {
       // Load all styles from all categories for admin view
@@ -69,9 +128,21 @@ export function DesignManagement() {
 
   useEffect(() => {
     loadDesigns();
+    loadCategories();
+    loadFabricTypes();
     loadBrands();
     loadStyles();
-  }, [loadDesigns, loadBrands, loadStyles]);
+  }, [loadDesigns, loadCategories, loadFabricTypes, loadBrands, loadStyles]);
+
+  useEffect(() => {
+    const colors = new Set<string>();
+    designs.forEach(design => {
+      design.design_colors?.forEach(color => {
+        if (color.color_name) colors.add(color.color_name);
+      });
+    });
+    setAvailableColors(Array.from(colors).sort());
+  }, [designs]);
 
   // Reset pagination when filters change
   useEffect(() => {
@@ -79,6 +150,17 @@ export function DesignManagement() {
     setDisplayedDesigns(filteredDesigns.slice(0, DESIGNS_PER_PAGE));
     setHasMore(filteredDesigns.length > DESIGNS_PER_PAGE);
   }, [filteredDesigns]);
+
+  const loadMoreDesigns = useCallback(() => {
+    const nextPage = page + 1;
+    const startIndex = 0;
+    const endIndex = nextPage * DESIGNS_PER_PAGE;
+    const newDisplayedDesigns = filteredDesigns.slice(startIndex, endIndex);
+
+    setDisplayedDesigns(newDisplayedDesigns);
+    setPage(nextPage);
+    setHasMore(endIndex < filteredDesigns.length);
+  }, [DESIGNS_PER_PAGE, filteredDesigns, page]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -102,18 +184,7 @@ export function DesignManagement() {
         observer.unobserve(currentRef);
       }
     };
-  }, [hasMore, page, filteredDesigns]);
-
-  const loadMoreDesigns = () => {
-    const nextPage = page + 1;
-    const startIndex = 0;
-    const endIndex = nextPage * DESIGNS_PER_PAGE;
-    const newDisplayedDesigns = filteredDesigns.slice(startIndex, endIndex);
-    
-    setDisplayedDesigns(newDisplayedDesigns);
-    setPage(nextPage);
-    setHasMore(endIndex < filteredDesigns.length);
-  };
+  }, [hasMore, loadMoreDesigns]);
 
   // Generate autocomplete suggestions
   useEffect(() => {
@@ -134,27 +205,27 @@ export function DesignManagement() {
         if (design.design_no?.toLowerCase().includes(searchTerm)) {
           suggestionSet.add(design.design_no);
         }
-        
+
         // Add design names
         if (design.name?.toLowerCase().includes(searchTerm)) {
           suggestionSet.add(design.name);
         }
-        
+
         // Add category names
         if (design.category?.name?.toLowerCase().includes(searchTerm)) {
           suggestionSet.add(design.category.name);
         }
-        
+
         // Add brand names
         if (design.brand?.name?.toLowerCase().includes(searchTerm)) {
           suggestionSet.add(design.brand.name);
         }
-        
+
         // Add fabric types - check nested object
         if (design.fabric_type?.name?.toLowerCase().includes(searchTerm)) {
           suggestionSet.add(design.fabric_type.name);
         }
-        
+
         // Add color names
         design.design_colors?.forEach(color => {
           if (color.color_name?.toLowerCase().includes(searchTerm)) {
@@ -197,58 +268,124 @@ export function DesignManagement() {
   useEffect(() => {
     // Apply filters
     let filtered = [...designs];
-    
+
     // Master search - search across all fields (applied first for best results)
     if (masterSearch.trim()) {
       const searchTerm = masterSearch.toLowerCase().trim();
       filtered = filtered.filter(design => {
         // Search in design number
         if (design.design_no?.toLowerCase().includes(searchTerm)) return true;
-        
+
         // Search in design name
         if (design.name?.toLowerCase().includes(searchTerm)) return true;
-        
+
         // Search in description
         if (design.description?.toLowerCase().includes(searchTerm)) return true;
-        
+
         // Search in category name - check nested object
         if (design.category?.name?.toLowerCase().includes(searchTerm)) return true;
-        
+
         // Search in brand name - check both nested object and ID lookup
         if (design.brand?.name?.toLowerCase().includes(searchTerm)) return true;
         const brand = brands.find(b => b.id === design.brand_id);
         if (brand?.name?.toLowerCase().includes(searchTerm)) return true;
-        
+
         // Search in fabric type - check nested object
         if (design.fabric_type?.name?.toLowerCase().includes(searchTerm)) return true;
-        
+
         // Search in style name - check both nested object and ID lookup
         if (design.style?.name?.toLowerCase().includes(searchTerm)) return true;
         const style = styles.find(s => s.id === design.style_id);
         if (style?.name?.toLowerCase().includes(searchTerm)) return true;
-        
+
         // Search in color names
-        if (design.design_colors?.some(color => 
-          color.color_name?.toLowerCase().includes(searchTerm)
-        )) return true;
-        
+        if (design.design_colors?.some(color => color.color_name?.toLowerCase().includes(searchTerm))) return true;
+
         return false;
       });
     }
-    
+
     // Apply brand filter
     if (selectedBrand) {
       filtered = filtered.filter(d => d.brand_id === selectedBrand);
     }
-    
+
     // Apply style filter
     if (selectedStyle) {
       filtered = filtered.filter(d => d.style_id === selectedStyle);
     }
-    
-    setFilteredDesigns(filtered);
-  }, [designs, selectedBrand, selectedStyle, masterSearch, brands, styles]);
 
+    if (selectedFabricType) {
+      filtered = filtered.filter(d => d.fabric_type_id === selectedFabricType);
+    }
+
+    if (filters.categories.length > 0) {
+      filtered = filtered.filter(d => d.category && filters.categories.includes(d.category.id));
+    }
+
+    filtered = filtered.filter(d => {
+      const minPrice = getMinPrice(d);
+      return minPrice >= filters.priceRange.min && minPrice <= filters.priceRange.max;
+    });
+
+    if (filters.colors.length > 0) {
+      filtered = filtered.filter(d => d.design_colors?.some(c => filters.colors.includes(c.color_name)));
+    }
+
+    if (filters.designNo.trim()) {
+      filtered = filtered.filter(d => d.design_no.toLowerCase().includes(filters.designNo.toLowerCase()));
+    }
+
+    if (filters.tags.length > 0) {
+      filtered = filtered.filter(d => {
+        const designTags = getDesignTags(d);
+        return filters.tags.some(tag => designTags.includes(tag));
+      });
+    }
+
+    filtered = filtered.filter((design) => (activeTab === 'active' ? design.is_active : !design.is_active));
+
+    if (selectedCreatedMonth) {
+      filtered = filtered.filter((design) => {
+        if (!design.created_at) return false;
+        const dt = new Date(design.created_at);
+        if (Number.isNaN(dt.getTime())) return false;
+        const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+        return key === selectedCreatedMonth;
+      });
+    }
+
+    // Apply sort
+    switch (filters.sortBy) {
+      case 'name':
+        filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        break;
+      case 'price_low':
+        filtered.sort((a, b) => getMinPrice(a) - getMinPrice(b));
+        break;
+      case 'price_high':
+        filtered.sort((a, b) => getMinPrice(b) - getMinPrice(a));
+        break;
+      case 'popularity':
+        filtered.sort((a, b) => {
+          const aPopularity = (a.order_count || 0) + (a.views || 0) * 0.1;
+          const bPopularity = (b.order_count || 0) + (b.views || 0) * 0.1;
+          return bPopularity - aPopularity;
+        });
+        break;
+      case 'newest':
+      default:
+        filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        break;
+    }
+
+    setFilteredDesigns(filtered);
+  }, [designs, selectedBrand, selectedStyle, selectedFabricType, masterSearch, brands, styles, activeTab, filters, selectedCreatedMonth]);
+
+  useEffect(() => {
+    setSelectedDesigns(new Set());
+    setBulkSelectionMode(false);
+  }, [activeTab]);
 
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm('Are you sure you want to delete this design?')) {
@@ -262,6 +399,24 @@ export function DesignManagement() {
       setError(err instanceof Error ? err.message : 'Failed to delete design');
     }
   }, [loadDesigns]);
+
+  const handleClearArchived = useCallback(async () => {
+    if (selectedDesigns.size === 0) return;
+    const confirmed = window.confirm(`Permanently delete ${selectedDesigns.size} archived design(s)? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const idsToDelete = Array.from(selectedDesigns);
+      for (const id of idsToDelete) {
+        await api.deleteDesign(id);
+      }
+      setSelectedDesigns(new Set());
+      setBulkSelectionMode(false);
+      await loadDesigns();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear archived designs');
+    }
+  }, [selectedDesigns, loadDesigns]);
 
   const handleViewDesign = useCallback((design: Design, colorIndex: number = 0) => {
     setSelectedDesign(design);
@@ -287,6 +442,24 @@ export function DesignManagement() {
     return design.price || 0;
   };
 
+  const clearAllFilters = useCallback(() => {
+    setFilters({
+      categories: [],
+      brands: [],
+      priceRange: { min: 0, max: 100000 },
+      colors: [],
+      designNo: '',
+      sortBy: 'newest',
+      tags: []
+    });
+    setSelectedBrand('');
+    setSelectedStyle('');
+    setSelectedFabricType('');
+    setSelectedCreatedMonth('');
+  }, []);
+
+  const activeFilterCount = getActiveFilterCount(filters, selectedFabricType, selectedBrand, selectedStyle);
+
   const toggleDesignSelection = useCallback((designId: string) => {
     setSelectedDesigns(prev => {
       const newSet = new Set(prev);
@@ -300,9 +473,9 @@ export function DesignManagement() {
   }, []);
 
   const selectAllDesigns = useCallback(() => {
-    const allIds = designs.map(d => d.id);
+    const allIds = filteredDesigns.map(d => d.id);
     setSelectedDesigns(new Set(allIds));
-  }, [designs]);
+  }, [filteredDesigns]);
 
   const clearSelection = useCallback(() => {
     setSelectedDesigns(new Set());
@@ -310,12 +483,12 @@ export function DesignManagement() {
 
   const shareBulkOnWhatsApp = async () => {
     if (selectedDesigns.size === 0) return;
-    
+
     try {
       const selectedDesignsData = designs.filter(d => selectedDesigns.has(d.id));
-      
+
       let message = `*🛍️ Check out these ${selectedDesigns.size} beautiful designs from our collection!*\n\n`;
-      
+
       selectedDesignsData.forEach((design, index) => {
         const minPrice = getMinPrice(design);
         const colorCount = design.design_colors?.length || 0;
@@ -327,10 +500,10 @@ export function DesignManagement() {
         }
         message += `\n`;
       });
-      
+
       message += `📱 Contact us for orders and more details!\n`;
       message += `🔗 Browse our full catalogue for more amazing designs!`;
-      
+
       const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
     } catch (error) {
@@ -348,24 +521,86 @@ export function DesignManagement() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-8">
-      {/* Mobile: No heading, Desktop: Show heading */}
-      <div className="hidden sm:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
-        <div className="flex-1">
-          <h1 className="text-2xl sm:text-3xl font-bold text-primary">Design Management</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">Manage product designs and color variants</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-2 bg-primary text-white px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 w-full sm:w-auto justify-center"
-          >
-            <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span>Add Design</span>
-          </button>
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pb-2">
+      <div className="mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <Breadcrumb />
+
+        <div className="relative w-full sm:w-80 lg:w-96" ref={searchRef}>
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="w-4 h-4 text-gray-400 group-focus-within:text-primary transition-colors duration-200" />
+            </div>
+            <input
+              type="text"
+              value={masterSearch}
+              onChange={(e) => setMasterSearch(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              placeholder="Search products..."
+              className="w-full pl-10 sm:pl-12 pr-10 sm:pr-12 py-2 sm:py-2.5 text-sm border-2 border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md focus:shadow-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 placeholder:text-gray-400"
+              autoComplete="off"
+            />
+            {masterSearch && (
+              <button
+                onClick={() => {
+                  setMasterSearch('');
+                  setShowSuggestions(false);
+                }}
+                className="absolute inset-y-0 right-0 pr-3 sm:pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Autocomplete Suggestions Dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-primary border-opacity-20 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden" style={{ zIndex: 9999 }}>
+              <div className="max-h-80 overflow-y-auto py-2">
+                {suggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setMasterSearch(suggestion);
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full px-4 py-2.5 text-left text-sm sm:text-base hover:bg-primary hover:bg-opacity-10 transition-colors duration-150 flex items-center gap-3 group"
+                  >
+                    <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 group-hover:text-primary transition-colors" />
+                    <span className="text-gray-700 group-hover:text-gray-900 font-medium">
+                      {suggestion}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {masterSearch && !showSuggestions && (
+            <div className="mt-3 flex items-center justify-between px-1 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                {isSearching ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs sm:text-sm text-gray-500 font-medium">Searching...</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                    <span className="text-xs sm:text-sm text-gray-600 font-medium">
+                      {filteredDesigns.length} result{filteredDesigns.length !== 1 ? 's' : ''}
+                    </span>
+                  </>
+                )}
+              </div>
+              <span className="text-xs text-gray-500 hidden sm:inline">
+                Searching for: <span className="font-semibold text-gray-700">&quot;{masterSearch}&quot;</span>
+              </span>
+            </div>
+          )}
         </div>
       </div>
-      
+
       {/* Mobile: Add Design button at top */}
       <div className="sm:hidden mb-4">
         <button
@@ -376,208 +611,193 @@ export function DesignManagement() {
           <span>Add Design</span>
         </button>
       </div>
-      
-      {/* Master Search Bar - Elegant & Responsive with Autocomplete */}
-      <div className="relative mb-6" ref={searchRef}>
-        <div className="relative group">
-          <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
-            <Search className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-focus-within:text-primary transition-colors duration-200" />
-          </div>
-          <input
-            type="text"
-            value={masterSearch}
-            onChange={(e) => setMasterSearch(e.target.value)}
-            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-            placeholder="Search products..."
-            className="w-full pl-10 sm:pl-12 pr-10 sm:pr-12 py-2.5 sm:py-3.5 text-sm sm:text-base border-2 border-gray-200 rounded-xl sm:rounded-2xl bg-white shadow-sm hover:shadow-md focus:shadow-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 placeholder:text-gray-400"
-            autoComplete="off"
-          />
-          {masterSearch && (
-            <button
-              onClick={() => {
-                setMasterSearch('');
-                setShowSuggestions(false);
-              }}
-              className="absolute inset-y-0 right-0 pr-3 sm:pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
-              aria-label="Clear search"
-            >
-              <X className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-          )}
-        </div>
-        
-        {/* Autocomplete Suggestions Dropdown */}
-        {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-primary border-opacity-20 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden" style={{ zIndex: 9999 }}>
-            <div className="max-h-80 overflow-y-auto py-2">
-              {suggestions.map((suggestion, index) => (
-                <button
-                  key={index}
-                  onClick={() => {
-                    setMasterSearch(suggestion);
-                    setShowSuggestions(false);
-                  }}
-                  className="w-full px-4 py-2.5 text-left text-sm sm:text-base hover:bg-primary hover:bg-opacity-10 transition-colors duration-150 flex items-center gap-3 group"
-                >
-                  <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 group-hover:text-primary transition-colors" />
-                  <span className="text-gray-700 group-hover:text-gray-900 font-medium">
-                    {suggestion}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {masterSearch && !showSuggestions && (
-          <div className="mt-3 flex items-center justify-between px-1 animate-fadeIn">
-            <div className="flex items-center gap-2">
-              {isSearching ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-xs sm:text-sm text-gray-500 font-medium">Searching...</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
-                  <span className="text-xs sm:text-sm text-gray-600 font-medium">
-                    {filteredDesigns.length} result{filteredDesigns.length !== 1 ? 's' : ''}
-                  </span>
-                </>
-              )}
-            </div>
-            <span className="text-xs text-gray-500 hidden sm:inline">
-              Searching for: <span className="font-semibold text-gray-700">"{masterSearch}"</span>
-            </span>
-          </div>
-        )}
-      </div>
-      
-      {/* Brand & Style Filters - After searchbar */}
-      <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row gap-2">
-        {brands.length > 0 && (
-          <select
-            value={selectedBrand}
-            onChange={(e) => setSelectedBrand(e.target.value)}
-            className="w-full sm:w-auto max-w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-primary focus:border-primary bg-white truncate"
-          >
-            <option value="">All Brands</option>
-            {brands.map((brand) => (
-              <option key={brand.id} value={brand.id}>
-                {brand.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {styles.length > 0 && (
-          <select
-            value={selectedStyle}
-            onChange={(e) => setSelectedStyle(e.target.value)}
-            className="w-full sm:w-auto max-w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-primary focus:border-primary bg-white truncate"
-          >
-            <option value="">All Styles</option>
-            {styles.map((style) => (
-              <option key={style.id} value={style.id}>
-                {style.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-      
-      {/* Select Designs Checkbox - Desktop only */}
-      <div className="hidden sm:block mb-4">
-        <button
-          onClick={() => setBulkSelectionMode(!bulkSelectionMode)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-            bulkSelectionMode 
-              ? 'bg-primary text-white' 
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          {bulkSelectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-          {bulkSelectionMode ? 'Selection Mode' : 'Select Designs'}
-        </button>
-      </div>
-      
-      {/* Bulk Selection Controls */}
-      {bulkSelectionMode && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-medium text-blue-900">
-                {selectedDesigns.size} of {filteredDesigns.length} designs selected
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={selectAllDesigns}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  Select All
-                </button>
-                <span className="text-blue-300">|</span>
-                <button
-                  onClick={clearSelection}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  Clear Selection
-                </button>
+
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Sidebar Filters */}
+        <DesktopFiltersSidebar
+          categories={categories}
+          fabricTypes={fabricTypes}
+          brands={brands}
+          styles={styles}
+          availableColors={availableColors}
+          filters={filters}
+          setFilters={setFilters}
+          selectedFabricType={selectedFabricType}
+          setSelectedFabricType={setSelectedFabricType}
+          selectedBrand={selectedBrand}
+          setSelectedBrand={setSelectedBrand}
+          selectedStyle={selectedStyle}
+          setSelectedStyle={setSelectedStyle}
+          onClearAll={clearAllFilters}
+          showBrand={true}
+          showStyle={true}
+          showFabric={true}
+        />
+
+        <div className="flex-1 min-w-0">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="border-b border-gray-200 bg-gray-50 px-3 sm:px-4">
+              <div className="flex items-end justify-between gap-3">
+                <div className="flex items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('active')}
+                    className={`-mb-px px-4 py-3 text-sm font-semibold border-b-2 transition ${
+                      activeTab === 'active'
+                        ? 'border-primary text-gray-900 bg-white rounded-t-lg'
+                        : 'border-transparent text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Active Designs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('archived')}
+                    className={`-mb-px px-4 py-3 text-sm font-semibold border-b-2 transition ${
+                      activeTab === 'archived'
+                        ? 'border-primary text-gray-900 bg-white rounded-t-lg'
+                        : 'border-transparent text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Archived Designs
+                  </button>
+                </div>
+
+                <div className="hidden sm:flex items-center gap-2 mb-[7px]">
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="inline-flex items-center justify-center space-x-2 bg-primary text-white px-3 py-1.5 text-sm rounded-lg font-semibold hover:bg-opacity-90 transition duration-200"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Design</span>
+                  </button>
+                </div>
               </div>
             </div>
-            <button
-              onClick={shareBulkOnWhatsApp}
-              disabled={selectedDesigns.size === 0}
-              className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <MessageCircle className="w-4 h-4" />
-              Share Selected ({selectedDesigns.size})
-            </button>
+
+            <div className="p-3 sm:p-4">
+              {/* Select Designs Checkbox - Desktop only - Only show when designs exist */}
+              {filteredDesigns.length > 0 && (
+                <div className="hidden sm:flex justify-end mb-4">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 select-none cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+                      checked={bulkSelectionMode}
+                      onChange={() => {
+                        const next = !bulkSelectionMode;
+                        setBulkSelectionMode(next);
+                        if (!next) {
+                          clearSelection();
+                        }
+                      }}
+                    />
+                    <span>Select Designs</span>
+                  </label>
+                </div>
+              )}
+
+              {/* Bulk Selection Controls */}
+              {bulkSelectionMode && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm font-medium text-blue-900">
+                        {selectedDesigns.size} of {filteredDesigns.length} designs selected
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={selectAllDesigns}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Select All
+                        </button>
+                        <span className="text-blue-300">|</span>
+                        <button
+                          onClick={clearSelection}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Clear Selection
+                        </button>
+                      </div>
+                    </div>
+                    {activeTab === 'archived' ? (
+                      <button
+                        onClick={handleClearArchived}
+                        disabled={selectedDesigns.size === 0}
+                        className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Clear Archived ({selectedDesigns.size})
+                      </button>
+                    ) : (
+                      <button
+                        onClick={shareBulkOnWhatsApp}
+                        disabled={selectedDesigns.size === 0}
+                        className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        Share Selected ({selectedDesigns.size})
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <ErrorAlert message={error} onDismiss={() => setError('')} className="mb-6" />
+
+              {loading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="text-gray-600">Loading designs...</div>
+                </div>
+              ) : filteredDesigns.length === 0 ? (
+                <div className="text-center py-12 sm:py-16">
+                  <p className="text-gray-500 text-base sm:text-lg">
+                    {activeTab === 'archived'
+                      ? 'No archived designs found.'
+                      : 'No designs found. Create your first design!'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                  {displayedDesigns.map((design) => (
+                    <DesignCard
+                      key={design.id}
+                      design={design}
+                      onView={(colorIndex) => handleViewDesign(design, colorIndex)}
+                      onEdit={() => handleEditDesign(design)}
+                      onDelete={() => handleDelete(design.id)}
+                      onToggleActive={() => handleToggleActive(design)}
+                      bulkSelectionMode={bulkSelectionMode}
+                      isSelected={selectedDesigns.has(design.id)}
+                      onToggleSelection={() => toggleDesignSelection(design.id)}
+                    />
+                  ))}
+
+                  {/* Infinite Scroll Trigger */}
+                  {hasMore && (
+                    <div ref={loadMoreRef} className="col-span-full flex justify-center py-8">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                        <span className="text-sm text-gray-500">Loading more designs...</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* End of Results */}
+                  {!hasMore && displayedDesigns.length > 0 && (
+                    <div className="col-span-full flex justify-center py-6">
+                      <div className="text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-full">
+                        ✓ All {filteredDesigns.length} designs loaded
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      )}
-
-      <ErrorAlert message={error} onDismiss={() => setError('')} className="mb-6" />
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-        {displayedDesigns.map((design) => (
-          <DesignCard
-            key={design.id}
-            design={design}
-            onView={(colorIndex) => handleViewDesign(design, colorIndex)}
-            onEdit={() => handleEditDesign(design)}
-            onDelete={() => handleDelete(design.id)}
-            onToggleActive={() => handleToggleActive(design)}
-            bulkSelectionMode={bulkSelectionMode}
-            isSelected={selectedDesigns.has(design.id)}
-            onToggleSelection={() => toggleDesignSelection(design.id)}
-          />
-        ))}
-        
-        {/* Infinite Scroll Trigger */}
-        {hasMore && (
-          <div ref={loadMoreRef} className="col-span-full flex justify-center py-8">
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-              <span className="text-sm text-gray-500">Loading more designs...</span>
-            </div>
-          </div>
-        )}
-        
-        {/* End of Results */}
-        {!hasMore && displayedDesigns.length > 0 && (
-          <div className="col-span-full flex justify-center py-6">
-            <div className="text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-full">
-              ✓ All {filteredDesigns.length} designs loaded
-            </div>
-          </div>
-        )}
       </div>
-
-      {designs.length === 0 && (
-        <div className="text-center py-12 sm:py-16">
-          <p className="text-gray-500 text-base sm:text-lg">No designs found. Create your first design!</p>
-        </div>
-      )}
 
       {showAddModal && (
         <AddDesignModal
@@ -602,58 +822,85 @@ export function DesignManagement() {
             setShowViewModal(false);
             setSelectedDesign(null);
           }}
-          onUpdate={async () => {
-            await loadDesigns();
-            // Refresh the selected design with updated data
-            const updatedDesigns = await api.getDesigns();
-            const updatedDesign = updatedDesigns.find(d => d.id === selectedDesign.id);
-            if (updatedDesign) {
-              setSelectedDesign(updatedDesign);
-            }
-          }}
         />
       )}
 
-      {/* Mobile: Sort Modal */}
-      {showSortModal && (
-        <div className="lg:hidden fixed inset-0 z-50 flex items-end" onClick={() => setShowSortModal(false)}>
+      <MobileFiltersSheet
+        isOpen={showFilters}
+        onClose={() => setShowFilters(false)}
+        categories={categories}
+        fabricTypes={fabricTypes}
+        brands={brands}
+        styles={styles}
+        availableColors={availableColors}
+        filters={filters}
+        setFilters={setFilters}
+        selectedFabricType={selectedFabricType}
+        setSelectedFabricType={setSelectedFabricType}
+        selectedBrand={selectedBrand}
+        setSelectedBrand={setSelectedBrand}
+        selectedStyle={selectedStyle}
+        setSelectedStyle={setSelectedStyle}
+        selectedCreatedMonth={selectedCreatedMonth}
+        setSelectedCreatedMonth={setSelectedCreatedMonth}
+        availableCreatedMonths={availableCreatedMonths}
+        onClearAll={clearAllFilters}
+        showBrand={true}
+        showStyle={true}
+        showFabric={true}
+      />
+
+      {/* Mobile Sort Sheet */}
+      {showSortSheet && (
+        <div className="lg:hidden fixed inset-0 z-50 flex items-end" onClick={() => setShowSortSheet(false)}>
           <div className="absolute inset-0 bg-black bg-opacity-50"></div>
-          <div 
-            className="relative w-full bg-white rounded-t-3xl shadow-2xl max-h-[60vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="relative w-full bg-white rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto scrollbar-hide" onClick={(e) => e.stopPropagation()} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between z-10">
               <h2 className="text-lg font-bold text-gray-900">Sort By</h2>
-              <button onClick={() => setShowSortModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button onClick={() => setShowSortSheet(false)} className="p-2 hover:bg-gray-100 rounded-full">
                 <X className="w-5 h-5" />
               </button>
             </div>
+
             <div className="p-4">
-              <div className="space-y-2">
-                {[
-                  { value: 'newest', label: 'Newly Added' },
-                  { value: 'name', label: 'Name (A-Z)' },
-                  { value: 'active', label: 'Active First' },
-                  { value: 'inactive', label: 'Inactive First' }
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      // Sort logic can be implemented here
-                      setShowSortModal(false);
-                    }}
-                    className="w-full text-left px-4 py-3 rounded-lg border-2 border-gray-200 hover:border-gray-300 text-gray-700 transition-all"
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+              {[
+                { value: 'newest', label: 'Newly Added' },
+                { value: 'popularity', label: 'Popularity' },
+                { value: 'price_low', label: 'Price: Low to High' },
+                { value: 'price_high', label: 'Price: High to Low' },
+                { value: 'name', label: 'Name (A-Z)' }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setFilters({ ...filters, sortBy: option.value as any });
+                    setShowSortSheet(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 transition-all ${
+                    filters.sortBy === option.value
+                      ? 'bg-primary/10 text-primary font-semibold'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4">
+              <button
+                onClick={() => setShowSortSheet(false)}
+                className="w-full px-4 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-primary-dark transition"
+              >
+                Apply
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Mobile: Bottom Fixed Filter & Sort Buttons - Two separate buttons */}
+      {/* Mobile: Bottom Fixed Buttons - Select, Filter & Sort */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-2xl">
         <div className="flex gap-2 p-3">
           <button
@@ -664,8 +911,20 @@ export function DesignManagement() {
             <span>{bulkSelectionMode ? 'Selection On' : 'Select'}</span>
           </button>
           <button
-            onClick={() => setShowSortModal(true)}
+            onClick={() => setShowFilters(!showFilters)}
             className="flex-1 bg-primary text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-primary-dark transition-all"
+          >
+            <Filter className="w-5 h-5" />
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="bg-white text-primary text-xs px-2 py-0.5 rounded-full font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setShowSortSheet(!showSortSheet)}
+            className="flex-1 bg-gray-700 text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-gray-600 transition-all"
           >
             <span>Sort</span>
           </button>
@@ -901,15 +1160,6 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
             </span>
           </div>
         </div>
-
-        {/* Design Description */}
-        {design.description && (
-          <div className="mb-2">
-            <p className="text-[10px] text-gray-600 line-clamp-2 leading-tight">
-              {design.description}
-            </p>
-          </div>
-        )}
 
         {/* Color Patches */}
         {colorCount > 0 && (

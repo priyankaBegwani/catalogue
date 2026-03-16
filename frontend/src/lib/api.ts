@@ -699,7 +699,10 @@ class ApiClient {
       category_id?: string;
       style_id?: string;
       fabric_type_id?: string;
+      brand_id?: string;
       available_sizes?: string[];
+      whatsapp_image_url?: string;
+      price?: number;
       is_active?: boolean;
     }
   ): Promise<Design> {
@@ -1413,6 +1416,47 @@ class ApiClient {
       const error = await response.json();
       throw new Error(error.error || 'Failed to delete order');
     }
+  }
+
+  async deleteOrderItem(orderId: string, itemId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/orders/${orderId}/items/${itemId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete order item');
+    }
+  }
+
+  async updateOrderItemSizes(orderId: string, itemId: string, sizesQuantities: { size: string; quantity: number }[]): Promise<void> {
+    const response = await fetch(`${API_URL}/api/orders/${orderId}/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { ...this.getAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sizes_quantities: sizesQuantities }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update order item');
+    }
+  }
+
+  async addItemsToOrder(orderId: string, items: { design_number: string; color: string; sizes_quantities: { size: string; quantity: number }[] }[]): Promise<{ items: OrderItem[] }> {
+    const response = await fetch(`${API_URL}/api/orders/${orderId}/items`, {
+      method: 'POST',
+      headers: {
+        ...this.getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ items }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to add items to order');
+    }
+
+    return await response.json();
   }
 
   async completeOrder(order: Order): Promise<Order> {

@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { api, Design, Party, Order } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import { Breadcrumb } from '../components';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -735,29 +736,20 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24 md:pb-8">
-      {/* Compact Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold text-gray-900">Admin Dashboard</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={refreshData}
-              disabled={refreshing}
-              className="p-2 text-gray-500 hover:text-primary hover:bg-gray-100 rounded-lg transition"
-              aria-label="Refresh data"
-            >
-              <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-            <button className="p-2 text-gray-500 hover:text-primary hover:bg-gray-100 rounded-lg transition">
-              <Search className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </header>
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 flex items-center justify-between gap-3">
+        <Breadcrumb />
+        <button
+          onClick={refreshData}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg transition font-medium text-sm border border-green-200 self-center"
+          aria-label="Refresh data"
+        >
+          <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${refreshing ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
+        </button>
+      </div>
 
-      <main className="px-4 py-4 space-y-6 max-w-7xl mx-auto">
+      <main className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
         {/* Core KPI Stack */}
         <section>
           <SwipeableKpi kpis={kpis} />
@@ -820,7 +812,7 @@ const AdminDashboard: React.FC = () => {
         )}
 
         {/* Two Column Layout for Desktop */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {/* Design Performance Intelligence */}
           <InsightCard
             title="What Designs Are Working?"

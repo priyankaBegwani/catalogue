@@ -12,3 +12,4 @@ export { TawkToChat } from './TawkToChat';
 export { LoadingSpinner } from './LoadingSpinner';
 export { ErrorAlert } from './ErrorAlert';
 export { ForgotPasswordModal } from './ForgotPasswordModal';
+export { Breadcrumb } from './Breadcrumb';
