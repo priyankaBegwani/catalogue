@@ -20,7 +20,13 @@ const app = new Hono();
 
 // Middleware
 app.use('*', cors({
-  origin: '*',
+  origin: (origin, c) => {
+    const frontendUrl = c.env?.FRONTEND_URL;
+    if (!frontendUrl) return origin || '*';
+
+    const allowedOrigins = frontendUrl.split(',').map(u => u.trim().replace(/\/+$/, ''));
+    return allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   exposeHeaders: ['Content-Length'],

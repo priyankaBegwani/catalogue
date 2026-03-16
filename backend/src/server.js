@@ -23,7 +23,25 @@ const app = express();
 // Security and performance middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+
+    const frontendUrl = process.env.FRONTEND_URL;
+    if (!frontendUrl) {
+      // No FRONTEND_URL set — allow all origins (dev / misconfigured prod)
+      return callback(null, true);
+    }
+
+    // Support comma-separated list of allowed origins
+    const allowedOrigins = frontendUrl.split(',').map(u => u.trim().replace(/\/+$/, ''));
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(compression());
