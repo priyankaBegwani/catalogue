@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api, Party } from '../lib/api';
 import * as XLSX from 'xlsx';
 import { Plus, Search, Edit2, Trash2, Users, MapPin, Phone, Upload, Download, Building, Award } from 'lucide-react';
 import { PartyTierSelector } from '../components/PartyTierSelector';
 import { Breadcrumb } from '../components';
-import { getPricingConfig } from '../utils/pricingTiers';
-
 
 const PartyEntry: React.FC = () => {
   const [parties, setParties] = useState<Party[]>([]);
@@ -388,13 +386,15 @@ const PartyEntry: React.FC = () => {
     validatePhoneNumber(value);
   };
 
-  const filteredParties = parties.filter(party =>
-    //party.party_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    party.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    party.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    party.state.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    party.gst_number.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredParties = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    return parties.filter(party =>
+      party.name.toLowerCase().includes(term) ||
+      party.city.toLowerCase().includes(term) ||
+      party.state.toLowerCase().includes(term) ||
+      party.gst_number.toLowerCase().includes(term)
+    );
+  }, [parties, searchTerm]);
 
   if (loading && parties.length === 0) {
     return (

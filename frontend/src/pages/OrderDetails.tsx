@@ -59,9 +59,7 @@ export default function OrderDetails() {
   const fetchOrderDetails = async () => {
     try {
       setLoading(true);
-      const orders = await api.fetchOrders();
-      const ordersData = Array.isArray(orders) ? orders : orders.orders || [];
-      const foundOrder = ordersData.find((o: Order) => o.id === orderId);
+      const foundOrder = await api.getOrderById(orderId!);
       
       if (!foundOrder) {
         setError('Order not found');

@@ -113,14 +113,12 @@ export function DesignManagement() {
 
   const loadStyles = useCallback(async () => {
     try {
-      // Load all styles from all categories for admin view
+      // Load all styles from all categories in parallel for admin view
       const categories = await api.getDesignCategories();
-      const allStyles: DesignStyle[] = [];
-      for (const category of categories) {
-        const categoryStyles = await api.getDesignStyles(category.id);
-        allStyles.push(...categoryStyles);
-      }
-      setStyles(allStyles);
+      const styleArrays = await Promise.all(
+        categories.map(category => api.getDesignStyles(category.id))
+      );
+      setStyles(styleArrays.flat());
     } catch (err) {
       console.error('Failed to load styles:', err);
     }

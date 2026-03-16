@@ -149,9 +149,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
 
   const loadCategories = async () => {
     try {
-      console.log('Loading categories...');
       const data = await api.getDesignCategories();
-      console.log('Categories loaded:', data);
       setCategories(data);
     } catch (err) {
       console.error('Failed to load categories:', err);
@@ -161,9 +159,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
 
   const loadStyles = async (categoryId: string) => {
     try {
-      console.log('Loading styles for category:', categoryId);
       const data = await api.getDesignStyles(categoryId);
-      console.log('Styles loaded:', data);
       setStyles(data);
     } catch (err) {
       console.error('Failed to load styles:', err);
@@ -173,9 +169,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
 
   const loadFabricTypes = async () => {
     try {
-      console.log('Loading fabric types...');
       const data = await api.getFabricTypes();
-      console.log('Fabric types loaded:', data);
       setFabricTypes(data);
     } catch (err) {
       console.error('Failed to load fabric types:', err);
@@ -185,9 +179,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
 
   const loadBrands = async () => {
     try {
-      console.log('Loading brands...');
       const data = await api.getBrands();
-      console.log('Brands loaded:', data);
       setBrands(data);
     } catch (err) {
       console.error('Failed to load brands:', err);

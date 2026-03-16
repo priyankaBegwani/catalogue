@@ -11,57 +11,27 @@ const router = express.Router();
 // GET /api/admin/kpis - Core KPI data
 router.get('/kpis', authenticateUser, requireAdmin, async (req, res) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayISO = today.toISOString();
-    
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const weekAgoISO = weekAgo.toISOString();
-    
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
-    
-    const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    const sixtyDaysAgoISO = sixtyDaysAgo.toISOString();
+    const now = Date.now();
+    const todayISO = new Date(now - (now % 86400000)).toISOString();
+    const weekAgoISO = new Date(now - 7 * 86400000).toISOString();
+    const thirtyDaysAgoISO = new Date(now - 30 * 86400000).toISOString();
+    const sixtyDaysAgoISO = new Date(now - 60 * 86400000).toISOString();
+    const previousWeekStartISO = new Date(now - 14 * 86400000).toISOString();
 
-    // Orders today
-    const { count: ordersToday } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', todayISO);
-
-    // Orders this week
-    const { count: ordersThisWeek } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', weekAgoISO);
-
-    // Active parties (logged in within 30 days)
-    const { count: activeParties } = await supabase
-      .from('user_profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'retailer')
-      .gte('updated_at', thirtyDaysAgoISO);
-
-    // Inactive parties (no activity in 60+ days)
-    const { count: inactiveParties } = await supabase
-      .from('user_profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'retailer')
-      .lt('updated_at', sixtyDaysAgoISO);
-
-    // Previous period comparisons for trends
-    const previousWeekStart = new Date(weekAgo);
-    previousWeekStart.setDate(previousWeekStart.getDate() - 7);
-    
-    const { count: ordersPreviousWeek } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', previousWeekStart.toISOString())
-      .lt('created_at', weekAgoISO);
+    // Run all count queries in parallel
+    const [
+      { count: ordersToday },
+      { count: ordersThisWeek },
+      { count: activeParties },
+      { count: inactiveParties },
+      { count: ordersPreviousWeek }
+    ] = await Promise.all([
+      supabase.from('orders').select('*', { count: 'exact', head: true }).gte('created_at', todayISO),
+      supabase.from('orders').select('*', { count: 'exact', head: true }).gte('created_at', weekAgoISO),
+      supabase.from('user_profiles').select('*', { count: 'exact', head: true }).eq('role', 'retailer').gte('updated_at', thirtyDaysAgoISO),
+      supabase.from('user_profiles').select('*', { count: 'exact', head: true }).eq('role', 'retailer').lt('updated_at', sixtyDaysAgoISO),
+      supabase.from('orders').select('*', { count: 'exact', head: true }).gte('created_at', previousWeekStartISO).lt('created_at', weekAgoISO)
+    ]);
 
     const weekTrend = ordersPreviousWeek > 0 
       ? Math.round(((ordersThisWeek - ordersPreviousWeek) / ordersPreviousWeek) * 100)

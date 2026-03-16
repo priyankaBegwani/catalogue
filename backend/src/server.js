@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
 import { globalErrorHandler } from './utils/errorHandler.js';
 import authRoutes from './routes/auth.js';
@@ -19,10 +21,23 @@ import brandsRoutes from './routes/brands.js';
 const app = express();
 
 // Security and performance middleware
-app.use(cors());
-app.use(compression()); // Compress responses
-app.use(express.json({ limit: '10mb' })); // Limit payload size
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true
+}));
+app.use(compression());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Rate limiting for auth endpoints (prevent brute-force)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 attempts per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' }
+});
 
 // Request logging in development
 if (process.env.NODE_ENV === 'development') {
@@ -32,7 +47,7 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/designs', designsRoutes);
 app.use('/api/storage', storageRoutes);

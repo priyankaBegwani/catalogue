@@ -297,6 +297,44 @@ class ApiClient {
     };
   }
 
+  /**
+   * Central fetch wrapper — handles auth headers, JSON parsing, and error extraction.
+   * All API methods should use this instead of raw fetch.
+   */
+  private async request<T>(
+    path: string,
+    options: {
+      method?: string;
+      body?: unknown;
+      auth?: boolean;
+      errorMsg?: string;
+    } = {}
+  ): Promise<T> {
+    const { method = 'GET', body, auth = true, errorMsg = 'Request failed' } = options;
+
+    const headers: Record<string, string> = {};
+    if (auth) Object.assign(headers, this.getAuthHeader());
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+
+    const response = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+
+    if (!response.ok) {
+      let serverError: string | undefined;
+      try {
+        const errData = await response.json();
+        serverError = errData.error;
+      } catch { /* non-JSON error body */ }
+      throw new Error(serverError || errorMsg);
+    }
+
+    // Some DELETE endpoints return no body (204)
+    const text = await response.text();
+    return text ? JSON.parse(text) : (undefined as unknown as T);
+  }
 
   /*   User Related Functions */
   
@@ -339,79 +377,29 @@ class ApiClient {
   }
 
   async forgotPassword(email: string) {
-    const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to send reset email');
-    }
-
-    return await response.json();
+    return this.request('/api/auth/forgot-password', { method: 'POST', body: { email }, auth: false, errorMsg: 'Failed to send reset email' });
   }
 
   async resetPassword(access_token: string, password: string) {
-    const response = await fetch(`${API_URL}/api/auth/reset-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ access_token, password }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to reset password');
-    }
-
-    return await response.json();
+    return this.request('/api/auth/reset-password', { method: 'POST', body: { access_token, password }, auth: false, errorMsg: 'Failed to reset password' });
   }
 
   async verifyResetToken(access_token: string) {
-    const response = await fetch(`${API_URL}/api/auth/verify-reset-token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ access_token }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Invalid or expired token');
-    }
-
-    return await response.json();
+    return this.request('/api/auth/verify-reset-token', { method: 'POST', body: { access_token }, auth: false, errorMsg: 'Invalid or expired token' });
   }
 
   async getCurrentUser() {
-    const response = await fetch(`${API_URL}/api/auth/me`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to get user');
-    }
-    return await response.json();
+    return this.request('/api/auth/me', { errorMsg: 'Failed to get user' });
   }
 
   // Alias for getCurrentUser - used in profile page
   async getProfile(): Promise<UserProfile> {
-    const response = await this.getCurrentUser();
+    const response: any = await this.getCurrentUser();
     return response.profile;
   }
 
   async getUsers(): Promise<UserProfile[]> {
-    const response = await fetch(`${API_URL}/api/users`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch users');
-    }
-
-    return await response.json();
+    return this.request('/api/users', { errorMsg: 'Failed to fetch users' });
   }
 
   async createUser(userData: {
@@ -421,80 +409,26 @@ class ApiClient {
     role: 'admin' | 'retailer' | 'guest';
     party_id?: string;
   }): Promise<UserProfile> {
-    const response = await fetch(`${API_URL}/api/users`, {
-      method: 'POST',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(userData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create user');
-    }
-
-    return await response.json();
+    return this.request('/api/users', { method: 'POST', body: userData, errorMsg: 'Failed to create user' });
   }
 
   async updateUser(
     id: string,
     updates: { full_name?: string; is_active?: boolean; party_id?: string; can_order_individual_sizes?: boolean }
   ): Promise<UserProfile> {
-    const response = await fetch(`${API_URL}/api/users/${id}`, {
-      method: 'PATCH',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update user');
-    }
-
-    return await response.json();
+    return this.request(`/api/users/${id}`, { method: 'PATCH', body: updates, errorMsg: 'Failed to update user' });
   }
 
   async getLoginHistory(limit: number = 50): Promise<LoginHistory[]> {
-    const response = await fetch(`${API_URL}/api/users/login-history?limit=${limit}`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch login history');
-    }
-
-    return await response.json();
+    return this.request(`/api/users/login-history?limit=${limit}`, { errorMsg: 'Failed to fetch login history' });
   }
 
   async getInactiveUsers(days: number = 30): Promise<UserProfile[]> {
-    const response = await fetch(`${API_URL}/api/users/inactive?days=${days}`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch inactive users');
-    }
-
-    return await response.json();
+    return this.request(`/api/users/inactive?days=${days}`, { errorMsg: 'Failed to fetch inactive users' });
   }
 
   async deleteUser(id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/users/${id}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to delete user');
-    }
+    return this.request(`/api/users/${id}`, { method: 'DELETE', errorMsg: 'Failed to delete user' });
   }
 
 
@@ -502,107 +436,32 @@ class ApiClient {
   /* Designs related Functions */
 
   async getDesignCategories(): Promise<DesignCategory[]> {
-    const response = await fetch(`${API_URL}/api/designs/categories`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch design categories');
-    }
-
-    return await response.json();
+    return this.request('/api/designs/categories', { errorMsg: 'Failed to fetch design categories' });
   }
 
   async getDesignStyles(categoryId?: string): Promise<DesignStyle[]> {
-    const url = categoryId
-      ? `${API_URL}/api/designs/styles?category_id=${categoryId}`
-      : `${API_URL}/api/designs/styles`;
-
-    const response = await fetch(url, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch design styles');
-    }
-
-    return await response.json();
+    const qs = categoryId ? `?category_id=${categoryId}` : '';
+    return this.request(`/api/designs/styles${qs}`, { errorMsg: 'Failed to fetch design styles' });
   }
 
   async getFabricTypes(): Promise<FabricType[]> {
-    const response = await fetch(`${API_URL}/api/designs/fabric-types`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch fabric types');
-    }
-
-    return await response.json();
+    return this.request('/api/designs/fabric-types', { errorMsg: 'Failed to fetch fabric types' });
   }
 
   async getBrands(): Promise<Brand[]> {
-    const response = await fetch(`${API_URL}/api/brands`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch brands');
-    }
-
-    return await response.json();
+    return this.request('/api/brands', { errorMsg: 'Failed to fetch brands' });
   }
 
   async createBrand(brand: Partial<Brand>): Promise<Brand> {
-    const response = await fetch(`${API_URL}/api/brands`, {
-      method: 'POST',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(brand),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create brand');
-    }
-
-    return await response.json();
+    return this.request('/api/brands', { method: 'POST', body: brand, errorMsg: 'Failed to create brand' });
   }
 
   async updateBrand(id: string, brand: Partial<Brand>): Promise<Brand> {
-    const response = await fetch(`${API_URL}/api/brands/${id}`, {
-      method: 'PUT',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(brand),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update brand');
-    }
-
-    return await response.json();
+    return this.request(`/api/brands/${id}`, { method: 'PUT', body: brand, errorMsg: 'Failed to update brand' });
   }
 
   async deleteBrand(id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/brands/${id}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to delete brand');
-    }
+    return this.request(`/api/brands/${id}`, { method: 'DELETE', errorMsg: 'Failed to delete brand' });
   }
 
   async getDesigns(categoryId?: string, fabricTypeId?: string, brandId?: string, styleId?: string, activeOnly?: boolean): Promise<Design[]> {
@@ -612,36 +471,12 @@ class ApiClient {
     if (brandId) params.append('brand_id', brandId);
     if (styleId) params.append('style_id', styleId);
     if (activeOnly) params.append('active_only', 'true');
-    
-    const url = params.toString() 
-      ? `${API_URL}/api/designs?${params.toString()}`
-      : `${API_URL}/api/designs`;
-
-    const response = await fetch(url, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch designs');
-    }
-
-    return await response.json();
+    const qs = params.toString() ? `?${params}` : '';
+    return this.request(`/api/designs${qs}`, { errorMsg: 'Failed to fetch designs' });
   }
 
-
-  
   async getDesign(id: string): Promise<Design> {
-    const response = await fetch(`${API_URL}/api/designs/${id}`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch design');
-    }
-
-    return await response.json();
+    return this.request(`/api/designs/${id}`, { errorMsg: 'Failed to fetch design' });
   }
 
 
@@ -671,21 +506,7 @@ class ApiClient {
       image_urls?: string[];
     }>;
   }): Promise<Design> {
-    const response = await fetch(`${API_URL}/api/designs`, {
-      method: 'POST',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(designData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create design');
-    }
-
-    return await response.json();
+    return this.request('/api/designs', { method: 'POST', body: designData, errorMsg: 'Failed to create design' });
   }
 
 
@@ -706,53 +527,18 @@ class ApiClient {
       is_active?: boolean;
     }
   ): Promise<Design> {
-    const response = await fetch(`${API_URL}/api/designs/${id}`, {
-      method: 'PUT',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update design');
-    }
-
-    return await response.json();
+    return this.request(`/api/designs/${id}`, { method: 'PUT', body: updates, errorMsg: 'Failed to update design' });
   }
 
 
   
   async searchDesigns(query: string): Promise<Design[]> {
-    if (!query || query.trim().length === 0) {
-      return [];
-    }
-
-    const response = await fetch(`${API_URL}/api/designs/search?q=${encodeURIComponent(query)}`, {
-      method: 'GET',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to search designs');
-    }
-
-    return await response.json();
+    if (!query || query.trim().length === 0) return [];
+    return this.request(`/api/designs/search?q=${encodeURIComponent(query)}`, { errorMsg: 'Failed to search designs' });
   }
 
   async deleteDesign(id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/designs/${id}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to delete design');
-    }
+    return this.request(`/api/designs/${id}`, { method: 'DELETE', errorMsg: 'Failed to delete design' });
   }
 
 
@@ -775,21 +561,7 @@ class ApiClient {
       image_urls?: string[];
     }
   ): Promise<DesignColor> {
-    const response = await fetch(`${API_URL}/api/designs/${designId}/colors`, {
-      method: 'POST',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(colorData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to add color');
-    }
-
-    return await response.json();
+    return this.request(`/api/designs/${designId}/colors`, { method: 'POST', body: colorData, errorMsg: 'Failed to add color' });
   }
 
   async updateDesignColor(
@@ -811,33 +583,11 @@ class ApiClient {
       image_urls?: string[];
     }
   ): Promise<DesignColor> {
-    const response = await fetch(`${API_URL}/api/designs/colors/${colorId}`, {
-      method: 'PUT',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update color');
-    }
-
-    return await response.json();
+    return this.request(`/api/designs/colors/${colorId}`, { method: 'PUT', body: updates, errorMsg: 'Failed to update color' });
   }
 
   async deleteDesignColor(colorId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/designs/colors/${colorId}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to delete color');
-    }
+    return this.request(`/api/designs/colors/${colorId}`, { method: 'DELETE', errorMsg: 'Failed to delete color' });
   }
 
 
@@ -846,29 +596,11 @@ class ApiClient {
   /* Cart Related Functions */
 
   async getCart(): Promise<CartItem[]> {
-    const response = await fetch(`${API_URL}/api/cart`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch cart');
-    }
-
-    return await response.json();
+    return this.request('/api/cart', { errorMsg: 'Failed to fetch cart' });
   }
 
   async getSizeSets(): Promise<SizeSet[]> {
-    const response = await fetch(`${API_URL}/api/cart/size-sets`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch size sets');
-    }
-
-    return await response.json();
+    return this.request('/api/cart/size-sets', { errorMsg: 'Failed to fetch size sets' });
   }
 
   async addToCart(cartData: {
@@ -878,65 +610,19 @@ class ApiClient {
     size_set_id?: string;
     quantity?: number;
   }): Promise<CartItem> {
-    const response = await fetch(`${API_URL}/api/cart`, {
-      method: 'POST',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(cartData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to add to cart');
-    }
-
-    return await response.json();
+    return this.request('/api/cart', { method: 'POST', body: cartData, errorMsg: 'Failed to add to cart' });
   }
 
-  
   async updateCartItem(itemId: string, quantity: number): Promise<CartItem> {
-    const response = await fetch(`${API_URL}/api/cart/${itemId}`, {
-      method: 'PUT',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ quantity }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update cart item');
-    }
-
-    return await response.json();
+    return this.request(`/api/cart/${itemId}`, { method: 'PUT', body: { quantity }, errorMsg: 'Failed to update cart item' });
   }
 
-  
   async removeFromCart(itemId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/cart/${itemId}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to remove from cart');
-    }
+    return this.request(`/api/cart/${itemId}`, { method: 'DELETE', errorMsg: 'Failed to remove from cart' });
   }
 
   async clearCart(): Promise<void> {
-    const response = await fetch(`${API_URL}/api/cart`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to clear cart');
-    }
+    return this.request('/api/cart', { method: 'DELETE', errorMsg: 'Failed to clear cart' });
   }
 
   async checkout(checkoutData: {
@@ -945,173 +631,49 @@ class ApiClient {
     transport?: string;
     remarks?: string;
   }): Promise<any> {
-    const response = await fetch(`${API_URL}/api/orders/checkout`, {
-      method: 'POST',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(checkoutData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to checkout');
-    }
-
-    return await response.json();
+    return this.request('/api/orders/checkout', { method: 'POST', body: checkoutData, errorMsg: 'Failed to checkout' });
   }
 
   async getTransportOptions(): Promise<any[]> {
-    const response = await fetch(`${API_URL}/api/transport`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch transport options');
-    }
-
-    const data = await response.json();
+    const data: any = await this.request('/api/transport', { errorMsg: 'Failed to fetch transport options' });
     return data.transportOptions || [];
   }
 
   /* WishList related Items */
   async getWishlist(): Promise<WishlistItem[]> {
-    const response = await fetch(`${API_URL}/api/wishlist`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch wishlist');
-    }
-
-    return await response.json();
+    return this.request('/api/wishlist', { errorMsg: 'Failed to fetch wishlist' });
   }
 
   async addToWishlist(designId: string): Promise<WishlistItem> {
-    const response = await fetch(`${API_URL}/api/wishlist`, {
-      method: 'POST',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ design_id: designId }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to add to wishlist');
-    }
-
-    return await response.json();
+    return this.request('/api/wishlist', { method: 'POST', body: { design_id: designId }, errorMsg: 'Failed to add to wishlist' });
   }
 
   async removeFromWishlist(designId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/wishlist/${designId}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to remove from wishlist');
-    }
+    return this.request(`/api/wishlist/${designId}`, { method: 'DELETE', errorMsg: 'Failed to remove from wishlist' });
   }
 
 
 /* party Related functions*/
 
-  
   async fetchParties(): Promise<PartiesResponse> {
-    const url = `${API_URL}/api/parties`;
-
-    const response = await fetch(url, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch parties');
-    }
-
-    return await response.json();
+    return this.request('/api/parties', { errorMsg: 'Failed to fetch parties' });
   }
 
   async getPartyById(id: string): Promise<Party> {
-    const response = await fetch(`${API_URL}/api/parties/${id}`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      let errorMessage = 'Failed to fetch party details';
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch (parseError) {
-        console.error('Failed to parse error response:', parseError);
-      }
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
+    const data: any = await this.request(`/api/parties/${id}`, { errorMsg: 'Failed to fetch party details' });
     return data.party;
   }
 
   async getOrderById(id: string): Promise<Order> {
-    const response = await fetch(`${API_URL}/api/orders/${id}`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      let errorMessage = 'Failed to fetch order details';
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch (parseError) {
-        console.error('Failed to parse error response:', parseError);
-      }
-      throw new Error(errorMessage);
-    }
-
-    return await response.json();
+    return this.request(`/api/orders/${id}`, { errorMsg: 'Failed to fetch order details' });
   }
 
   async updateParty(id: string, data: Partial<Party>): Promise<Party> {
-    const response = await fetch(`${API_URL}/api/parties/${id}`, {
-      method: 'PUT',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to update party');
-    }
-
-    return await response.json();
+    return this.request(`/api/parties/${id}`, { method: 'PUT', body: data, errorMsg: 'Failed to update party' });
   }
 
   async deleteParty(id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/parties/${id}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      let errorMessage = 'Failed to delete party';
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch (parseError) {
-        console.error('Failed to parse error response:', parseError);
-      }
-      throw new Error(errorMessage);
-    }
+    return this.request(`/api/parties/${id}`, { method: 'DELETE', errorMsg: 'Failed to delete party' });
   }
 
   
@@ -1131,152 +693,63 @@ class ApiClient {
     hybrid_override_tier_id?: string,
     monthly_order_count?: number
   }, editingParty: Party | null): Promise<Party> {
-      const url = editingParty 
-          ? `${API_URL}/api/parties/${editingParty.id}`
-          : `${API_URL}/api/parties`;
-      
-      const method = editingParty ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to ${editingParty ? 'update' : 'create'} party`);
-      }
-
-    return await response.json();
+    const path = editingParty ? `/api/parties/${editingParty.id}` : '/api/parties';
+    const method = editingParty ? 'PUT' : 'POST';
+    return this.request(path, { method, body: formData, errorMsg: `Failed to ${editingParty ? 'update' : 'create'} party` });
   }
 
 
   async importParties(validRows: ImportPartyData[]) {
-     let successCount = 0;
-      let errorCount = 0;
-      const errors: string[] = [];
-
-      for (const row of validRows) {
-        try {
-            const response = await fetch(`${API_URL}/api/parties`, {
-            method: 'POST',
-            headers: {
-              ...this.getAuthHeader(),
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              name: row.name,
-              description: row.description,
-              address: row.address,
-              city: row.city,
-              state: row.state,
-              pincode: row.pincode,
-              phone_number: row.phone_number,
-              gst_number: row.gst_number
-            }),
-          });
-
-          if (response.ok) {
-            successCount++;
-          } else {
-            const errorData = await response.json();
-            errors.push(`Row ${row.rowNumber}: ${errorData.error || 'Failed to create party'}`);
-            errorCount++;
-          }
-           } catch (err) {
-          errors.push(`Row ${row.rowNumber}: Network error`);
-          errorCount++;
-        }
-      }
-
-    return {
-      successCount: successCount,
-      errors: errors
-    }
-
-  }
-
-  async importTransports(validRows: ImportTransportData[]) {
     let successCount = 0;
-    let errorCount = 0;
     const errors: string[] = [];
 
     for (const row of validRows) {
       try {
-        const response = await fetch(`${API_URL}/api/transport`, {
+        await this.request('/api/parties', {
           method: 'POST',
-          headers: {
-            ...this.getAuthHeader(),
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            transport_name: row.transport_name,
-            description: row.description,
-            address: row.address,
-            city: row.city,
-            state: row.state,
-            district: row.district,
-            pincode: row.pincode,
-            phone_number: row.phone_number,
-            gst_number: row.gst_number
-          }),
+          body: { name: row.name, description: row.description, address: row.address, city: row.city, state: row.state, pincode: row.pincode, phone_number: row.phone_number, gst_number: row.gst_number },
+          errorMsg: 'Failed to create party'
         });
-
-        if (response.ok) {
-          successCount++;
-        } else {
-          const errorData = await response.json();
-          errors.push(`Row ${row.rowNumber}: ${errorData.error || 'Failed to create transport'}`);
-          errorCount++;
-        }
-      } catch (err) {
-        errors.push(`Row ${row.rowNumber}: Network error`);
-        errorCount++;
+        successCount++;
+      } catch (err: any) {
+        errors.push(`Row ${row.rowNumber}: ${err.message || 'Network error'}`);
       }
     }
 
-    return {
-      successCount: successCount,
-      errors: errors
+    return { successCount, errors };
+  }
+
+  async importTransports(validRows: ImportTransportData[]) {
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const row of validRows) {
+      try {
+        await this.request('/api/transport', {
+          method: 'POST',
+          body: { transport_name: row.transport_name, description: row.description, address: row.address, city: row.city, state: row.state, district: row.district, pincode: row.pincode, phone_number: row.phone_number, gst_number: row.gst_number },
+          errorMsg: 'Failed to create transport'
+        });
+        successCount++;
+      } catch (err: any) {
+        errors.push(`Row ${row.rowNumber}: ${err.message || 'Network error'}`);
+      }
     }
+
+    return { successCount, errors };
   }
 
 
   /* Transport related functions */
 
   async fetchTransports(): Promise<TransportListResponse> {
-    const url = `${API_URL}/api/transport`;
-
-    const response = await fetch(url, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch transports');
-    }
-
-    return await response.json();
+    return this.request('/api/transport', { errorMsg: 'Failed to fetch transports' });
   }
-
 
   async deleteTransport(id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/transport/${id}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to delete transport');
-    }
+    return this.request(`/api/transport/${id}`, { method: 'DELETE', errorMsg: 'Failed to delete transport' });
   }
 
-  
   async createOrEditTransport(formData: {
      transport_name: string,
     description: string,
@@ -1288,175 +761,54 @@ class ApiClient {
     city: string,
     pincode: string
   }, editingTransport: Transport | null): Promise<{ message: string; transport: Transport }> {
-      const url = editingTransport 
-          ? `${API_URL}/api/transport/${editingTransport.id}`
-          : `${API_URL}/api/transport`;
-      
-      const method = editingTransport ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to ${editingTransport ? 'update' : 'create'} transport option`);
-      }
-
-    return await response.json();
+    const path = editingTransport ? `/api/transport/${editingTransport.id}` : '/api/transport';
+    const method = editingTransport ? 'PUT' : 'POST';
+    return this.request(path, { method, body: formData, errorMsg: `Failed to ${editingTransport ? 'update' : 'create'} transport option` });
   }
 
 
   /* Location related functions */
 
   async fetchStates(): Promise<{ states: string[] }> {
-    const response = await fetch(`${API_URL}/api/locations/states`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch states');
-    }
-
-    return await response.json();
+    return this.request('/api/locations/states', { errorMsg: 'Failed to fetch states' });
   }
 
   async fetchDistricts(state: string): Promise<{ districts: string[] }> {
-    const response = await fetch(`${API_URL}/api/locations/districts?state=${encodeURIComponent(state)}`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch districts');
-    }
-
-    return await response.json();
+    return this.request(`/api/locations/districts?state=${encodeURIComponent(state)}`, { errorMsg: 'Failed to fetch districts' });
   }
 
   async fetchCities(district: string): Promise<{ cities: Array<{ city_name: string; zipcode: string; is_major_city: boolean }> }> {
-    const response = await fetch(`${API_URL}/api/locations/cities?district=${encodeURIComponent(district)}`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch cities');
-    }
-
-    return await response.json();
+    return this.request(`/api/locations/cities?district=${encodeURIComponent(district)}`, { errorMsg: 'Failed to fetch cities' });
   }
 
 
 /* Orders related function */
   async fetchOrders(): Promise<OrdersResponse> {
-    const url = `${API_URL}/api/orders`;
-
-    const response = await fetch(url, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch orders');
-    }
-
-    return await response.json();
+    return this.request('/api/orders', { errorMsg: 'Failed to fetch orders' });
   }
 
   async createOrder(orderData: CreateOrderData): Promise<Order> {
-    const response = await fetch(`${API_URL}/api/orders`, {
-      method: 'POST',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(orderData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create order');
-    }
-
-    return await response.json();
+    return this.request('/api/orders', { method: 'POST', body: orderData, errorMsg: 'Failed to create order' });
   }
 
   async updateOrder(id: string, orderData: CreateOrderData): Promise<Order> {
-    const response = await fetch(`${API_URL}/api/orders/${id}`, {
-      method: 'PUT',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(orderData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update order');
-    }
-
-    return await response.json();
+    return this.request(`/api/orders/${id}`, { method: 'PUT', body: orderData, errorMsg: 'Failed to update order' });
   }
 
   async deleteOrder(id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/orders/${id}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to delete order');
-    }
+    return this.request(`/api/orders/${id}`, { method: 'DELETE', errorMsg: 'Failed to delete order' });
   }
 
   async deleteOrderItem(orderId: string, itemId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/orders/${orderId}/items/${itemId}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeader(),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to delete order item');
-    }
+    return this.request(`/api/orders/${orderId}/items/${itemId}`, { method: 'DELETE', errorMsg: 'Failed to delete order item' });
   }
 
   async updateOrderItemSizes(orderId: string, itemId: string, sizesQuantities: { size: string; quantity: number }[]): Promise<void> {
-    const response = await fetch(`${API_URL}/api/orders/${orderId}/items/${itemId}`, {
-      method: 'PATCH',
-      headers: { ...this.getAuthHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sizes_quantities: sizesQuantities }),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update order item');
-    }
+    return this.request(`/api/orders/${orderId}/items/${itemId}`, { method: 'PATCH', body: { sizes_quantities: sizesQuantities }, errorMsg: 'Failed to update order item' });
   }
 
   async addItemsToOrder(orderId: string, items: { design_number: string; color: string; sizes_quantities: { size: string; quantity: number }[] }[]): Promise<{ items: OrderItem[] }> {
-    const response = await fetch(`${API_URL}/api/orders/${orderId}/items`, {
-      method: 'POST',
-      headers: {
-        ...this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ items }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to add items to order');
-    }
-
-    return await response.json();
+    return this.request(`/api/orders/${orderId}/items`, { method: 'POST', body: { items }, errorMsg: 'Failed to add items to order' });
   }
 
   async completeOrder(order: Order): Promise<Order> {
@@ -1479,120 +831,39 @@ class ApiClient {
   }
 
   async getDashboardKpis(): Promise<any> {
-    const response = await fetch(`${API_URL}/api/admin/kpis`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch KPIs');
-    }
-
-    return await response.json();
+    return this.request('/api/admin/kpis', { errorMsg: 'Failed to fetch KPIs' });
   }
 
   async getTopViewedDesigns(): Promise<any[]> {
-    const response = await fetch(`${API_URL}/api/admin/designs/top-viewed`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch top viewed designs');
-    }
-
-    return await response.json();
+    return this.request('/api/admin/designs/top-viewed', { errorMsg: 'Failed to fetch top viewed designs' });
   }
 
   async getTopOrderedDesigns(): Promise<any[]> {
-    const response = await fetch(`${API_URL}/api/admin/designs/top-ordered`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch top ordered designs');
-    }
-
-    return await response.json();
+    return this.request('/api/admin/designs/top-ordered', { errorMsg: 'Failed to fetch top ordered designs' });
   }
 
   async getMostSharedDesigns(): Promise<any[]> {
-    const response = await fetch(`${API_URL}/api/admin/designs/most-shared`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch most shared designs');
-    }
-
-    return await response.json();
+    return this.request('/api/admin/designs/most-shared', { errorMsg: 'Failed to fetch most shared designs' });
   }
 
   async getActiveParties(): Promise<any[]> {
-    const response = await fetch(`${API_URL}/api/admin/parties/active`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch active parties');
-    }
-
-    return await response.json();
+    return this.request('/api/admin/parties/active', { errorMsg: 'Failed to fetch active parties' });
   }
 
   async getStagnantParties(): Promise<any[]> {
-    const response = await fetch(`${API_URL}/api/admin/parties/stagnant`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch stagnant parties');
-    }
-
-    return await response.json();
+    return this.request('/api/admin/parties/stagnant', { errorMsg: 'Failed to fetch stagnant parties' });
   }
 
   async getColorTrends(): Promise<any[]> {
-    const response = await fetch(`${API_URL}/api/admin/trends/colors`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch color trends');
-    }
-
-    return await response.json();
+    return this.request('/api/admin/trends/colors', { errorMsg: 'Failed to fetch color trends' });
   }
 
   async getWhatsAppEngagement(): Promise<any> {
-    const response = await fetch(`${API_URL}/api/admin/engagement/whatsapp`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch WhatsApp engagement');
-    }
-
-    return await response.json();
+    return this.request('/api/admin/engagement/whatsapp', { errorMsg: 'Failed to fetch WhatsApp engagement' });
   }
 
   async getDashboardAlerts(): Promise<any[]> {
-    const response = await fetch(`${API_URL}/api/admin/alerts`, {
-      headers: this.getAuthHeader(),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch alerts');
-    }
-
-    return await response.json();
+    return this.request('/api/admin/alerts', { errorMsg: 'Failed to fetch alerts' });
   }
 
 }

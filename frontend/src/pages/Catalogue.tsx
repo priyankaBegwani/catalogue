@@ -415,13 +415,6 @@ export function Catalogue() {
         })
         .slice(0, 8);
 
-      console.log('🔍 Search term:', searchTerm);
-      console.log('📊 Filtered designs:', designs.length);
-      console.log('🌍 All designs (for autocomplete):', allDesigns.length);
-      console.log('🏭 Fabric types loaded:', fabricTypes.length);
-      console.log('💡 Suggestions generated:', sortedSuggestions);
-      console.log('✅ Show dropdown:', sortedSuggestions.length > 0);
-      
       setSuggestions(sortedSuggestions);
       setShowSuggestions(sortedSuggestions.length > 0);
       setIsSearching(false);
@@ -442,16 +435,19 @@ export function Catalogue() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    // Extract unique colors from all designs
+  const availableColorsMemo = useMemo(() => {
     const colors = new Set<string>();
     designs.forEach(design => {
       design.design_colors?.forEach(color => {
         if (color.color_name) colors.add(color.color_name);
       });
     });
-    setAvailableColors(Array.from(colors).sort());
+    return Array.from(colors).sort();
   }, [designs]);
+
+  useEffect(() => {
+    setAvailableColors(availableColorsMemo);
+  }, [availableColorsMemo]);
 
   const loadCategories = async () => {
     try {
@@ -1315,15 +1311,7 @@ export function Catalogue() {
                   </div>
                 )}
 
-                {filteredDesigns.length > 0 && (activeFilterCount > 0 || filteredDesigns.length < designs.length) && (
-                  <button
-                    onClick={shareFilteredCatalogue}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-all duration-200 shadow-md hover:shadow-lg"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>Share Selection</span>
-                  </button>
-                )}
+                
               </div>
 
               {/* Bulk Selection Controls */}
@@ -2053,16 +2041,10 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
         const profile = await api.getProfile();
         setUserProfile(profile);
         
-        console.log('User profile loaded:', profile);
-        
         // Load size sets if user is a retailer or admin
         if (profile.role === 'retailer' || profile.role === 'admin') {
-          console.log('Loading size sets for retailer/admin...');
           const sets = await api.getSizeSets();
-          console.log('Size sets loaded:', sets);
           setSizeSets(sets);
-        } else {
-          console.log('User is not a retailer/admin, role:', profile.role);
         }
       } catch (err) {
         console.error('Failed to load user data:', err);
@@ -2295,22 +2277,6 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
     ? Object.values(setQuantities).reduce((sum, qty) => sum + qty, 0)
     : Object.values(sizeQuantities).reduce((sum, qty) => sum + qty, 0);
 
-  // Debug logging
-  console.log('Quick View Debug:', {
-    designName: design.name,
-    userProfile: userProfile,
-    isRetailer: isRetailer,
-    sizeSets: sizeSets,
-    sizeSetCount: sizeSets.length,
-    originalAvailableSizes: design.available_sizes,
-    effectiveAvailableSizes: effectiveAvailableSizes,
-    effectiveAvailableSizesLength: effectiveAvailableSizes?.length,
-    sizeQuantities,
-    setQuantities,
-    totalItemsToAdd,
-    selectedColor: selectedColor?.color_name,
-    parsedSizeQuantities
-  });
 
   const handleAddToCart = async () => {
     if (!selectedColor || totalItemsToAdd === 0) return;

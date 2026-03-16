@@ -1,5 +1,5 @@
 import express from 'express';
-import { supabase, config } from '../config.js';
+import { supabase } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { 
   asyncHandler, 
@@ -9,39 +9,9 @@ import {
   executeQuery,
   cacheMiddleware
 } from '../utils/index.js';
-import { getPublicUrl } from '../config/r2.js';
+import { convertToSignedUrls } from '../utils/imageUrls.js';
 
 const router = express.Router();
-
-// Helper function to convert image URLs to signed URLs
-async function convertToSignedUrls(imageUrls) {
-  if (!imageUrls || imageUrls.length === 0) return imageUrls;
-
-  // Only generate signed URLs for CDN storage type
-  if (config.storageType !== 'cdn') {
-    return imageUrls;
-  }
-
-  const signedUrls = [];
-  for (const imageUrl of imageUrls) {
-    try {
-      const urlParts = imageUrl.split('/');
-      const keyStartIndex = urlParts.findIndex(part => part === 'designs');
-      
-      if (keyStartIndex !== -1) {
-        const key = urlParts.slice(keyStartIndex).join('/');
-        const publicUrl = getPublicUrl(key);
-        signedUrls.push(publicUrl);
-      } else {
-        signedUrls.push(imageUrl);
-      }
-    } catch (error) {
-      console.error(`Failed to generate signed URL for ${imageUrl}:`, error);
-      signedUrls.push(imageUrl);
-    }
-  }
-  return signedUrls;
-}
 
 router.get('/size-sets', 
   authenticateUser, 
@@ -100,16 +70,14 @@ router.get('/',
       'Failed to fetch cart items'
     );
 
-    // Convert image URLs to signed URLs for each cart item
-    const cartItemsWithSignedUrls = await Promise.all(
-      cartItems.map(async (item) => ({
-        ...item,
-        color: item.color ? {
-          ...item.color,
-          image_urls: await convertToSignedUrls(item.color.image_urls)
-        } : item.color
-      }))
-    );
+    // Convert image URLs to signed URLs for each cart item (synchronous)
+    const cartItemsWithSignedUrls = cartItems.map(item => ({
+      ...item,
+      color: item.color ? {
+        ...item.color,
+        image_urls: convertToSignedUrls(item.color.image_urls)
+      } : item.color
+    }));
 
     res.json(cartItemsWithSignedUrls);
   })

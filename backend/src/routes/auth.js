@@ -1,8 +1,25 @@
 import express from 'express';
+import { createClient } from '@supabase/supabase-js';
 import { config, supabase, supabaseAdmin } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Fire-and-forget login history write (non-critical audit log)
+function recordLoginAttempt(req, userId, status) {
+  supabase
+    .from('login_history')
+    .insert({
+      user_id: userId,
+      login_time: new Date().toISOString(),
+      ip_address: req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress,
+      user_agent: req.headers['user-agent'],
+      status
+    })
+    .then(({ error }) => {
+      if (error) console.error('Login history write failed:', error.message);
+    });
+}
 
 router.post('/signup', async (req, res) => {
   try {
@@ -98,16 +115,7 @@ router.post('/login', async (req, res) => {
         .maybeSingle();
 
       if (profileError || !profile) {
-        // Record failed login attempt
-        await supabase
-          .from('login_history')
-          .insert({
-            user_id: null,
-            login_time: new Date().toISOString(),
-            ip_address: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-            user_agent: req.headers['user-agent'],
-            status: 'failed'
-          });
+        recordLoginAttempt(req, null, 'failed');
         return res.status(401).json({ error: 'Invalid username or password' });
       }
 
@@ -120,17 +128,7 @@ router.post('/login', async (req, res) => {
     });
 
     if (error) {
-      // Record failed login attempt
-      await supabase
-        .from('login_history')
-        .insert({
-          user_id: null,
-          login_time: new Date().toISOString(),
-          ip_address: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-          user_agent: req.headers['user-agent'],
-          status: 'failed'
-        });
-      
+      recordLoginAttempt(req, null, 'failed');
       return res.status(401).json({ error: error.message });
     }
 
@@ -144,22 +142,9 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'User account is inactive' });
     }
 
-    // Update last_login_at in user_profiles
-    await supabase
-      .from('user_profiles')
-      .update({ last_login_at: new Date().toISOString() })
-      .eq('id', data.user.id);
-
-    // Record successful login in login_history
-    await supabase
-      .from('login_history')
-      .insert({
-        user_id: data.user.id,
-        login_time: new Date().toISOString(),
-        ip_address: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-        user_agent: req.headers['user-agent'],
-        status: 'success'
-      });
+    // Fire-and-forget: update last_login_at and record login history
+    supabase.from('user_profiles').update({ last_login_at: new Date().toISOString() }).eq('id', data.user.id).then(() => {});
+    recordLoginAttempt(req, data.user.id, 'success');
 
     res.json({
       user: data.user,
@@ -295,23 +280,12 @@ router.post('/reset-password', async (req, res) => {
       return res.status(500).json({ error: 'Password reset is not configured correctly' });
     }
 
-    // Create a Supabase client with the user's access token
-    const { createClient } = await import('@supabase/supabase-js');
     const userSupabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      },
-      global: {
-        headers: {
-          Authorization: `Bearer ${access_token}`
-        }
-      }
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: `Bearer ${access_token}` } }
     });
 
-    const { data, error } = await userSupabase.auth.updateUser({
-      password: password
-    });
+    const { data, error } = await userSupabase.auth.updateUser({ password });
 
     if (error) {
       console.error('Reset password error:', error);
@@ -338,18 +312,9 @@ router.post('/verify-reset-token', async (req, res) => {
       return res.status(500).json({ error: 'Password reset is not configured correctly' });
     }
 
-    // Create a Supabase client with the user's access token
-    const { createClient } = await import('@supabase/supabase-js');
     const userSupabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      },
-      global: {
-        headers: {
-          Authorization: `Bearer ${access_token}`
-        }
-      }
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: `Bearer ${access_token}` } }
     });
 
     const { data, error } = await userSupabase.auth.getUser();

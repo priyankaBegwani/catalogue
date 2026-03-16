@@ -1,189 +1,138 @@
 import express from 'express';
 import { supabase } from '../config.js';
 import { authenticateUser, optionalAuth } from '../middleware/auth.js';
-import { deleteFromR2, getPublicUrl } from '../config/r2.js';
+import { deleteFromR2 } from '../config/r2.js';
+import { convertToSignedUrls, extractR2Key } from '../utils/imageUrls.js';
+import { asyncHandler, AppError } from '../utils/index.js';
 
 const router = express.Router();
 
-// Helper function to convert image URLs to signed URLs
-function convertToSignedUrls(imageUrls) {
-  if (!imageUrls || imageUrls.length === 0) return imageUrls;
+// Shared select for design with all relations
+const DESIGN_WITH_COLORS_SELECT = `
+  *,
+  design_colors (
+    id,
+    design_id,
+    color_name,
+    color_code,
+    in_stock,
+    stock_quantity,
+    size_quantities,
+    image_urls,
+    created_at,
+    updated_at
+  )
+`;
 
-  const signedUrls = [];
-  for (const imageUrl of imageUrls) {
-    try {
-      const urlParts = imageUrl.split('/');
-      const keyStartIndex = urlParts.findIndex(part => part === 'designs');
-      
-      if (keyStartIndex !== -1) {
-        const key = urlParts.slice(keyStartIndex).join('/');
-        const publicUrl = getPublicUrl(key);
-        signedUrls.push(publicUrl);
-      } else {
-        signedUrls.push(imageUrl);
-      }
-    } catch (error) {
-      console.error(`Failed to generate signed URL for ${imageUrl}:`, error);
-      signedUrls.push(imageUrl);
-    }
-  }
-  return signedUrls;
+/**
+ * Delete all R2 images for an array of image URLs. Logs errors but does not throw.
+ */
+async function deleteImagesFromR2(imageUrls) {
+  if (!imageUrls || imageUrls.length === 0) return;
+  await Promise.allSettled(
+    imageUrls.map(async (url) => {
+      const key = extractR2Key(url);
+      if (key) await deleteFromR2(key);
+    })
+  );
 }
 
-router.get('/categories', optionalAuth, async (req, res) => {
-  try {
-    const { data: categories, error } = await supabase
-      .from('design_categories')
-      .select('*')
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
+router.get('/categories', optionalAuth, asyncHandler(async (req, res) => {
+  const { data: categories, error } = await supabase
+    .from('design_categories')
+    .select('*')
+    .eq('is_active', true)
+    .order('display_order', { ascending: true });
 
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
+  if (error) throw new AppError(error.message, 500);
+  res.json(categories);
+}));
 
-    res.json(categories);
-  } catch (error) {
-    console.error('Get categories error:', error);
-    res.status(500).json({ error: 'Failed to fetch categories' });
+router.get('/styles', authenticateUser, asyncHandler(async (req, res) => {
+  const { category_id } = req.query;
+
+  let query = supabase
+    .from('design_styles')
+    .select('*')
+    .eq('is_active', true)
+    .order('display_order', { ascending: true });
+
+  if (category_id) {
+    query = query.eq('category_id', category_id);
   }
-});
 
-router.get('/styles', authenticateUser, async (req, res) => {
-  try {
-    const { category_id } = req.query;
+  const { data: styles, error } = await query;
+  if (error) throw new AppError(error.message, 500);
+  res.json(styles);
+}));
 
-    let query = supabase
-      .from('design_styles')
-      .select('*')
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
+router.get('/fabric-types', optionalAuth, asyncHandler(async (req, res) => {
+  const { data: fabricTypes, error } = await supabase
+    .from('fabric_types')
+    .select('*')
+    .eq('is_active', true)
+    .order('display_order', { ascending: true });
 
-    if (category_id) {
-      query = query.eq('category_id', category_id);
-    }
-
-    const { data: styles, error } = await query;
-
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
-    res.json(styles);
-  } catch (error) {
-    console.error('Get styles error:', error);
-    res.status(500).json({ error: 'Failed to fetch styles' });
-  }
-});
-
-router.get('/fabric-types', optionalAuth, async (req, res) => {
-  try {
-    const { data: fabricTypes, error } = await supabase
-      .from('fabric_types')
-      .select('*')
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
-
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
-    res.json(fabricTypes);
-  } catch (error) {
-    console.error('Get fabric types error:', error);
-    res.status(500).json({ error: 'Failed to fetch fabric types' });
-  }
-});
+  if (error) throw new AppError(error.message, 500);
+  res.json(fabricTypes);
+}));
 
 // Search endpoint - optimized for fast searching across all fields
-router.get('/search', optionalAuth, async (req, res) => {
-  try {
-    const { q } = req.query;
-    
-    if (!q || q.trim().length === 0) {
-      return res.json([]);
-    }
-
-    const searchTerm = `%${q.toLowerCase().trim()}%`;
-
-    // Use database search with ILIKE for case-insensitive partial matching
-    const { data: designs, error } = await supabase
-      .from('designs')
-      .select(`
-        *,
-        category:design_categories(id, name),
-        fabric_type:fabric_types(id, name),
-        brand:brands(id, name),
-        design_colors(*)
-      `)
-      .or(`design_no.ilike.${searchTerm},name.ilike.${searchTerm},description.ilike.${searchTerm}`)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (error) {
-      console.error('Search error:', error);
-      return res.status(500).json({ error: error.message });
-    }
-
-    // Additional filtering for related fields (category, brand, fabric, colors)
-    let filteredDesigns = designs || [];
-    
-    // Filter by category name, brand name, fabric type, or color names
-    const lowerQ = q.toLowerCase().trim();
-    filteredDesigns = filteredDesigns.filter(design => {
-      // Already matched by database query
-      if (design.design_no?.toLowerCase().includes(lowerQ) ||
-          design.name?.toLowerCase().includes(lowerQ) ||
-          design.description?.toLowerCase().includes(lowerQ)) {
-        return true;
-      }
-      
-      // Check category
-      if (design.category?.name?.toLowerCase().includes(lowerQ)) {
-        return true;
-      }
-      
-      // Check brand
-      if (design.brand?.name?.toLowerCase().includes(lowerQ)) {
-        return true;
-      }
-      
-      // Check fabric type
-      if (design.fabric_type?.name?.toLowerCase().includes(lowerQ)) {
-        return true;
-      }
-      
-      // Check color names
-      if (design.design_colors?.some(color => 
-        color.color_name?.toLowerCase().includes(lowerQ)
-      )) {
-        return true;
-      }
-      
-      return false;
-    });
-
-    // Convert image URLs to signed URLs
-    const designsWithSignedUrls = filteredDesigns.map(design => ({
-      ...design,
-      design_colors: design.design_colors?.map(color => ({
-        ...color,
-        image_urls: convertToSignedUrls(color.image_urls || []),
-        video_urls: color.video_urls || []
-      })) || []
-    }));
-
-    res.json(designsWithSignedUrls);
-  } catch (error) {
-    console.error('Search error:', error);
-    res.status(500).json({ error: 'Failed to search designs' });
+router.get('/search', optionalAuth, asyncHandler(async (req, res) => {
+  const { q } = req.query;
+  
+  if (!q || q.trim().length === 0) {
+    return res.json([]);
   }
-});
 
-router.get('/', optionalAuth, async (req, res) => {
-  try {
-    const { category_id, fabric_type_id, brand_id, style_id, active_only, created_month } = req.query;
-    const isAuthenticated = !!req.user;
+  const searchTerm = `%${q.toLowerCase().trim()}%`;
+
+  const { data: designs, error } = await supabase
+    .from('designs')
+    .select(`
+      *,
+      category:design_categories(id, name),
+      fabric_type:fabric_types(id, name),
+      brand:brands(id, name),
+      design_colors(*)
+    `)
+    .or(`design_no.ilike.${searchTerm},name.ilike.${searchTerm},description.ilike.${searchTerm}`)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) throw new AppError(error.message, 500);
+
+  const lowerQ = q.toLowerCase().trim();
+  const filteredDesigns = (designs || []).filter(design => {
+    if (design.design_no?.toLowerCase().includes(lowerQ) ||
+        design.name?.toLowerCase().includes(lowerQ) ||
+        design.description?.toLowerCase().includes(lowerQ)) {
+      return true;
+    }
+    if (design.category?.name?.toLowerCase().includes(lowerQ)) return true;
+    if (design.brand?.name?.toLowerCase().includes(lowerQ)) return true;
+    if (design.fabric_type?.name?.toLowerCase().includes(lowerQ)) return true;
+    if (design.design_colors?.some(color => 
+      color.color_name?.toLowerCase().includes(lowerQ)
+    )) return true;
+    return false;
+  });
+
+  const designsWithSignedUrls = filteredDesigns.map(design => ({
+    ...design,
+    design_colors: design.design_colors?.map(color => ({
+      ...color,
+      image_urls: convertToSignedUrls(color.image_urls || []),
+      video_urls: color.video_urls || []
+    })) || []
+  }));
+
+  res.json(designsWithSignedUrls);
+}));
+
+router.get('/', optionalAuth, asyncHandler(async (req, res) => {
+  const { category_id, fabric_type_id, brand_id, style_id, active_only, created_month } = req.query;
+  const isAuthenticated = !!req.user;
 
     let query = supabase
       .from('designs')
@@ -270,23 +219,16 @@ router.get('/', optionalAuth, async (req, res) => {
     }
 
     const { data: designs, error } = await query;
+    if (error) throw new AppError(error.message, 500);
 
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
-    // Convert image URLs to signed URLs for all designs
-    const designsWithSignedUrls = await Promise.all(
-      designs.map(async (design) => ({
-        ...design,
-        design_colors: await Promise.all(
-          (design.design_colors || []).map(async (color) => ({
-            ...color,
-            image_urls: await convertToSignedUrls(color.image_urls)
-          }))
-        )
+    // Convert image URLs to signed URLs for all designs (synchronous — no await needed)
+    const designsWithSignedUrls = designs.map(design => ({
+      ...design,
+      design_colors: (design.design_colors || []).map(color => ({
+        ...color,
+        image_urls: convertToSignedUrls(color.image_urls)
       }))
-    );
+    }));
 
     // Hide prices for non-authenticated users
     if (!isAuthenticated) {
@@ -303,16 +245,11 @@ router.get('/', optionalAuth, async (req, res) => {
     }
 
     res.json(designsWithSignedUrls);
-  } catch (error) {
-    console.error('Get designs error:', error);
-    res.status(500).json({ error: 'Failed to fetch designs' });
-  }
-});
+}));
 
-router.get('/:id', optionalAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const isAuthenticated = !!req.user;
+router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const isAuthenticated = !!req.user;
 
     const { data: design, error } = await supabase
       .from('designs')
@@ -354,13 +291,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
       .eq('id', id)
       .maybeSingle();
 
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
-    if (!design) {
-      return res.status(404).json({ error: 'Design not found' });
-    }
+    if (error) throw new AppError(error.message, 500);
+    if (!design) throw new AppError('Design not found', 404);
 
     // Hide prices for non-authenticated users
     if (!isAuthenticated) {
@@ -377,349 +309,207 @@ router.get('/:id', optionalAuth, async (req, res) => {
     }
 
     res.json(design);
-  } catch (error) {
-    console.error('Get design error:', error);
-    res.status(500).json({ error: 'Failed to fetch design' });
+}));
+
+router.post('/', authenticateUser, asyncHandler(async (req, res) => {
+  if (req.profile.role !== 'admin') {
+    throw new AppError('Admin access required', 403);
   }
-});
 
-router.post('/', authenticateUser, async (req, res) => {
-  try {
-    if (req.profile.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
+  const { design_no, name, description, category_id, style_id, fabric_type_id, brand_id, available_sizes, price, colors } = req.body;
 
-    const { design_no, name, description, category_id, style_id, fabric_type_id, brand_id, available_sizes, price, colors } = req.body;
-
-    if (!design_no || !name) {
-      return res.status(400).json({ error: 'Design number and name are required' });
-    }
-
-    const { data: design, error: designError } = await supabase
-      .from('designs')
-      .insert({
-        design_no,
-        name,
-        description: description || '',
-        category_id: category_id || null,
-        style_id: style_id || null,
-        fabric_type_id: fabric_type_id || null,
-        brand_id: brand_id || null,
-        available_sizes: available_sizes || [],
-        price: price || 0,
-        created_by: req.user.id
-      })
-      .select()
-      .single();
-
-    if (designError) {
-      return res.status(400).json({ error: designError.message });
-    }
-
-    if (colors && colors.length > 0) {
-      const colorInserts = colors.map(color => ({
-        design_id: design.id,
-        color_name: color.color_name,
-        color_code: color.color_code || null,
-        in_stock: color.in_stock !== undefined ? color.in_stock : true,
-        stock_quantity: color.stock_quantity || 0,
-        size_quantities: color.size_quantities || { S: 0, M: 0, L: 0, XL: 0, XXL: 0, XXXL: 0 },
-        image_urls: color.image_urls || []
-      }));
-
-      const { error: colorsError } = await supabase
-        .from('design_colors')
-        .insert(colorInserts);
-
-      if (colorsError) {
-        await supabase.from('designs').delete().eq('id', design.id);
-        return res.status(400).json({ error: colorsError.message });
-      }
-    }
-
-    const { data: fullDesign } = await supabase
-      .from('designs')
-      .select(`
-        *,
-        design_colors (
-          id,
-          design_id,
-          color_name,
-          color_code,
-          in_stock,
-          stock_quantity,
-          size_quantities,
-          image_urls,
-          created_at,
-          updated_at
-        )
-      `)
-      .eq('id', design.id)
-      .single();
-
-    res.status(201).json(fullDesign);
-  } catch (error) {
-    console.error('Create design error:', error);
-    res.status(500).json({ error: 'Failed to create design' });
+  if (!design_no || !name) {
+    throw new AppError('Design number and name are required', 400);
   }
-});
 
-router.put('/:id', authenticateUser, async (req, res) => {
-  try {
-    if (req.profile.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
+  const { data: design, error: designError } = await supabase
+    .from('designs')
+    .insert({
+      design_no,
+      name,
+      description: description || '',
+      category_id: category_id || null,
+      style_id: style_id || null,
+      fabric_type_id: fabric_type_id || null,
+      brand_id: brand_id || null,
+      available_sizes: available_sizes || [],
+      price: price || 0,
+      created_by: req.user.id
+    })
+    .select()
+    .single();
 
-    const { id } = req.params;
-    const { design_no, name, description, category_id, style_id, fabric_type_id, brand_id, available_sizes, price, is_active } = req.body;
+  if (designError) throw new AppError(designError.message, 400);
 
-    const updateData = {};
-    if (design_no !== undefined) updateData.design_no = design_no;
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (category_id !== undefined) updateData.category_id = category_id;
-    if (style_id !== undefined) updateData.style_id = style_id || null;
-    if (fabric_type_id !== undefined) updateData.fabric_type_id = fabric_type_id || null;
-    if (brand_id !== undefined) updateData.brand_id = brand_id || null;
-    if (available_sizes !== undefined) updateData.available_sizes = available_sizes;
-    if (price !== undefined) updateData.price = price;
-    if (is_active !== undefined) updateData.is_active = is_active;
+  if (colors && colors.length > 0) {
+    const colorInserts = colors.map(color => ({
+      design_id: design.id,
+      color_name: color.color_name,
+      color_code: color.color_code || null,
+      in_stock: color.in_stock !== undefined ? color.in_stock : true,
+      stock_quantity: color.stock_quantity || 0,
+      size_quantities: color.size_quantities || { S: 0, M: 0, L: 0, XL: 0, XXL: 0, XXXL: 0 },
+      image_urls: color.image_urls || []
+    }));
 
-    const { data: design, error } = await supabase
-      .from('designs')
-      .update(updateData)
-      .eq('id', id)
-      .select(`
-        *,
-        design_colors (
-          id,
-          design_id,
-          color_name,
-          color_code,
-          in_stock,
-          stock_quantity,
-          size_quantities,
-          image_urls,
-          created_at,
-          updated_at
-        )
-      `)
-      .single();
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    res.json(design);
-  } catch (error) {
-    console.error('Update design error:', error);
-    res.status(500).json({ error: 'Failed to update design' });
-  }
-});
-
-router.delete('/:id', authenticateUser, async (req, res) => {
-  try {
-    if (req.profile.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const { id } = req.params;
-
-    // First, fetch the design with all its colors and images
-    const { data: design, error: fetchError } = await supabase
-      .from('designs')
-      .select(`
-        *,
-        design_colors (
-          id,
-          image_urls
-        )
-      `)
-      .eq('id', id)
-      .single();
-
-    if (fetchError) {
-      return res.status(400).json({ error: fetchError.message });
-    }
-
-    if (!design) {
-      return res.status(404).json({ error: 'Design not found' });
-    }
-
-    // Delete all images from storage
-    if (design.design_colors && design.design_colors.length > 0) {
-      for (const color of design.design_colors) {
-        if (color.image_urls && color.image_urls.length > 0) {
-          for (const imageUrl of color.image_urls) {
-            try {
-              // Extract key from URL
-              const urlParts = imageUrl.split('/');
-              const keyStartIndex = urlParts.findIndex(part => part === 'designs');
-              
-              if (keyStartIndex !== -1) {
-                const key = urlParts.slice(keyStartIndex).join('/');
-                
-                // Delete from R2
-                await deleteFromR2(key);
-              }
-            } catch (deleteError) {
-              console.error(`Failed to delete image ${imageUrl}:`, deleteError);
-              // Continue with other images even if one fails
-            }
-          }
-        }
-      }
-    }
-
-    // Now delete the design from database (cascade will delete colors)
-    const { error } = await supabase
-      .from('designs')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    res.json({ message: 'Design and associated images deleted successfully' });
-  } catch (error) {
-    console.error('Delete design error:', error);
-    res.status(500).json({ error: 'Failed to delete design' });
-  }
-});
-
-router.post('/:id/colors', authenticateUser, async (req, res) => {
-  try {
-    if (req.profile.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const { id } = req.params;
-    const { color_name, color_code, in_stock, stock_quantity, size_quantities, image_urls } = req.body;
-
-    if (!color_name) {
-      return res.status(400).json({ error: 'Color name is required' });
-    }
-
-    const { data: color, error } = await supabase
+    const { error: colorsError } = await supabase
       .from('design_colors')
-      .insert({
-        design_id: id,
-        color_name,
-        color_code: color_code || null,
-        in_stock: in_stock !== undefined ? in_stock : true,
-        stock_quantity: stock_quantity || 0,
-        size_quantities: size_quantities || { S: 0, M: 0, L: 0, XL: 0, XXL: 0, XXXL: 0 },
-        image_urls: image_urls || []
-      })
-      .select()
-      .single();
+      .insert(colorInserts);
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
+    if (colorsError) {
+      await supabase.from('designs').delete().eq('id', design.id);
+      throw new AppError(colorsError.message, 400);
     }
-
-    res.status(201).json(color);
-  } catch (error) {
-    console.error('Add color error:', error);
-    res.status(500).json({ error: 'Failed to add color' });
   }
-});
 
-router.put('/colors/:colorId', authenticateUser, async (req, res) => {
-  try {
-    if (req.profile.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
+  const { data: fullDesign } = await supabase
+    .from('designs')
+    .select(DESIGN_WITH_COLORS_SELECT)
+    .eq('id', design.id)
+    .single();
 
-    const { colorId } = req.params;
-    const { color_name, color_code, in_stock, stock_quantity, size_quantities, image_urls } = req.body;
+  res.status(201).json(fullDesign);
+}));
 
-    const updateData = {};
-    if (color_name !== undefined) updateData.color_name = color_name;
-    if (color_code !== undefined) updateData.color_code = color_code;
-    if (in_stock !== undefined) updateData.in_stock = in_stock;
-    if (stock_quantity !== undefined) updateData.stock_quantity = stock_quantity;
-    if (size_quantities !== undefined) updateData.size_quantities = size_quantities;
-    if (image_urls !== undefined) updateData.image_urls = image_urls;
-
-    const { data: color, error } = await supabase
-      .from('design_colors')
-      .update(updateData)
-      .eq('id', colorId)
-      .select()
-      .single();
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    res.json(color);
-  } catch (error) {
-    console.error('Update color error:', error);
-    res.status(500).json({ error: 'Failed to update color' });
+router.put('/:id', authenticateUser, asyncHandler(async (req, res) => {
+  if (req.profile.role !== 'admin') {
+    throw new AppError('Admin access required', 403);
   }
-});
 
-router.delete('/colors/:colorId', authenticateUser, async (req, res) => {
-  try {
-    if (req.profile.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
+  const { id } = req.params;
+  const { design_no, name, description, category_id, style_id, fabric_type_id, brand_id, available_sizes, price, is_active } = req.body;
 
-    const { colorId } = req.params;
+  const updateData = {};
+  if (design_no !== undefined) updateData.design_no = design_no;
+  if (name !== undefined) updateData.name = name;
+  if (description !== undefined) updateData.description = description;
+  if (category_id !== undefined) updateData.category_id = category_id;
+  if (style_id !== undefined) updateData.style_id = style_id || null;
+  if (fabric_type_id !== undefined) updateData.fabric_type_id = fabric_type_id || null;
+  if (brand_id !== undefined) updateData.brand_id = brand_id || null;
+  if (available_sizes !== undefined) updateData.available_sizes = available_sizes;
+  if (price !== undefined) updateData.price = price;
+  if (is_active !== undefined) updateData.is_active = is_active;
 
-    // First, fetch the color with its images
-    const { data: color, error: fetchError } = await supabase
-      .from('design_colors')
-      .select('id, image_urls')
-      .eq('id', colorId)
-      .single();
+  const { data: design, error } = await supabase
+    .from('designs')
+    .update(updateData)
+    .eq('id', id)
+    .select(DESIGN_WITH_COLORS_SELECT)
+    .single();
 
-    if (fetchError) {
-      return res.status(400).json({ error: fetchError.message });
-    }
+  if (error) throw new AppError(error.message, 400);
+  res.json(design);
+}));
 
-    if (!color) {
-      return res.status(404).json({ error: 'Color not found' });
-    }
-
-    // Delete all images from storage
-    if (color.image_urls && color.image_urls.length > 0) {
-      for (const imageUrl of color.image_urls) {
-        try {
-          // Extract key from URL
-          const urlParts = imageUrl.split('/');
-          const keyStartIndex = urlParts.findIndex(part => part === 'designs');
-          
-          if (keyStartIndex !== -1) {
-            const key = urlParts.slice(keyStartIndex).join('/');
-            
-            // Delete from R2
-            await deleteFromR2(key);
-          }
-        } catch (deleteError) {
-          console.error(`Failed to delete image ${imageUrl}:`, deleteError);
-          // Continue with other images even if one fails
-        }
-      }
-    }
-
-    // Now delete the color from database
-    const { error } = await supabase
-      .from('design_colors')
-      .delete()
-      .eq('id', colorId);
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    res.json({ message: 'Color and associated images deleted successfully' });
-  } catch (error) {
-    console.error('Delete color error:', error);
-    res.status(500).json({ error: 'Failed to delete color' });
+router.delete('/:id', authenticateUser, asyncHandler(async (req, res) => {
+  if (req.profile.role !== 'admin') {
+    throw new AppError('Admin access required', 403);
   }
-});
+
+  const { id } = req.params;
+
+  const { data: design, error: fetchError } = await supabase
+    .from('designs')
+    .select('*, design_colors (id, image_urls)')
+    .eq('id', id)
+    .single();
+
+  if (fetchError) throw new AppError(fetchError.message, 400);
+  if (!design) throw new AppError('Design not found', 404);
+
+  // Delete all images from R2 in parallel (non-blocking per-image errors)
+  if (design.design_colors?.length > 0) {
+    const allImageUrls = design.design_colors.flatMap(c => c.image_urls || []);
+    await deleteImagesFromR2(allImageUrls);
+  }
+
+  const { error } = await supabase.from('designs').delete().eq('id', id);
+  if (error) throw new AppError(error.message, 400);
+
+  res.json({ message: 'Design and associated images deleted successfully' });
+}));
+
+router.post('/:id/colors', authenticateUser, asyncHandler(async (req, res) => {
+  if (req.profile.role !== 'admin') {
+    throw new AppError('Admin access required', 403);
+  }
+
+  const { id } = req.params;
+  const { color_name, color_code, in_stock, stock_quantity, size_quantities, image_urls } = req.body;
+
+  if (!color_name) throw new AppError('Color name is required', 400);
+
+  const { data: color, error } = await supabase
+    .from('design_colors')
+    .insert({
+      design_id: id,
+      color_name,
+      color_code: color_code || null,
+      in_stock: in_stock !== undefined ? in_stock : true,
+      stock_quantity: stock_quantity || 0,
+      size_quantities: size_quantities || { S: 0, M: 0, L: 0, XL: 0, XXL: 0, XXXL: 0 },
+      image_urls: image_urls || []
+    })
+    .select()
+    .single();
+
+  if (error) throw new AppError(error.message, 400);
+  res.status(201).json(color);
+}));
+
+router.put('/colors/:colorId', authenticateUser, asyncHandler(async (req, res) => {
+  if (req.profile.role !== 'admin') {
+    throw new AppError('Admin access required', 403);
+  }
+
+  const { colorId } = req.params;
+  const { color_name, color_code, in_stock, stock_quantity, size_quantities, image_urls } = req.body;
+
+  const updateData = {};
+  if (color_name !== undefined) updateData.color_name = color_name;
+  if (color_code !== undefined) updateData.color_code = color_code;
+  if (in_stock !== undefined) updateData.in_stock = in_stock;
+  if (stock_quantity !== undefined) updateData.stock_quantity = stock_quantity;
+  if (size_quantities !== undefined) updateData.size_quantities = size_quantities;
+  if (image_urls !== undefined) updateData.image_urls = image_urls;
+
+  const { data: color, error } = await supabase
+    .from('design_colors')
+    .update(updateData)
+    .eq('id', colorId)
+    .select()
+    .single();
+
+  if (error) throw new AppError(error.message, 400);
+  res.json(color);
+}));
+
+router.delete('/colors/:colorId', authenticateUser, asyncHandler(async (req, res) => {
+  if (req.profile.role !== 'admin') {
+    throw new AppError('Admin access required', 403);
+  }
+
+  const { colorId } = req.params;
+
+  const { data: color, error: fetchError } = await supabase
+    .from('design_colors')
+    .select('id, image_urls')
+    .eq('id', colorId)
+    .single();
+
+  if (fetchError) throw new AppError(fetchError.message, 400);
+  if (!color) throw new AppError('Color not found', 404);
+
+  await deleteImagesFromR2(color.image_urls);
+
+  const { error } = await supabase
+    .from('design_colors')
+    .delete()
+    .eq('id', colorId);
+
+  if (error) throw new AppError(error.message, 400);
+  res.json({ message: 'Color and associated images deleted successfully' });
+}));
 
 export default router;

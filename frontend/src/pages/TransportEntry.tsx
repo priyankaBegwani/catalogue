@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Edit2, Trash2, Truck, MapPin, Phone, Building, Upload, Download, FileDown, ChevronDown } from 'lucide-react';
 import { api, Transport } from '../lib/api';
 import * as XLSX from 'xlsx';
@@ -456,13 +456,16 @@ const TransportEntry: React.FC = () => {
     }
   };
 
-  const filteredTransports = transports.filter(transport =>
-    transport.transport_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    transport.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (transport.city && transport.city.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (transport.state && transport.state.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (transport.gst_number && transport.gst_number.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredTransports = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    return transports.filter(transport =>
+      transport.transport_name.toLowerCase().includes(term) ||
+      transport.description.toLowerCase().includes(term) ||
+      (transport.city && transport.city.toLowerCase().includes(term)) ||
+      (transport.state && transport.state.toLowerCase().includes(term)) ||
+      (transport.gst_number && transport.gst_number.toLowerCase().includes(term))
+    );
+  }, [transports, searchTerm]);
 
   if (loading && transports.length === 0) {
     return (

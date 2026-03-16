@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import {
@@ -26,7 +26,7 @@ function AppContent() {
   const { user, loading, isAdmin } = useAuth();
   const [showSetup, setShowSetup] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarPinned, setSidebarPinned] = useState(() => {
+  const [sidebarPinned, setSidebarPinned] = useState<boolean>(() => {
     const saved = localStorage.getItem('sidebarPinned');
     return saved ? JSON.parse(saved) : false;
   });
@@ -35,9 +35,9 @@ function AppContent() {
     localStorage.setItem('sidebarPinned', JSON.stringify(sidebarPinned));
   }, [sidebarPinned]);
 
-  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-  const togglePin = () => setSidebarPinned(!sidebarPinned);
-  const closeSidebar = () => setSidebarOpen(false);
+  const toggleSidebar = useCallback(() => setSidebarOpen(prev => !prev), []);
+  const togglePin = useCallback(() => setSidebarPinned(prev => !prev), []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
  
   if (loading) {
     return (

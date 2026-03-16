@@ -7,20 +7,33 @@ class Cache {
   constructor() {
     this.store = new Map();
     this.ttl = new Map(); // Time to live
+    this.timers = new Map(); // Track timers for cleanup
   }
 
   /**
    * Set cache with optional TTL (in seconds)
    */
   set(key, value, ttlSeconds = 300) {
+    // Clear existing timer for this key to prevent leaks
+    if (this.timers.has(key)) {
+      clearTimeout(this.timers.get(key));
+      this.timers.delete(key);
+    }
+
     this.store.set(key, value);
     
     if (ttlSeconds > 0) {
       const expiresAt = Date.now() + (ttlSeconds * 1000);
       this.ttl.set(key, expiresAt);
       
-      // Auto-cleanup
-      setTimeout(() => this.delete(key), ttlSeconds * 1000);
+      const timer = setTimeout(() => {
+        this.timers.delete(key);
+        this.delete(key);
+      }, ttlSeconds * 1000);
+
+      // Prevent timer from keeping the process alive
+      if (timer.unref) timer.unref();
+      this.timers.set(key, timer);
     }
   }
 
@@ -28,10 +41,8 @@ class Cache {
    * Get cached value
    */
   get(key) {
-    // Check if expired
     if (this.ttl.has(key)) {
-      const expiresAt = this.ttl.get(key);
-      if (Date.now() > expiresAt) {
+      if (Date.now() > this.ttl.get(key)) {
         this.delete(key);
         return null;
       }
@@ -44,6 +55,10 @@ class Cache {
    * Delete cache entry
    */
   delete(key) {
+    if (this.timers.has(key)) {
+      clearTimeout(this.timers.get(key));
+      this.timers.delete(key);
+    }
     this.store.delete(key);
     this.ttl.delete(key);
   }
@@ -52,6 +67,10 @@ class Cache {
    * Clear all cache
    */
   clear() {
+    for (const timer of this.timers.values()) {
+      clearTimeout(timer);
+    }
+    this.timers.clear();
     this.store.clear();
     this.ttl.clear();
   }

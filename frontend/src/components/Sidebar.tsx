@@ -34,7 +34,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname.slice(1) || 'catalogue';
-  const { user, logout, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const branding = useBranding();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['management', 'system']));
 
@@ -181,6 +181,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } ${isPinned ? 'lg:translate-x-0' : ''}`}
         style={{ width: '280px' }}
+        aria-label="Main navigation"
       >
         {/* Sidebar Header */}
         <div className="h-20 flex items-center justify-between px-6 border-b border-slate-700/50 bg-slate-900/50">
@@ -200,7 +201,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
             <button
               onClick={onTogglePin}
               className="hidden lg:block p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
-              title={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
+              aria-label={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
             >
               {isPinned ? <Pin size={20} className="text-blue-400" /> : <PinOff size={20} />}
             </button>
@@ -210,7 +211,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
               className={`p-2 hover:bg-slate-700/50 rounded-lg transition-colors ${
                 isPinned ? 'lg:hidden' : ''
               }`}
-              title="Close sidebar"
+              aria-label="Close sidebar"
             >
               <ChevronLeft size={20} />
             </button>

@@ -139,7 +139,8 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               <button
                 onClick={() => setMobileActionsOpen(!mobileActionsOpen)}
                 className="relative p-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-all"
-                title="Menu"
+                aria-label="Open actions menu"
+                aria-expanded={mobileActionsOpen}
               >
                 <MoreVertical className="w-5 h-5" />
                 {(cartCount > 0 || wishlistCount > 0) && (
@@ -150,6 +151,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               {mobileActionsOpen && (
                 <div 
                   className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
+                  role="menu"
                   onMouseDown={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
                 >
@@ -232,10 +234,9 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
 
                   <div className="border-t border-gray-200 mt-2 pt-2">
                     <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        logout();
+                      onClick={() => {
                         setMobileActionsOpen(false);
+                        handleLogout();
                       }}
                       className="w-full px-4 py-3 flex items-center gap-3 text-red-600 hover:bg-red-50 transition-colors rounded-lg mx-2"
                       style={{ width: 'calc(100% - 1rem)' }}
@@ -276,7 +277,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               <button
                 onClick={() => setWishlistModalOpen(true)}
                 className="relative p-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
-                title="Wishlist"
+                aria-label={`Wishlist${wishlistCount > 0 ? ` (${wishlistCount} items)` : ''}`}
               >
                 <Heart className="w-6 h-6" />
                 {wishlistCount > 0 && (
@@ -290,7 +291,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               <button
                 onClick={() => setCartModalOpen(true)}
                 className="relative p-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
-                title="Shopping Cart"
+                aria-label={`Shopping cart${cartCount > 0 ? ` (${cartCount} items)` : ''}`}
               >
                 <ShoppingCart className="w-6 h-6" />
                 {cartCount > 0 && (
@@ -305,7 +306,8 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                 <button
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                   className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-xl transition-all"
-                  title="Profile"
+                  aria-label="Profile menu"
+                  aria-expanded={profileDropdownOpen}
                 >
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg">
                     {user?.full_name?.charAt(0).toUpperCase() || 'U'}
@@ -321,6 +323,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               {profileDropdownOpen && (
                 <div 
                   className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
+                  role="menu"
                   onMouseDown={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
                 >
@@ -359,10 +362,9 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
 
                   <div className="border-t border-gray-200 mt-2 pt-2">
                     <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        logout();
+                      onClick={() => {
                         setProfileDropdownOpen(false);
+                        handleLogout();
                       }}
                       className="w-full px-4 py-3 flex items-center gap-3 text-red-600 hover:bg-red-50 transition-colors rounded-lg mx-2"
                       style={{ width: 'calc(100% - 1rem)' }}
@@ -399,6 +401,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               <button
                 onClick={handleWishlistModalClose}
                 className="text-gray-400 hover:text-gray-600 transition p-2 hover:bg-gray-100 rounded-lg"
+                aria-label="Close wishlist"
               >
                 <X className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>

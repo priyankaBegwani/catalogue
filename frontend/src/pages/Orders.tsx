@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
@@ -17,6 +17,20 @@ import {
 import * as XLSX from 'xlsx';
 import { api, Order, CreateOrderData, Party, DesignColor } from '../lib/api';
 import { Breadcrumb } from '../components';
+
+// Pure helpers — no component state dependency, safe to hoist
+const formatDate = (dateString: string) =>
+  new Date(dateString).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'pending': return 'bg-yellow-100 text-yellow-800';
+    case 'processing': return 'bg-blue-100 text-blue-800';
+    case 'completed': return 'bg-green-100 text-green-800';
+    case 'cancelled': return 'bg-red-100 text-red-800';
+    default: return 'bg-gray-100 text-gray-800';
+  }
+};
 
 const Orders: React.FC = () => {
   const navigate = useNavigate();
@@ -383,23 +397,6 @@ const Orders: React.FC = () => {
     }));
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'processing': return 'bg-blue-100 text-blue-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
 
   const getDesignTooltip = (order: Order, designNumber: string) => {
     const itemsForDesign = (order.order_items || []).filter(item => item.design_number === designNumber);
@@ -424,7 +421,7 @@ const Orders: React.FC = () => {
     return parts.join(' | ');
   };
 
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = useMemo(() => orders.filter(order => {
     const orderNumberMatch = !columnFilters.orderNumber ||
       order.order_number.toLowerCase().includes(columnFilters.orderNumber.toLowerCase());
 
@@ -457,13 +454,13 @@ const Orders: React.FC = () => {
       transportMatch &&
       statusMatch
     );
-  });
+  }), [orders, columnFilters]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const indexOfLastOrder = currentPage * ordersPerPage;
   const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
-  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+  const currentOrders = useMemo(() => filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder), [filteredOrders, indexOfFirstOrder, indexOfLastOrder]);
 
   // Print functions
   const printOrder = (order: Order) => {

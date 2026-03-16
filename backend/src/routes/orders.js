@@ -12,6 +12,79 @@ import {
 
 const router = express.Router();
 
+// Shared select query for fetching complete orders
+const ORDER_SELECT = `
+  *,
+  order_items (
+    id,
+    design_number,
+    color,
+    sizes_quantities
+  ),
+  order_remarks (
+    id,
+    remark,
+    created_at
+  )
+`;
+
+/**
+ * Validate and filter order items + remarks.
+ * Returns { validItems, hasValidRemarks }.
+ * Throws AppError(400) when neither items nor remarks are present.
+ */
+function validateOrderPayload({ party_name, order_items, order_remarks }) {
+  const hasValidRemarks = Array.isArray(order_remarks) &&
+    order_remarks.some(r => r && String(r).trim().length > 0);
+
+  let validItems = [];
+  if (Array.isArray(order_items) && order_items.length > 0) {
+    validItems = order_items.filter(item =>
+      item.design_number && item.color &&
+      Array.isArray(item.sizes_quantities) && item.sizes_quantities.length > 0
+    );
+    for (const item of validItems) {
+      for (const sq of item.sizes_quantities) {
+        if (!sq.size || !sq.quantity || sq.quantity <= 0) {
+          throw new AppError('Each size must have a valid quantity greater than 0', 400);
+        }
+      }
+    }
+  }
+
+  if (!party_name || (validItems.length === 0 && !hasValidRemarks)) {
+    throw new AppError('Party name and either order items or order remarks are required', 400);
+  }
+
+  return { validItems, hasValidRemarks };
+}
+
+/**
+ * Insert order remarks (non-critical — logs errors but does not throw).
+ */
+async function insertOrderRemarks(orderId, order_remarks) {
+  if (!Array.isArray(order_remarks)) return;
+  const remarksToCreate = order_remarks
+    .filter(r => r && String(r).trim())
+    .map(r => ({ order_id: orderId, remark: String(r).trim() }));
+  if (remarksToCreate.length === 0) return;
+
+  const { error } = await supabase.from('order_remarks').insert(remarksToCreate);
+  if (error) console.error('Order remarks creation error:', error);
+}
+
+/**
+ * Fetch the complete order with items + remarks.
+ */
+async function fetchCompleteOrder(orderId) {
+  const { data } = await supabase
+    .from('orders')
+    .select(ORDER_SELECT)
+    .eq('id', orderId)
+    .single();
+  return data;
+}
+
 // Get transport options for dropdown
 router.get('/transport', 
   authenticateUser, 
@@ -88,24 +161,8 @@ router.get('/designs',
 router.get('/', 
   authenticateUser, 
   asyncHandler(async (req, res) => {
-    let query = supabase
-      .from('orders')
-      .select(`
-        *,
-        order_items (
-          id,
-          design_number,
-          color,
-          sizes_quantities
-        ),
-        order_remarks (
-          id,
-          remark,
-          created_at
-        )
-      `);
+    let query = supabase.from('orders').select(ORDER_SELECT);
 
-    // If user is not admin, only show their orders
     if (req.profile?.role !== 'admin') {
       query = query.eq('user_id', req.user.id);
     }
@@ -124,37 +181,15 @@ router.get('/:id',
   authenticateUser, 
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
     validateUUID(id, 'Order ID');
     
-    let query = supabase
-      .from('orders')
-      .select(`
-        *,
-        order_items (
-          id,
-          design_number,
-          color,
-          sizes_quantities
-        ),
-        order_remarks (
-          id,
-          remark,
-          created_at
-        )
-      `)
-      .eq('id', id);
+    let query = supabase.from('orders').select(ORDER_SELECT).eq('id', id);
 
-    // If user is not admin, only show their orders
     if (req.profile?.role !== 'admin') {
       query = query.eq('user_id', req.user.id);
     }
 
-    const order = await executeQuery(
-      query.single(),
-      'Order not found'
-    );
-
+    const order = await executeQuery(query.single(), 'Order not found');
     res.json(order);
   })
 );
@@ -318,25 +353,7 @@ router.post('/checkout',
       // Don't fail the order creation if cart clearing fails
     }
 
-    // Fetch the complete order with items
-    const { data: completeOrder } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        order_items (
-          id,
-          design_number,
-          color,
-          sizes_quantities
-        ),
-        order_remarks (
-          id,
-          remark,
-          created_at
-        )
-      `)
-      .eq('id', order.id)
-      .single();
+    const completeOrder = await fetchCompleteOrder(order.id);
 
     res.status(201).json({
       message: 'Order created successfully from cart',
@@ -349,491 +366,275 @@ router.post('/checkout',
 );
 
 // Create new order with items
-router.post('/', authenticateUser, async (req, res) => {
-  try {
-    const { 
-      party_name, 
-      date_of_order,
-      expected_delivery_date,
-      transport,
-      remarks,
-      order_items,
-      order_remarks
-    } = req.body;
+router.post('/', authenticateUser, asyncHandler(async (req, res) => {
+  const { party_name, date_of_order, expected_delivery_date, transport, remarks, order_items, order_remarks } = req.body;
 
-    if (!party_name || !order_items || !Array.isArray(order_items) || order_items.length === 0) {
-      // Check if we have valid order items OR valid order remarks
-      const hasValidOrderRemarks = order_remarks && Array.isArray(order_remarks) && 
-        order_remarks.some(remark => remark && remark.trim().length > 0);
-      
-      if (!hasValidOrderRemarks) {
-        return res.status(400).json({ error: 'Party name and either order items or order remarks are required' });
-      }
-    }
+  const { validItems } = validateOrderPayload({ party_name, order_items, order_remarks });
 
-    // Validate order items only if they exist and are not empty
-    if (order_items && Array.isArray(order_items) && order_items.length > 0) {
-      // Filter out empty items
-      const validItems = order_items.filter(item => 
-        item.design_number && item.color && item.sizes_quantities && 
-        Array.isArray(item.sizes_quantities) && item.sizes_quantities.length > 0
-      );
-      
-      // Validate each valid item
-      for (const item of validItems) {
-        // Validate sizes_quantities array
-        for (const sq of item.sizes_quantities) {
-          if (!sq.size || !sq.quantity || sq.quantity <= 0) {
-            return res.status(400).json({ error: 'Each size must have a valid quantity greater than 0' });
-          }
-        }
-      }
-      
-      // Update order_items to only include valid items
-      req.body.order_items = validItems;
-    }
+  const { data: order, error: orderError } = await supabase
+    .from('orders')
+    .insert([{
+      user_id: req.user.id,
+      party_name,
+      date_of_order: date_of_order || new Date().toISOString().split('T')[0],
+      expected_delivery_date: expected_delivery_date || null,
+      transport: transport || '',
+      remarks: remarks || ''
+    }])
+    .select()
+    .single();
 
-    // Create order
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert([
-        {
-          user_id: req.user.id,
-          party_name,
-          date_of_order: date_of_order || new Date().toISOString().split('T')[0],
-          expected_delivery_date: expected_delivery_date || null,
-          transport: transport || '',
-          remarks: remarks || ''
-        }
-      ])
-      .select()
-      .single();
-
-    if (orderError) {
-      console.error('Order creation error:', orderError);
-      return res.status(500).json({ error: 'Failed to create order' });
-    }
-
-    let createdItems = [];
-    
-    // Create order items only if we have valid items
-    if (req.body.order_items && req.body.order_items.length > 0) {
-      const orderItemsData = req.body.order_items.map(item => ({
-        order_id: order.id,
-        design_number: item.design_number,
-        color: item.color,
-        sizes_quantities: item.sizes_quantities
-      }));
-
-      const { data: items, error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItemsData)
-        .select();
-
-      if (itemsError) {
-        console.error('Order items creation error:', itemsError);
-        // Rollback order creation
-        await supabase.from('orders').delete().eq('id', order.id);
-        return res.status(500).json({ error: 'Failed to create order items' });
-      }
-      
-      createdItems = items || [];
-    }
-
-    // Create order remarks if provided
-    if (order_remarks && Array.isArray(order_remarks) && order_remarks.length > 0) {
-      const remarksToCreate = order_remarks
-        .filter(remark => remark && remark.trim())
-        .map(remark => ({
-          order_id: order.id,
-          remark: remark.trim()
-        }));
-
-      if (remarksToCreate.length > 0) {
-        const { error: remarksError } = await supabase
-          .from('order_remarks')
-          .insert(remarksToCreate);
-
-        if (remarksError) {
-          console.error('Order remarks creation error:', remarksError);
-          // Don't fail the entire order creation for remarks
-        }
-      }
-    }
-
-    // Fetch the complete order with remarks
-    const { data: completeOrder } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        order_items (
-          id,
-          design_number,
-          color,
-          sizes_quantities
-        ),
-        order_remarks (
-          id,
-          remark,
-          created_at
-        )
-      `)
-      .eq('id', order.id)
-      .single();
-
-    res.status(201).json({
-      message: 'Order created successfully',
-      order: completeOrder || {
-        ...order,
-        order_items: createdItems
-      }
-    });
-  } catch (error) {
-    console.error('Order creation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  if (orderError) {
+    throw new AppError('Failed to create order', 500, { dbError: orderError.message });
   }
-});
 
-// Update order with items
-router.put('/:id', authenticateUser, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { 
-      party_name, 
-      date_of_order,
-      expected_delivery_date,
-      transport,
-      remarks,
-      status,
-      order_items,
-      order_remarks
-    } = req.body;
+  let createdItems = [];
 
-    if (!party_name || !order_items || !Array.isArray(order_items) || order_items.length === 0) {
-      // Check if we have valid order items OR valid order remarks
-      const hasValidOrderRemarks = order_remarks && Array.isArray(order_remarks) && 
-        order_remarks.some(remark => remark && remark.trim().length > 0);
-      
-      if (!hasValidOrderRemarks) {
-        return res.status(400).json({ error: 'Party name and either order items or order remarks are required' });
-      }
-    }
-
-    // Validate order items only if they exist and are not empty
-    if (order_items && Array.isArray(order_items) && order_items.length > 0) {
-      // Filter out empty items
-      const validItems = order_items.filter(item => 
-        item.design_number && item.color && item.sizes_quantities && 
-        Array.isArray(item.sizes_quantities) && item.sizes_quantities.length > 0
-      );
-      
-      // Validate each valid item
-      for (const item of validItems) {
-        // Validate sizes_quantities array
-        for (const sq of item.sizes_quantities) {
-          if (!sq.size || !sq.quantity || sq.quantity <= 0) {
-            return res.status(400).json({ error: 'Each size must have a valid quantity greater than 0' });
-          }
-        }
-      }
-      
-      // Update order_items to only include valid items
-      req.body.order_items = validItems;
-    }
-
-    // Update order
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .update({
-        party_name,
-        date_of_order: date_of_order || new Date().toISOString().split('T')[0],
-        expected_delivery_date: expected_delivery_date || null,
-        transport: transport || '',
-        remarks: remarks || '',
-        status: status || 'pending',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (orderError) {
-      console.error('Order update error:', orderError);
-      return res.status(500).json({ error: 'Failed to update order' });
-    }
-
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found or you do not have permission to update it' });
-    }
-
-    // Delete existing order items
-    const { error: deleteError } = await supabase
-      .from('order_items')
-      .delete()
-      .eq('order_id', id);
-
-    if (deleteError) {
-      console.error('Order items deletion error:', deleteError);
-      return res.status(500).json({ error: 'Failed to update order items' });
-    }
-
-    let createdItems = [];
-    
-    // Create new order items only if we have valid items
-    if (req.body.order_items && req.body.order_items.length > 0) {
-      const orderItemsData = req.body.order_items.map(item => ({
-        order_id: id,
-        design_number: item.design_number,
-        color: item.color,
-        sizes_quantities: item.sizes_quantities
-      }));
-
-      const { data: items, error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItemsData)
-        .select();
-
-      if (itemsError) {
-        console.error('Order items creation error:', itemsError);
-        return res.status(500).json({ error: 'Failed to create order items' });
-      }
-      
-      createdItems = items || [];
-    }
-
-    // Delete existing order remarks
-    const { error: deleteRemarksError } = await supabase
-      .from('order_remarks')
-      .delete()
-      .eq('order_id', id);
-
-    if (deleteRemarksError) {
-      console.error('Order remarks deletion error:', deleteRemarksError);
-      // Don't fail the entire order update for remarks
-    }
-
-    // Create new order remarks if provided
-    if (order_remarks && Array.isArray(order_remarks) && order_remarks.length > 0) {
-      const remarksToCreate = order_remarks
-        .filter(remark => remark && remark.trim())
-        .map(remark => ({
-          order_id: id,
-          remark: remark.trim()
-        }));
-
-      if (remarksToCreate.length > 0) {
-        const { error: remarksError } = await supabase
-          .from('order_remarks')
-          .insert(remarksToCreate);
-
-        if (remarksError) {
-          console.error('Order remarks creation error:', remarksError);
-          // Don't fail the entire order update for remarks
-        }
-      }
-    }
-
-    // Fetch the complete order with remarks
-    const { data: completeOrder } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        order_items (
-          id,
-          design_number,
-          color,
-          sizes_quantities
-        ),
-        order_remarks (
-          id,
-          remark,
-          created_at
-        )
-      `)
-      .eq('id', id)
-      .single();
-
-    res.json({
-      message: 'Order updated successfully',
-      order: completeOrder || {
-        ...order,
-        order_items: createdItems
-      }
-    });
-  } catch (error) {
-    console.error('Order update error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Add items to existing order (for substitute designs)
-router.post('/:id/items', authenticateUser, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { items } = req.body;
-
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'items array is required' });
-    }
-
-    // Validate items
-    const validItems = items.filter(item =>
-      item.design_number && item.color &&
-      item.sizes_quantities && Array.isArray(item.sizes_quantities) &&
-      item.sizes_quantities.length > 0
-    );
-
-    if (validItems.length === 0) {
-      return res.status(400).json({ error: 'No valid items provided' });
-    }
-
-    for (const item of validItems) {
-      for (const sq of item.sizes_quantities) {
-        if (!sq.size || !sq.quantity || sq.quantity <= 0) {
-          return res.status(400).json({ error: 'Each size must have a valid quantity greater than 0' });
-        }
-      }
-    }
-
-    // Verify order exists and user has access
-    let orderQuery = supabase.from('orders').select('id').eq('id', id);
-    if (req.profile?.role !== 'admin') {
-      orderQuery = orderQuery.eq('user_id', req.user.id);
-    }
-    const { data: order, error: orderError } = await orderQuery.single();
-    if (orderError || !order) {
-      return res.status(404).json({ error: 'Order not found or access denied' });
-    }
-
+  if (validItems.length > 0) {
     const orderItemsData = validItems.map(item => ({
-      order_id: id,
+      order_id: order.id,
       design_number: item.design_number,
       color: item.color,
-      sizes_quantities: item.sizes_quantities,
-      is_substitute: true
+      sizes_quantities: item.sizes_quantities
     }));
 
-    const { data: newItems, error: insertError } = await supabase
+    const { data: items, error: itemsError } = await supabase
       .from('order_items')
       .insert(orderItemsData)
       .select();
 
-    if (insertError) {
-      // Try without is_substitute if column doesn't exist
-      const fallbackData = validItems.map(item => ({
-        order_id: id,
-        design_number: item.design_number,
-        color: item.color,
-        sizes_quantities: item.sizes_quantities
-      }));
-      const { data: fallbackItems, error: fallbackError } = await supabase
-        .from('order_items')
-        .insert(fallbackData)
-        .select();
-      if (fallbackError) {
-        console.error('Order items insert error:', fallbackError);
-        return res.status(500).json({ error: 'Failed to add items to order' });
-      }
-      return res.status(201).json({ message: 'Items added to order', items: fallbackItems });
+    if (itemsError) {
+      await supabase.from('orders').delete().eq('id', order.id);
+      throw new AppError('Failed to create order items', 500, { dbError: itemsError.message });
     }
-
-    res.status(201).json({ message: 'Items added to order', items: newItems });
-  } catch (error) {
-    console.error('Add order items error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    createdItems = items || [];
   }
-});
+
+  await insertOrderRemarks(order.id, order_remarks);
+
+  const completeOrder = await fetchCompleteOrder(order.id);
+
+  res.status(201).json({
+    message: 'Order created successfully',
+    order: completeOrder || { ...order, order_items: createdItems }
+  });
+}));
+
+// Update order with items
+router.put('/:id', authenticateUser, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { party_name, date_of_order, expected_delivery_date, transport, remarks, status, order_items, order_remarks } = req.body;
+
+  const { validItems } = validateOrderPayload({ party_name, order_items, order_remarks });
+
+  const { data: order, error: orderError } = await supabase
+    .from('orders')
+    .update({
+      party_name,
+      date_of_order: date_of_order || new Date().toISOString().split('T')[0],
+      expected_delivery_date: expected_delivery_date || null,
+      transport: transport || '',
+      remarks: remarks || '',
+      status: status || 'pending',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (orderError) {
+    throw new AppError('Failed to update order', 500, { dbError: orderError.message });
+  }
+  if (!order) {
+    throw new AppError('Order not found or you do not have permission to update it', 404);
+  }
+
+  // Delete existing items and remarks in parallel
+  const [deleteItemsResult, deleteRemarksResult] = await Promise.all([
+    supabase.from('order_items').delete().eq('order_id', id),
+    supabase.from('order_remarks').delete().eq('order_id', id)
+  ]);
+
+  if (deleteItemsResult.error) {
+    throw new AppError('Failed to update order items', 500, { dbError: deleteItemsResult.error.message });
+  }
+  if (deleteRemarksResult.error) {
+    console.error('Order remarks deletion error:', deleteRemarksResult.error);
+  }
+
+  let createdItems = [];
+
+  if (validItems.length > 0) {
+    const orderItemsData = validItems.map(item => ({
+      order_id: id,
+      design_number: item.design_number,
+      color: item.color,
+      sizes_quantities: item.sizes_quantities
+    }));
+
+    const { data: items, error: itemsError } = await supabase
+      .from('order_items')
+      .insert(orderItemsData)
+      .select();
+
+    if (itemsError) {
+      throw new AppError('Failed to create order items', 500, { dbError: itemsError.message });
+    }
+    createdItems = items || [];
+  }
+
+  await insertOrderRemarks(id, order_remarks);
+
+  const completeOrder = await fetchCompleteOrder(id);
+
+  res.json({
+    message: 'Order updated successfully',
+    order: completeOrder || { ...order, order_items: createdItems }
+  });
+}));
+
+// Add items to existing order (for substitute designs)
+router.post('/:id/items', authenticateUser, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { items } = req.body;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new AppError('items array is required', 400);
+  }
+
+  const validItems = items.filter(item =>
+    item.design_number && item.color &&
+    Array.isArray(item.sizes_quantities) && item.sizes_quantities.length > 0
+  );
+
+  if (validItems.length === 0) {
+    throw new AppError('No valid items provided', 400);
+  }
+
+  for (const item of validItems) {
+    for (const sq of item.sizes_quantities) {
+      if (!sq.size || !sq.quantity || sq.quantity <= 0) {
+        throw new AppError('Each size must have a valid quantity greater than 0', 400);
+      }
+    }
+  }
+
+  // Verify order exists and user has access
+  let orderQuery = supabase.from('orders').select('id').eq('id', id);
+  if (req.profile?.role !== 'admin') {
+    orderQuery = orderQuery.eq('user_id', req.user.id);
+  }
+  const { data: order, error: orderError } = await orderQuery.single();
+  if (orderError || !order) {
+    throw new AppError('Order not found or access denied', 404);
+  }
+
+  const orderItemsData = validItems.map(item => ({
+    order_id: id,
+    design_number: item.design_number,
+    color: item.color,
+    sizes_quantities: item.sizes_quantities,
+    is_substitute: true
+  }));
+
+  const { data: newItems, error: insertError } = await supabase
+    .from('order_items')
+    .insert(orderItemsData)
+    .select();
+
+  if (insertError) {
+    // Fallback without is_substitute if column doesn't exist
+    const fallbackData = validItems.map(item => ({
+      order_id: id,
+      design_number: item.design_number,
+      color: item.color,
+      sizes_quantities: item.sizes_quantities
+    }));
+    const { data: fallbackItems, error: fallbackError } = await supabase
+      .from('order_items')
+      .insert(fallbackData)
+      .select();
+    if (fallbackError) {
+      throw new AppError('Failed to add items to order', 500, { dbError: fallbackError.message });
+    }
+    return res.status(201).json({ message: 'Items added to order', items: fallbackItems });
+  }
+
+  res.status(201).json({ message: 'Items added to order', items: newItems });
+}));
 
 // Delete a single order item (admin only)
-router.delete('/:orderId/items/:itemId', authenticateUser, async (req, res) => {
-  try {
-    const { orderId, itemId } = req.params;
+router.delete('/:orderId/items/:itemId', authenticateUser, asyncHandler(async (req, res) => {
+  const { orderId, itemId } = req.params;
 
-    if (req.profile?.role !== 'admin') {
-      return res.status(403).json({ error: 'Only admins can delete order items' });
-    }
-
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .select('id')
-      .eq('id', orderId)
-      .single();
-    if (orderError || !order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    const { error } = await supabase
-      .from('order_items')
-      .delete()
-      .eq('id', itemId)
-      .eq('order_id', orderId);
-
-    if (error) {
-      console.error('Delete order item error:', error);
-      return res.status(500).json({ error: 'Failed to delete order item' });
-    }
-
-    res.json({ message: 'Order item deleted successfully' });
-  } catch (error) {
-    console.error('Delete order item error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  if (req.profile?.role !== 'admin') {
+    throw new AppError('Only admins can delete order items', 403);
   }
-});
+
+  const { data: order, error: orderError } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('id', orderId)
+    .single();
+  if (orderError || !order) {
+    throw new AppError('Order not found', 404);
+  }
+
+  const { error } = await supabase
+    .from('order_items')
+    .delete()
+    .eq('id', itemId)
+    .eq('order_id', orderId);
+
+  if (error) {
+    throw new AppError('Failed to delete order item', 500, { dbError: error.message });
+  }
+
+  res.json({ message: 'Order item deleted successfully' });
+}));
 
 // Update order item sizes (for removing a specific size) - admin only
-router.patch('/:orderId/items/:itemId', authenticateUser, async (req, res) => {
-  try {
-    const { orderId, itemId } = req.params;
-    const { sizes_quantities } = req.body;
+router.patch('/:orderId/items/:itemId', authenticateUser, asyncHandler(async (req, res) => {
+  const { orderId, itemId } = req.params;
+  const { sizes_quantities } = req.body;
 
-    if (req.profile?.role !== 'admin') {
-      return res.status(403).json({ error: 'Only admins can update order items' });
-    }
-
-    if (!sizes_quantities || !Array.isArray(sizes_quantities)) {
-      return res.status(400).json({ error: 'sizes_quantities array is required' });
-    }
-
-    const { data, error } = await supabase
-      .from('order_items')
-      .update({ sizes_quantities })
-      .eq('id', itemId)
-      .eq('order_id', orderId)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Update order item error:', error);
-      return res.status(500).json({ error: 'Failed to update order item' });
-    }
-
-    res.json({ message: 'Order item updated', item: data });
-  } catch (error) {
-    console.error('Update order item error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  if (req.profile?.role !== 'admin') {
+    throw new AppError('Only admins can update order items', 403);
   }
-});
+
+  if (!sizes_quantities || !Array.isArray(sizes_quantities)) {
+    throw new AppError('sizes_quantities array is required', 400);
+  }
+
+  const { data, error } = await supabase
+    .from('order_items')
+    .update({ sizes_quantities })
+    .eq('id', itemId)
+    .eq('order_id', orderId)
+    .select()
+    .single();
+
+  if (error) {
+    throw new AppError('Failed to update order item', 500, { dbError: error.message });
+  }
+
+  res.json({ message: 'Order item updated', item: data });
+}));
 
 // Delete order (cascades to order_items)
-router.delete('/:id', authenticateUser, async (req, res) => {
-  try {
-    const { id } = req.params;
+router.delete('/:id', authenticateUser, asyncHandler(async (req, res) => {
+  const { id } = req.params;
 
-    const { error } = await supabase
-      .from('orders')
-      .delete()
-      .eq('id', id);
+  const { error } = await supabase
+    .from('orders')
+    .delete()
+    .eq('id', id);
 
-    if (error) {
-      console.error('Order deletion error:', error);
-      return res.status(500).json({ error: 'Failed to delete order' });
-    }
-
-    res.json({ message: 'Order deleted successfully' });
-  } catch (error) {
-    console.error('Order deletion error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  if (error) {
+    throw new AppError('Failed to delete order', 500, { dbError: error.message });
   }
-});
+
+  res.json({ message: 'Order deleted successfully' });
+}));
 
 export default router;
