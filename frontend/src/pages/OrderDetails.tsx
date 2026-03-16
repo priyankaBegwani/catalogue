@@ -688,11 +688,12 @@ export default function OrderDetails() {
                                     type="button"
                                     onClick={() => toggleSizeFulfilled(groupKey, sq.size, group.allSizes)}
                                     title={isFulfilled ? 'Click to mark as pending' : 'Click to mark as fulfilled'}
-                                    className={`w-full relative rounded-lg p-3 text-center border-2 transition-all ${
+                                    className={`w-full relative rounded-lg p-3 text-center border-2 transition-all touch-action-manipulation ${
                                       isFulfilled
                                         ? 'bg-green-50 border-green-400 shadow-sm'
                                         : 'bg-white border-gray-200 hover:border-primary hover:shadow-sm'
                                     }`}
+                                    style={{ touchAction: 'manipulation' }}
                                   >
                                     {isFulfilled && (
                                       <Check className="w-3 h-3 text-green-500 absolute top-1 right-1" />
@@ -713,7 +714,7 @@ export default function OrderDetails() {
                                       type="button"
                                       onClick={() => handleDeleteSize(group, sq.size)}
                                       title={`Delete size ${sq.size}`}
-                                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full opacity-0 group-hover/size:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow z-10"
+                                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full opacity-0 group-hover/size:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow z-10 hover:opacity-100 sm:hover:opacity-100"
                                     >
                                       <X className="w-2.5 h-2.5" />
                                     </button>
@@ -1295,17 +1296,36 @@ export default function OrderDetails() {
                           )}
 
                           {/* Size inputs */}
-                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                             {sel.sizes.map((sq, si) => (
-                              <div key={si} className="bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-center">
+                              <div key={si} className="bg-white border border-gray-200 rounded-lg px-2 py-2 text-center relative">
                                 <div className="text-[10px] font-bold text-gray-400 mb-1 uppercase">{sq.size}</div>
                                 <input
                                   type="number"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
                                   min="0"
                                   value={sq.quantity}
                                   onChange={e => updateSize(dn, si, parseInt(e.target.value) || 0)}
-                                  className="w-full text-center text-sm font-semibold text-gray-900 border-0 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary rounded"
+                                  className="w-full text-center text-sm font-semibold text-gray-900 border-0 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary rounded touch-action-manipulation"
+                                  style={{ touchAction: 'manipulation' }}
                                 />
+                                {/* Mobile delete button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newSizes = sel.sizes.filter((_, i) => i !== si);
+                                    setSelectedSubstitutes(prev => prev.map(s => 
+                                      (s.design.design_no || s.design.design_number) === dn 
+                                        ? { ...s, sizes: newSizes.length > 0 ? newSizes : [{ size: 'M', quantity: 0 }] }
+                                        : s
+                                    ));
+                                  }}
+                                  className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full opacity-100 sm:opacity-0 focus:opacity-100 transition-opacity flex items-center justify-center shadow z-10 sm:hover:opacity-100"
+                                  title={`Remove size ${sq.size}`}
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
                               </div>
                             ))}
                           </div>
