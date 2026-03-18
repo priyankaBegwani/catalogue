@@ -57,6 +57,15 @@ const authLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later' }
 });
 
+app.get('/health', (req, res) => {
+   res.set('Cache-Control', 'no-store');
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: Date.now(),
+    service: 'backend-api'
+  });
+});
 // Request logging in development
 if (process.env.NODE_ENV === 'development') {
   app.use((req, res, next) => {
