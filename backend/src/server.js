@@ -17,6 +17,7 @@ import locationRoutes from './routes/locations.js';
 import ordersRoutes from './routes/orders.js';
 import adminRoutes from './routes/admin.js';
 import brandsRoutes from './routes/brands.js';
+import whatsappRoutes from './routes/whatsappWebhook.js';
 
 const app = express();
 
@@ -86,15 +87,7 @@ app.use('/api/locations', locationRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/brands', brandsRoutes);
-
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage()
-  });
-});
+app.use('/webhook/whatsapp', whatsappRoutes);
 
 // 404 handler
 app.use((req, res) => {
