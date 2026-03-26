@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api, Party } from '../lib/api';
 import * as XLSX from 'xlsx';
-import { Plus, Search, Edit2, Trash2, Users, MapPin, Phone, Upload, Download, Building, Award } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Users, MapPin, Phone, Upload, Download, Building, Award, X } from 'lucide-react';
 import { PartyTierSelector } from '../components/PartyTierSelector';
 import { Breadcrumb } from '../components';
 
@@ -688,8 +688,17 @@ const PartyEntry: React.FC = () => {
       {/* Create/Edit Party Modal */}
       {showCreateForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6">
-            <h2 className="mb-4 text-xl font-bold text-gray-900">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 relative">
+            {/* Close button - fixed position */}
+            <button
+              onClick={() => setShowCreateForm(false)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+              title="Close modal"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+            
+            <h2 className="mb-4 pr-8 text-xl font-bold text-gray-900">
               {editingParty ? 'Edit Party' : 'Create New Party'}
             </h2>
             
@@ -888,8 +897,21 @@ const PartyEntry: React.FC = () => {
       {/* Import Excel Modal */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-6">
-            <h2 className="mb-4 text-xl font-bold text-gray-900">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-6 relative">
+            {/* Close button - fixed position */}
+            <button
+              onClick={() => {
+                setShowImportModal(false);
+                setImportFile(null);
+                setImportPreview([]);
+              }}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+              title="Close modal"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+            
+            <h2 className="mb-4 pr-8 text-xl font-bold text-gray-900">
               Import Party Details from Excel
             </h2>
             

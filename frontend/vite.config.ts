@@ -44,6 +44,13 @@ export default defineConfig(({ mode }) => {
     hmr: {
       overlay: false, // Disable error overlay for better performance
     },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   };
 });

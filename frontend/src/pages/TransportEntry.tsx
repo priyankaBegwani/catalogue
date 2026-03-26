@@ -1,46 +1,86 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit2, Trash2, Truck, MapPin, Phone, Building, Upload, Download, FileDown, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Upload, Download, FileDown, ChevronDown, Truck } from 'lucide-react';
 import { api, Transport } from '../lib/api';
 import * as XLSX from 'xlsx';
 import { Breadcrumb } from '../components';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { backendConfig } from '../config/backend';
+
+// Hooks
+import { useTransportForm } from '../hooks/useTransportForm';
+import { useLocationData } from '../hooks/useLocationData';
+import { useTransportData } from '../hooks/useTransportData';
+
+// Components
+import { 
+  TransportTable, 
+  TransportMobileCard, 
+  ViewTransportModal,
+  TransportFormModal 
+} from '../components/transport';
+
+// Utils
+import { 
+  generateSampleExcel, 
+  exportToExcel, 
+  exportToPDF,
+  parseExcelFile,
+  validateImportData,
+  transformImportData
+} from '../utils/transport/exportHelpers';
 
 const TransportEntry: React.FC = () => {
-  const [transports, setTransports] = useState<Transport[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Data management
+  const {
+    filteredTransports,
+    loading,
+    error,
+    searchTerm,
+    setSearchTerm,
+    setError,
+    createTransport,
+    updateTransport,
+    deleteTransport,
+    importTransports
+  } = useTransportData();
+
+  // Form management
+  const {
+    formData,
+    setFormData,
+    gstError,
+    phoneError,
+    editingTransport,
+    handlePhoneChange,
+    handleGSTChange,
+    validateForm,
+    resetForm,
+    loadTransportForEdit
+  } = useTransportForm();
+
+  // Location management
+  const {
+    states,
+    districts,
+    cities,
+    applyLocationFromPincode,
+    handleStateChange,
+    handleDistrictChange,
+    handleCityChange,
+    loadDistrictsAndCities
+  } = useLocationData();
+
+  // UI state
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importLoading, setImportLoading] = useState(false);
-  const [editingTransport, setEditingTransport] = useState<Transport | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [states, setStates] = useState<string[]>([]);
-  const [districts, setDistricts] = useState<string[]>([]);
-  const [cities, setCities] = useState<Array<{ city_name: string; zipcode: string }>>([]);
-  const [formData, setFormData] = useState({
-    transport_name: '',
-    description: '',
-    address: '',
-    phone_number: '',
-    gst_number: '',
-    state: '',
-    district: '',
-    city: '',
-    pincode: ''
-  });
-  const [gstError, setGstError] = useState('');
-  const [phoneError, setPhoneError] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedTransport, setSelectedTransport] = useState<Transport | null>(null);
 
-  useEffect(() => {
-    fetchTransports();
-    fetchStates();
-  }, []);
-
+  // Handle export menu click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -58,333 +98,114 @@ const TransportEntry: React.FC = () => {
     };
   }, [showExportMenu]);
 
-  const fetchStates = async () => {
-    try {
-      const data = await api.fetchStates();
-      setStates(data.states);
-    } catch (err) {
-      console.error('Failed to fetch states:', err);
-    }
-  };
-
-  const handleStateChange = async (state: string) => {
-    setFormData({ ...formData, state, district: '', city: '', pincode: '' });
-    setDistricts([]);
-    setCities([]);
-    
-    if (state) {
-      try {
-        const data = await api.fetchDistricts(state);
-        setDistricts(data.districts);
-      } catch (err) {
-        console.error('Failed to fetch districts:', err);
-      }
-    }
-  };
-
-  const handleDistrictChange = async (district: string) => {
-    setFormData({ ...formData, district, city: '', pincode: '' });
-    setCities([]);
-    
-    if (district) {
-      try {
-        const data = await api.fetchCities(district);
-        setCities(data.cities);
-      } catch (err) {
-        console.error('Failed to fetch cities:', err);
-      }
-    }
-  };
-
-  const handleCityChange = (cityName: string) => {
-    const selectedCity = cities.find(c => c.city_name === cityName);
-    setFormData({ 
-      ...formData, 
-      city: cityName,
-      pincode: selectedCity?.zipcode || formData.pincode
-    });
-  };
-
-  const handleExportExcel = async () => {
-    try {
-      setExportLoading(true);
-      const response = await fetch('/api/transport/export/excel', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      if (!response.ok) throw new Error('Export failed');
-      
-      const { data } = await response.json();
-      
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Transport');
-      
-      XLSX.writeFile(workbook, `Transport_${new Date().toISOString().split('T')[0]}.xlsx`);
-      setShowExportMenu(false);
-    } catch (err) {
-      setError('Failed to export to Excel');
-    } finally {
-      setExportLoading(false);
-    }
-  };
-
-  const handleExportPDF = async () => {
-    try {
-      setExportLoading(true);
-      const response = await fetch('/api/transport/export/pdf', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      if (!response.ok) throw new Error('Export failed');
-      
-      const { data } = await response.json();
-      
-      const doc = new jsPDF();
-      
-      doc.setFontSize(18);
-      doc.text('Transport Options', 14, 20);
-      
-      const tableData = data.map((item: any) => [
-        item.transport_name,
-        item.phone_number,
-        `${item.city}, ${item.state}`,
-        item.gst_number,
-        item.created_at
-      ]);
-      
-      (doc as any).autoTable({
-        head: [['Transport Name', 'Phone', 'Location', 'GST Number', 'Created Date']],
-        body: tableData,
-        startY: 30,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [59, 130, 246] }
-      });
-      
-      doc.save(`Transport_${new Date().toISOString().split('T')[0]}.pdf`);
-      setShowExportMenu(false);
-    } catch (err) {
-      setError('Failed to export to PDF');
-    } finally {
-      setExportLoading(false);
-    }
-  };
-
-  const fetchTransports = async () => {
-     try {
-      setLoading(true);
-      const data = await api.fetchTransports();
-      setTransports(data.transportOptions);
-    } catch (err) {
-     setError(err instanceof Error ? err.message : 'Failed to fetch transport options');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Handlers
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate GST number and phone number before submission
-    const isGSTValid = validateGSTNumber(formData.gst_number);
-    const isPhoneValid = validatePhoneNumber(formData.phone_number);
-    
-    if (!isGSTValid || !isPhoneValid) {
+    if (!validateForm()) {
       return;
     }
-    
-    setLoading(true);
 
     try {
-         await api.createOrEditTransport({
-      ...formData
-     }, editingTransport);
+      if (editingTransport) {
+        await updateTransport(formData, editingTransport);
+      } else {
+        await createTransport(formData);
+      }
       
       resetForm();
-      fetchTransports();
+      setShowCreateForm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${editingTransport ? 'update' : 'create'} transport option`);
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleEdit = async (transport: Transport) => {
-    setEditingTransport(transport);
-    setFormData({
-      transport_name: transport.transport_name,
-      description: transport.description,
-      address: transport.address || '',
-      phone_number: transport.phone_number || '',
-      gst_number: transport.gst_number || '',
-      state: transport.state || '',
-      district: transport.district || '',
-      city: transport.city || '',
-      pincode: transport.pincode || ''
-    });
+    await loadTransportForEdit(transport);
     
-    // Load districts and cities for editing
     if (transport.state) {
-      try {
-        const districtData = await api.fetchDistricts(transport.state);
-        setDistricts(districtData.districts);
-        
-        if (transport.district) {
-          const cityData = await api.fetchCities(transport.district);
-          setCities(cityData.cities);
-        }
-      } catch (err) {
-        console.error('Failed to load location data:', err);
-      }
+      await loadDistrictsAndCities(transport.state, transport.district);
     }
     
     setShowCreateForm(true);
   };
 
-  const handleDelete = async (id: string, transportName: string) => {
-    if (!confirm(`Are you sure you want to delete transport option "${transportName}"?`)) return;
-
-    try {
-          await api.deleteTransport(id);
-          await fetchTransports();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete transport option');
-    }
+  const handleView = (transport: Transport) => {
+    setSelectedTransport(transport);
+    setShowViewModal(true);
   };
 
-  const resetForm = () => {
-    setFormData({
-      transport_name: '',
-      description: '',
-      address: '',
-      phone_number: '',
-      gst_number: '',
-      state: '',
-      district: '',
-      city: '',
-      pincode: ''
-    });
-    setDistricts([]);
-    setCities([]);
-    setShowCreateForm(false);
-    setEditingTransport(null);
-    setError('');
-    setGstError('');
-    setPhoneError('');
-  };
+  const handlePincodeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const pincode = e.target.value;
+    console.log('=== handlePincodeChange called ===');
+    console.log('Pincode entered:', pincode);
+    setFormData(prev => ({ ...prev, pincode }));
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const validateGSTNumber = (gstNumber: string) => {
-    if (!gstNumber) {
-      setGstError('');
-      return true;
-    }
-    
-    // GSTIN format: 2 characters (state code) + 10 characters (PAN) + 1 character (entity) + 1 character (checksum) + 1 character (Z) + 1 digit (default)
-    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-    
-    if (!gstRegex.test(gstNumber.toUpperCase())) {
-      setGstError('Invalid GST number format. Please enter a valid GSTIN (e.g., 22AAAAA0000A1Z5)');
-      return false;
-    }
-    
-    setGstError('');
-    return true;
-  };
-
-  const validatePhoneNumber = (phoneNumber: string) => {
-    if (!phoneNumber) {
-      setPhoneError('');
-      return true;
-    }
-    
-    // Remove any non-digit characters for validation
-    const cleanPhone = phoneNumber.replace(/\D/g, '');
-    
-    // Indian mobile number validation: 10 digits starting with 6-9
-    const mobileRegex = /^[6-9]\d{9}$/;
-    
-    if (cleanPhone.length !== 10) {
-      setPhoneError('Phone number must be exactly 10 digits');
-      return false;
-    }
-    
-    if (!mobileRegex.test(cleanPhone)) {
-      setPhoneError('Invalid mobile number. Must start with 6-9 and be 10 digits');
-      return false;
-    }
-    
-    setPhoneError('');
-    return true;
-  };
-
-  const handleGSTChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.toUpperCase();
-    setFormData({ ...formData, gst_number: value });
-    validateGSTNumber(value);
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, ''); // Only allow digits
-    setFormData({ ...formData, phone_number: value });
-    validatePhoneNumber(value);
-  };
-
-  const generateSampleExcel = () => {
-    const sampleData = [
-      {
-        'Transport Name': 'Express Logistics',
-        'Description': 'Fast and reliable delivery service',
-        'Address': '123 Main Street, Industrial Area',
-        'City': 'Mumbai',
-        'State': 'Maharashtra',
-        'District': 'Mumbai',
-        'Pincode': '400001',
-        'Phone Number': '9876543210',
-        'GST Number': '27AAAAA0000A1Z5'
-      },
-      {
-        'Transport Name': 'Swift Cargo',
-        'Description': 'Nationwide transport solutions',
-        'Address': '456 Transport Hub',
-        'City': 'Delhi',
-        'State': 'Delhi',
-        'District': 'Central Delhi',
-        'Pincode': '110001',
-        'Phone Number': '9123456789',
-        'GST Number': '07BBBBB1111B2Z6'
+    if (pincode.length === 6) {
+      console.log('Pincode is 6 digits, fetching location...');
+      try {
+        const locationData = await api.fetchLocationByPincode(pincode);
+        console.log('Location data from API:', locationData);
+        
+        if (locationData.found && locationData.state && locationData.district && locationData.city) {
+          console.log('Valid location found, calling applyLocationFromPincode...');
+          const updatedLocation = await applyLocationFromPincode({
+            state: locationData.state,
+            district: locationData.district,
+            city: locationData.city,
+            pincode: locationData.pincode
+          });
+          
+          setFormData(prev => ({ ...prev, ...updatedLocation }));
+          console.log('applyLocationFromPincode completed');
+        } else {
+          console.log('Location not found or incomplete');
+        }
+      } catch (err) {
+        console.error('Failed to fetch location by pincode:', err);
       }
-    ];
+    }
+    console.log('=== handlePincodeChange completed ===');
+  };
 
-    const ws = XLSX.utils.json_to_sheet(sampleData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Transport Details');
-    
-    // Set column widths
-    ws['!cols'] = [
-      { width: 25 },  // Transport Name
-      { width: 35 },  // Description
-      { width: 35 },  // Address
-      { width: 15 },  // City
-      { width: 15 },  // State
-      { width: 15 },  // District
-      { width: 10 },  // Pincode
-      { width: 15 },  // Phone Number
-      { width: 20 }   // GST Number
-    ];
+  const handleStateChangeWrapper = async (state: string) => {
+    const updates = await handleStateChange(state);
+    setFormData(prev => ({ ...prev, ...updates }));
+  };
 
-    XLSX.writeFile(wb, 'transport_details_sample.xlsx');
+  const handleDistrictChangeWrapper = async (district: string) => {
+    const updates = await handleDistrictChange(district);
+    setFormData(prev => ({ ...prev, ...updates }));
+  };
+
+  const handleCityChangeWrapper = (cityName: string) => {
+    const updates = handleCityChange(cityName, cities);
+    setFormData(prev => ({ ...prev, ...updates }));
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      setExportLoading(true);
+      const token = localStorage.getItem('access_token');
+      await exportToExcel(token!);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export to Excel');
+    } finally {
+      setExportLoading(false);
+      setShowExportMenu(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    try {
+      setExportLoading(true);
+      exportToPDF(filteredTransports);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export to PDF');
+    } finally {
+      setExportLoading(false);
+      setShowExportMenu(false);
+    }
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -393,81 +214,40 @@ const TransportEntry: React.FC = () => {
 
     setImportFile(file);
     
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        
-        // Validate and transform data
-        const transformedData = jsonData.map((row: any, index: number) => ({
-          rowNumber: index + 2, // Excel row number (starting from 2, accounting for header)
-          transport_name: row['Transport Name'] || '',
-          description: row['Description'] || '',
-          address: row['Address'] || '',
-          city: row['City'] || '',
-          state: row['State'] || '',
-          district: row['District'] || '',
-          pincode: row['Pincode'] || '',
-          phone_number: row['Phone Number'] || '',
-          gst_number: row['GST Number'] || '',
-          isValid: !!(row['Transport Name']) // At least transport name is required
-        }));
-        
-        setImportPreview(transformedData);
-      } catch (err) {
-        setError('Failed to read Excel file. Please check the file format.');
-      }
-    };
-    reader.readAsArrayBuffer(file);
+    parseExcelFile(file)
+      .then(data => {
+        setImportPreview(data);
+      })
+      .catch(err => {
+        setError('Failed to read file. Please ensure it is a valid Excel file.');
+      });
   };
 
-  const handleImportData = async () => {
+  const handleImport = async () => {
     if (!importPreview.length) return;
-    
-    setImportLoading(true);
-    const validRows = importPreview.filter(row => row.isValid);
-    
+
+    const validation = validateImportData(importPreview);
+    if (!validation.valid) {
+      setError(validation.errors.join('\n'));
+      return;
+    }
+
     try {
-      const result = await api.importTransports(validRows);
-       
-      if (result.successCount > 0) {
-        fetchTransports(); // Refresh the transports list
-      }
-
-      if (result.errors.length > 0) {
-        setError(`Import completed with ${result.successCount} success(es) and ${result.errors.length} error(s):\n${result.errors.join('\n')}`);
-      } else {
-        setError('');
-      }
-
-      // Close modal and reset state
+      setImportLoading(true);
+      const transformedData = transformImportData(importPreview);
+      await importTransports(transformedData);
+      
       setShowImportModal(false);
       setImportFile(null);
       setImportPreview([]);
-      
     } catch (err) {
-      setError('Failed to import data. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to import transport options');
     } finally {
       setImportLoading(false);
     }
   };
 
-  const filteredTransports = useMemo(() => {
-    const term = searchTerm.toLowerCase();
-    return transports.filter(transport =>
-      transport.transport_name.toLowerCase().includes(term) ||
-      transport.description.toLowerCase().includes(term) ||
-      (transport.city && transport.city.toLowerCase().includes(term)) ||
-      (transport.state && transport.state.toLowerCase().includes(term)) ||
-      (transport.gst_number && transport.gst_number.toLowerCase().includes(term))
-    );
-  }, [transports, searchTerm]);
-
-  if (loading && transports.length === 0) {
+  if (loading && filteredTransports.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="text-gray-600">Loading transport options...</div>
@@ -476,65 +256,80 @@ const TransportEntry: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pb-2 sm:pb-8">
-      <Breadcrumb />
-      <div className="space-y-6">
+    <div className="space-y-6">
+      <Breadcrumb items={[{ label: 'Transport Entry', path: '/transport-entry' }]} />
+
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Transport Entry</h1>
-          <p className="mt-1 text-gray-600">Manage transport methods and delivery options</p>
+          <h1 className="text-2xl font-bold text-gray-900">Transport Entry</h1>
+          <p className="mt-1 text-sm text-gray-600">Manage your transport options</p>
         </div>
-        <div className="mt-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 sm:mt-0">
+        <div className="flex gap-2">
           <button
-            onClick={() => setShowImportModal(true)}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center justify-center"
+            onClick={() => {
+              resetForm();
+              setShowCreateForm(true);
+            }}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
-            <Upload className="mr-2 h-5 w-5" />
-            Import Excel
+            <Plus className="h-4 w-4" />
+            Add Transport
           </button>
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
-          >
-            <Plus className="mr-2 h-5 w-5" />
-            New Transport
-          </button>
+          
           <div className="relative export-menu-container">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              disabled={exportLoading}
-              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
-              <FileDown className="mr-2 h-5 w-5" />
-              {exportLoading ? 'Exporting...' : 'Export'}
-              <ChevronDown className="ml-2 h-4 w-4" />
+              <Download className="h-4 w-4" />
+              Export
+              <ChevronDown className="h-4 w-4" />
             </button>
+            
             {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
+              <div className="absolute right-0 mt-2 w-48 rounded-lg border border-gray-200 bg-white shadow-lg z-10">
                 <button
                   onClick={handleExportExcel}
-                  className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-100 flex items-center transition-colors"
+                  disabled={exportLoading}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                 >
-                  <Download className="mr-2 h-4 w-4" />
+                  <FileDown className="h-4 w-4" />
                   Export to Excel
                 </button>
                 <button
-                  onClick={handleExportPDF}
-                  className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-100 flex items-center transition-colors"
+                  onClick={handleExportPdf}
+                  disabled={exportLoading}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                 >
-                  <FileDown className="mr-2 h-4 w-4" />
+                  <FileDown className="h-4 w-4" />
                   Export to PDF
+                </button>
+                <button
+                  onClick={generateSampleExcel}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-t"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Sample
                 </button>
               </div>
             )}
           </div>
+
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Upload className="h-4 w-4" />
+            Import
+          </button>
         </div>
       </div>
 
+      {/* Error Display */}
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="text-red-600">{error}</p>
+        <div className="rounded-lg bg-red-50 p-4">
+          <p className="text-sm text-red-800">{error}</p>
           <button 
             onClick={() => setError('')}
             className="text-red-800 hover:text-red-900 text-sm mt-1"
@@ -550,7 +345,7 @@ const TransportEntry: React.FC = () => {
           <Search className="-translate-y-1/2 absolute left-3 top-1/2 h-5 w-5 transform text-gray-400" />
           <input
             type="text"
-            placeholder="Search transport options by name or description..."
+            placeholder="Search transport ..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -558,112 +353,22 @@ const TransportEntry: React.FC = () => {
         </div>
       </div>
 
-      {/* Transport Options Table */}
-      <div className="overflow-hidden rounded-lg bg-white shadow-sm">
-        {/* Desktop Table View */}
-        <div className="hidden overflow-x-auto md:block">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Transport Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Contact
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Location
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  GST Number
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Created Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {filteredTransports.map((transport) => (
-                <tr key={transport.id} className="transition-colors duration-200 hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center">
-                      <Truck className="mr-2 h-4 w-4 text-gray-400" />
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{transport.transport_name}</div>
-                        {transport.description && (
-                          <div className="text-xs text-gray-500">{transport.description}</div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {transport.phone_number && (
-                      <div className="flex items-center text-sm text-gray-900">
-                        <Phone className="mr-1 h-3 w-3 text-gray-400" />
-                        {transport.phone_number}
-                      </div>
-                    )}
-                    {transport.address && (
-                      <div className="text-xs text-gray-500 mt-1">{transport.address}</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {(transport.city || transport.state) && (
-                      <div className="flex items-center text-sm text-gray-900">
-                        <MapPin className="mr-1 h-3 w-3 text-gray-400" />
-                        <span>
-                          {transport.city}{transport.city && transport.state && ', '}{transport.state}
-                        </span>
-                      </div>
-                    )}
-                    {transport.district && (
-                      <div className="text-xs text-gray-500">{transport.district}</div>
-                    )}
-                    {transport.pincode && (
-                      <div className="text-xs text-gray-500">PIN: {transport.pincode}</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {transport.gst_number && (
-                      <div className="rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-900">
-                        {transport.gst_number}
-                      </div>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <div className="text-sm text-gray-500">{formatDate(transport.created_at)}</div>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleEdit(transport)}
-                        className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
-                        title="Edit transport option"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(transport.id, transport.transport_name)}
-                        className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
-                        title="Delete transport option"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Transport List */}
+      <div className="rounded-lg bg-white shadow-sm overflow-hidden">
+        {/* Desktop View */}
+        <div className="hidden md:block overflow-x-auto">
+          <TransportTable
+            transports={filteredTransports}
+            onView={handleView}
+            onEdit={handleEdit}
+            onDelete={deleteTransport}
+          />
 
           {filteredTransports.length === 0 && (
             <div className="py-12 text-center">
               <Truck className="mx-auto mb-4 h-12 w-12 text-gray-400" />
               <p className="text-gray-500">
-                {searchTerm ? 'No transport options found matching your search' : 'No transport options found'}
+                {searchTerm ? 'No transport options found matching your search.' : 'No transport options yet. Click "Add Transport" to create one.'}
               </p>
             </div>
           )}
@@ -675,382 +380,114 @@ const TransportEntry: React.FC = () => {
             <div className="py-12 text-center">
               <Truck className="mx-auto mb-4 h-12 w-12 text-gray-400" />
               <p className="text-gray-500">
-                {searchTerm ? 'No transport options found matching your search' : 'No transport options found'}
+                {searchTerm ? 'No transport options found.' : 'No transport options yet.'}
               </p>
             </div>
           ) : (
-            <div className="space-y-4 p-4">
-              {filteredTransports.map((transport) => (
-                <div key={transport.id} className="rounded-lg border bg-gray-50 p-4">
-                  {/* Transport Header */}
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center">
-                      <Truck className="mr-2 h-4 w-4 text-gray-400" />
-                      <span className="text-sm font-medium text-gray-900">{transport.transport_name}</span>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  {transport.description && (
-                    <div className="mb-3">
-                      <p className="text-xs text-gray-600">{transport.description}</p>
-                    </div>
-                  )}
-
-                  {/* Contact Info */}
-                  <div className="mb-3 space-y-1">
-                    {transport.phone_number && (
-                      <div className="flex items-center text-sm text-gray-900">
-                        <Phone className="mr-2 h-3 w-3 text-gray-400" />
-                        <span className="text-xs">{transport.phone_number}</span>
-                      </div>
-                    )}
-                    {transport.gst_number && (
-                      <div className="flex items-center text-sm text-gray-900">
-                        <Building className="mr-2 h-3 w-3 text-gray-400" />
-                        <span className="rounded border bg-white px-2 py-1 font-mono text-xs">
-                          {transport.gst_number}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Address */}
-                  {(transport.address || transport.city || transport.state) && (
-                    <div className="mb-3">
-                      <div className="flex items-start text-sm text-gray-900">
-                        <MapPin className="mr-2 mt-0.5 h-3 w-3 text-gray-400" />
-                        <div className="text-xs">
-                          {transport.address && (
-                            <div className="mb-1">{transport.address}</div>
-                          )}
-                          <div>
-                            {transport.city}{transport.city && transport.state && ', '}{transport.state}
-                            {transport.pincode && ` - ${transport.pincode}`}
-                          </div>
-                          {transport.district && (
-                            <div className="text-gray-500">District: {transport.district}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Created Date */}
-                  <div className="mb-3">
-                    <div className="text-xs text-gray-500">
-                      Created: {formatDate(transport.created_at)}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex justify-end space-x-2 border-t pt-2">
-                    <button
-                      onClick={() => handleEdit(transport)}
-                      className="text-blue-600 hover:text-blue-900 p-2 rounded hover:bg-blue-50"
-                      title="Edit transport option"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(transport.id, transport.transport_name)}
-                      className="text-red-600 hover:text-red-900 p-2 rounded hover:bg-red-50"
-                      title="Delete transport option"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <TransportMobileCard
+              transports={filteredTransports}
+              onView={handleView}
+              onEdit={handleEdit}
+              onDelete={deleteTransport}
+            />
           )}
         </div>
       </div>
 
-      {/* Import Excel Modal */}
+      {/* Modals */}
+      <TransportFormModal
+        isOpen={showCreateForm}
+        isEditing={!!editingTransport}
+        formData={formData}
+        states={states}
+        districts={districts}
+        cities={cities}
+        gstError={gstError}
+        phoneError={phoneError}
+        onClose={() => {
+          setShowCreateForm(false);
+          resetForm();
+        }}
+        onSubmit={handleSubmit}
+        onFormDataChange={(updates) => setFormData(prev => ({ ...prev, ...updates }))}
+        onPhoneChange={handlePhoneChange}
+        onGSTChange={handleGSTChange}
+        onPincodeChange={handlePincodeChange}
+        onStateChange={handleStateChangeWrapper}
+        onDistrictChange={handleDistrictChangeWrapper}
+        onCityChange={handleCityChangeWrapper}
+      />
+
+      {showViewModal && (
+        <ViewTransportModal
+          transport={selectedTransport}
+          onClose={() => setShowViewModal(false)}
+        />
+      )}
+
+      {/* Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-6">
-            <h2 className="mb-4 text-xl font-bold text-gray-900">
-              Import Transport Details from Excel
-            </h2>
+          <div className="w-full max-w-4xl rounded-lg bg-white p-6 shadow-lg">
+            <h2 className="mb-4 text-xl font-semibold">Import Transport Options</h2>
             
-            <div className="space-y-6">
-              {/* File Upload */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Select Excel File
-                </label>
-                <div className="flex items-center space-x-4">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={handleFileUpload}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  <button
-                    onClick={generateSampleExcel}
-                    className="whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800"
-                  >
-                    Download Sample
-                  </button>
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Upload an Excel file (.xlsx or .xls) with transport details. Download the sample format to see the expected structure.
-                </p>
-              </div>
+            <div className="mb-4">
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileUpload}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+            </div>
 
-              {/* Expected Format Info */}
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                <h3 className="mb-2 text-sm font-medium text-blue-900">Expected Excel Format:</h3>
-                <div className="space-y-1 text-xs text-blue-800">
-                  <p><strong>Required Column:</strong> Transport Name</p>
-                  <p><strong>Optional Columns:</strong> Description, Address, City, State, District, Pincode, Phone Number, GST Number</p>
-                  <p className="mt-2 text-blue-700">Note: Phone numbers should be 10 digits. GST numbers should follow the standard format.</p>
-                </div>
+            {importPreview.length > 0 && (
+              <div className="mb-4 max-h-96 overflow-auto">
+                <p className="mb-2 text-sm text-gray-600">Preview ({importPreview.length} rows)</p>
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Transport Name</th>
+                      <th className="px-3 py-2 text-left">Description</th>
+                      <th className="px-3 py-2 text-left">Phone</th>
+                      <th className="px-3 py-2 text-left">City</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {importPreview.slice(0, 10).map((row, idx) => (
+                      <tr key={idx}>
+                        <td className="px-3 py-2">{row['Transport Name']}</td>
+                        <td className="px-3 py-2">{row['Description']}</td>
+                        <td className="px-3 py-2">{row['Phone Number']}</td>
+                        <td className="px-3 py-2">{row['City']}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+            )}
 
-              {/* Preview Data */}
-              {importPreview.length > 0 && (
-                <div>
-                  <h3 className="mb-3 text-lg font-medium text-gray-900">
-                    Preview ({importPreview.filter(row => row.isValid).length} valid rows)
-                  </h3>
-                  <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-300">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Row</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Transport Name</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">City</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">State</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Phone</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {importPreview.map((row, index) => (
-                          <tr key={index} className={row.isValid ? 'bg-white' : 'bg-red-50'}>
-                            <td className="px-3 py-2 text-gray-900">{row.rowNumber}</td>
-                            <td className="px-3 py-2 text-gray-900">{row.transport_name || '-'}</td>
-                            <td className="px-3 py-2 text-gray-600">{row.city || '-'}</td>
-                            <td className="px-3 py-2 text-gray-600">{row.state || '-'}</td>
-                            <td className="px-3 py-2 text-gray-600">{row.phone_number || '-'}</td>
-                            <td className="px-3 py-2">
-                              <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                                row.isValid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                              }`}>
-                                {row.isValid ? 'Valid' : 'Invalid'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowImportModal(false);
-                    setImportFile(null);
-                    setImportPreview([]);
-                  }}
-                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleImportData}
-                  disabled={importLoading || importPreview.filter(row => row.isValid).length === 0}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {importLoading ? 'Importing...' : `Import ${importPreview.filter(row => row.isValid).length} Transport(s)`}
-                </button>
-              </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportPreview([]);
+                }}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={importLoading || importPreview.length === 0}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {importLoading ? 'Importing...' : 'Import'}
+              </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Create/Edit Transport Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6">
-            <h2 className="mb-4 text-xl font-bold text-gray-900">
-              {editingTransport ? 'Edit Transport Option' : 'Create New Transport Option'}
-            </h2>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Transport Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.transport_name}
-                  onChange={(e) => setFormData({ ...formData, transport_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter transport name (e.g., Express Delivery)"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter description (optional)"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Address
-                </label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter complete address"
-                  rows={2}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    State
-                  </label>
-                  <select
-                    value={formData.state}
-                    onChange={(e) => handleStateChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Select State</option>
-                    {states.map((state) => (
-                      <option key={state} value={state}>{state}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    District
-                  </label>
-                  <select
-                    value={formData.district}
-                    onChange={(e) => handleDistrictChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={!formData.state}
-                  >
-                    <option value="">Select District</option>
-                    {districts.map((district) => (
-                      <option key={district} value={district}>{district}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    City
-                  </label>
-                  <select
-                    value={formData.city}
-                    onChange={(e) => handleCityChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={!formData.district}
-                  >
-                    <option value="">Select City</option>
-                    {cities.map((city) => (
-                      <option key={city.city_name} value={city.city_name}>{city.city_name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Pincode
-                </label>
-                <input
-                  type="text"
-                  value={formData.pincode}
-                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter pincode"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone_number}
-                  onChange={handlePhoneChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    phoneError ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter 10-digit mobile number"
-                  maxLength={10}
-                />
-                {phoneError && (
-                  <p className="mt-1 text-sm text-red-600">{phoneError}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  GST Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.gst_number}
-                  onChange={handleGSTChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    gstError ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter GST number (e.g., 22AAAAA0000A1Z5)"
-                  maxLength={15}
-                />
-                {gstError && (
-                  <p className="mt-1 text-sm text-red-600">{gstError}</p>
-                )}
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 transition-colors duration-200 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors duration-200 hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingTransport ? 'Update Transport' : 'Create Transport')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      </div>
     </div>
   );
 };

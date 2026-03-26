@@ -1,5 +1,5 @@
 import express from 'express';
-import { supabase } from '../config.js';
+import { supabase, supabaseAdmin } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { 
   asyncHandler, 
@@ -20,7 +20,7 @@ router.get('/',
   cacheMiddleware(600), // Cache for 10 minutes
   asyncHandler(async (req, res) => {
     const transportOptions = await executeQuery(
-      supabase
+      supabaseAdmin
         .from('transport')
         .select('*')
         .order('created_at', { ascending: false }),
@@ -33,45 +33,89 @@ router.get('/',
 
 // Export to Excel - must come before /:id route
 router.get('/export/excel',
+  (req, res, next) => {
+    console.log('=== EXCEL EXPORT REQUEST RECEIVED ===');
+    console.log('Headers:', req.headers.authorization ? 'Authorization header present' : 'NO Authorization header');
+    console.log('Auth header value:', req.headers.authorization?.substring(0, 30));
+    next();
+  },
   authenticateUser,
   asyncHandler(async (req, res) => {
-    const transportOptions = await executeQuery(
-      supabase
-        .from('transport')
-        .select('*')
-        .order('created_at', { ascending: false }),
-      'Failed to fetch transport options for export'
-    );
+    console.log('=== AFTER AUTHENTICATION ===');
+    console.log('User ID:', req.user?.id);
+    console.log('User email:', req.user?.email);
+    console.log('Timestamp:', new Date().toISOString());
+    
+    try {
+      const transportOptions = await executeQuery(
+        supabaseAdmin
+          .from('transport')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        'Failed to fetch transport options for export'
+      );
 
-    // Format data for Excel
-    const excelData = transportOptions.map(transport => ({
-      'Transport Name': transport.transport_name,
-      'Description': transport.description || '',
-      'Address': transport.address || '',
-      'Phone Number': transport.phone_number || '',
-      'GST Number': transport.gst_number || '',
-      'State': transport.state || '',
-      'District': transport.district || '',
-      'City': transport.city || '',
-      'Pincode': transport.pincode || '',
-      'Created Date': new Date(transport.created_at).toLocaleDateString()
-    }));
+      console.log('Transport records fetched:', transportOptions?.length || 0);
 
-    res.json({ data: excelData });
+      // If no data, return empty array with proper structure
+      if (!transportOptions || transportOptions.length === 0) {
+        console.log('No transport data found, returning empty array');
+        return res.json({ data: [] });
+      }
+
+      // Format data for Excel
+      const excelData = transportOptions.map(transport => ({
+        'Transport Name': transport.transport_name,
+        'Description': transport.description || '',
+        'Address': transport.address || '',
+        'Phone Number': transport.phone_number || '',
+        'Email ID': transport.email_id || '',
+        'GST Number': transport.gst_number || '',
+        'State': transport.state || '',
+        'District': transport.district || '',
+        'City': transport.city || '',
+        'Pincode': transport.pincode || '',
+        'Created Date': new Date(transport.created_at).toLocaleDateString()
+      }));
+      
+      console.log('Excel data formatted successfully, rows:', excelData.length);
+      console.log('Sample row:', JSON.stringify(excelData[0]));
+      console.log('Sending response...');
+      
+      res.json({ data: excelData });
+      console.log('Response sent successfully');
+    } catch (error) {
+      console.error('ERROR in Excel export:', error);
+      console.error('Error stack:', error.stack);
+      throw error;
+    }
   })
 );
 
 // Export to PDF - must come before /:id route
 router.get('/export/pdf',
+  (req, res, next) => {
+    console.log('=== PDF EXPORT REQUEST RECEIVED ===');
+    console.log('Headers:', req.headers.authorization ? 'Authorization header present' : 'NO Authorization header');
+    console.log('Auth header value:', req.headers.authorization?.substring(0, 30));
+    next();
+  },
   authenticateUser,
   asyncHandler(async (req, res) => {
+    console.log('=== AFTER PDF AUTHENTICATION ===');
+    console.log('User ID:', req.user?.id);
+    console.log('User email:', req.user?.email);
+    console.log('Timestamp:', new Date().toISOString());
+    
     const transportOptions = await executeQuery(
-      supabase
+      supabaseAdmin
         .from('transport')
         .select('*')
         .order('created_at', { ascending: false }),
       'Failed to fetch transport options for export'
     );
+
+    console.log('Transport records fetched for PDF:', transportOptions?.length || 0);
 
     // Format data for PDF
     const pdfData = transportOptions.map(transport => ({
@@ -79,6 +123,7 @@ router.get('/export/pdf',
       description: transport.description || '',
       address: transport.address || '',
       phone_number: transport.phone_number || '',
+      email_id: transport.email_id || '',
       gst_number: transport.gst_number || '',
       state: transport.state || '',
       district: transport.district || '',
@@ -86,8 +131,11 @@ router.get('/export/pdf',
       pincode: transport.pincode || '',
       created_at: new Date(transport.created_at).toLocaleDateString()
     }));
-
+    
+    console.log('PDF data formatted successfully, rows:', pdfData.length);
+    console.log('Sending PDF response...');
     res.json({ data: pdfData });
+    console.log('PDF response sent successfully');
   })
 );
 
@@ -100,7 +148,7 @@ router.get('/:id',
     validateUUID(id, 'Transport ID');
 
     const transport = await getOneOrFail(
-      supabase
+      supabaseAdmin
         .from('transport')
         .select('*')
         .eq('id', id),
@@ -120,6 +168,7 @@ router.post('/',
       description, 
       address, 
       phone_number, 
+      email_id,
       gst_number, 
       state, 
       district, 
@@ -129,7 +178,7 @@ router.post('/',
 
     validateRequired(req.body, ['transport_name']);
 
-    const { data: transport, error } = await supabase
+    const { data: transport, error } = await supabaseAdmin
       .from('transport')
       .insert([
         {
@@ -137,6 +186,7 @@ router.post('/',
           description: description || '',
           address: address || '',
           phone_number: phone_number || '',
+          email_id: email_id || '',
           gst_number: gst_number || '',
           state: state || '',
           district: district || '',
@@ -178,6 +228,7 @@ router.put('/:id',
       description, 
       address, 
       phone_number, 
+      email_id,
       gst_number, 
       state, 
       district, 
@@ -188,13 +239,14 @@ router.put('/:id',
     validateUUID(id, 'Transport ID');
     validateRequired(req.body, ['transport_name']);
 
-    const { data: transport, error } = await supabase
+    const { data: transport, error } = await supabaseAdmin
       .from('transport')
       .update({
         transport_name,
         description: description || '',
         address: address || '',
         phone_number: phone_number || '',
+        email_id: email_id || '',
         gst_number: gst_number || '',
         state: state || '',
         district: district || '',
@@ -232,7 +284,7 @@ router.delete('/:id',
     validateUUID(id, 'Transport ID');
 
     await executeQuery(
-      supabase
+      supabaseAdmin
         .from('transport')
         .delete()
         .eq('id', id),

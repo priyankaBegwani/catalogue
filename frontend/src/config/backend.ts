@@ -21,8 +21,8 @@ interface BackendConfig {
 
 // Get backend type from environment or use default
 const getBackendType = (): BackendType => {
-  const envType = import.meta.env.VITE_BACKEND_TYPE as BackendType;
-  return envType || 'node'; // Default to Node.js backend
+  // Force Node.js backend for transport export functionality
+  return 'node'; // Always use Node.js backend
 };
 
 // Get backend URL from environment or use defaults

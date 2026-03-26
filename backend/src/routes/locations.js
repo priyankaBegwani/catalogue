@@ -120,4 +120,64 @@ router.get('/hierarchy',
   })
 );
 
+// Get location by pincode
+router.get('/pincode/:pincode', 
+  authenticateUser, 
+  cacheMiddleware(3600), // Cache for 1 hour
+  asyncHandler(async (req, res) => {
+    const { pincode } = req.params;
+    
+    console.log('=== BACKEND: Pincode lookup request ===');
+    console.log('Pincode:', pincode);
+    
+    if (!pincode) {
+      throw new AppError('Pincode parameter is required', 400);
+    }
+
+    console.log('Querying cities table for zipcode:', pincode);
+    const locationData = await executeQuery(
+      supabase
+        .from('cities')
+        .select(`
+          city_name,
+          zipcode,
+          districts!inner(
+            district_name,
+            states!inner(
+              state_name
+            )
+          )
+        `)
+        .eq('zipcode', pincode)
+        .limit(1),
+      'Failed to fetch location by pincode'
+    );
+
+    console.log('Query result:', locationData);
+    console.log('Number of records found:', locationData.length);
+
+    if (locationData.length === 0) {
+      console.log('No location found for pincode:', pincode);
+      return res.json({ 
+        found: false,
+        message: 'No location found for this pincode' 
+      });
+    }
+
+    const location = locationData[0];
+    console.log('Location found:', location);
+    console.log('Districts object:', location.districts);
+    
+    const response = { 
+      found: true,
+      state: location.districts.states.state_name,
+      district: location.districts.district_name,
+      city: location.city_name,
+      pincode: location.zipcode
+    };
+    console.log('Sending response:', response);
+    res.json(response);
+  })
+);
+
 export default router;

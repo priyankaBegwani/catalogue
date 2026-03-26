@@ -211,6 +211,7 @@ export interface ImportTransportData {
   district: string;
   pincode: string;
   phone_number: string;
+  email_id: string;
   gst_number: string;
   rowNumber: number;
 }
@@ -219,13 +220,13 @@ export interface PartiesResponse {
   parties: Party[];
 }
 
-
 export interface Transport {
   id: string;
   transport_name: string;
   description: string;
   address: string;
   phone_number: string;
+  email_id: string;
   gst_number: string;
   state: string;
   district: string;
@@ -727,7 +728,7 @@ class ApiClient {
       try {
         await this.request('/api/transport', {
           method: 'POST',
-          body: { transport_name: row.transport_name, description: row.description, address: row.address, city: row.city, state: row.state, district: row.district, pincode: row.pincode, phone_number: row.phone_number, gst_number: row.gst_number },
+          body: { transport_name: row.transport_name, description: row.description, address: row.address, city: row.city, state: row.state, district: row.district, pincode: row.pincode, phone_number: row.phone_number, email_id: row.email_id, gst_number: row.gst_number },
           errorMsg: 'Failed to create transport'
         });
         successCount++;
@@ -755,6 +756,7 @@ class ApiClient {
     description: string,
     address: string,
     phone_number: string,
+    email_id: string,
     gst_number: string,
     state: string,
     district: string,
@@ -779,6 +781,10 @@ class ApiClient {
 
   async fetchCities(district: string): Promise<{ cities: Array<{ city_name: string; zipcode: string; is_major_city: boolean }> }> {
     return this.request(`/api/locations/cities?district=${encodeURIComponent(district)}`, { errorMsg: 'Failed to fetch cities' });
+  }
+
+  async fetchLocationByPincode(pincode: string): Promise<{ found: boolean; state?: string; district?: string; city?: string; pincode?: string; message?: string }> {
+    return this.request(`/api/locations/pincode/${encodeURIComponent(pincode)}`, { errorMsg: 'Failed to fetch location by pincode' });
   }
 
 
