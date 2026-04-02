@@ -63,7 +63,12 @@ router.post('/',
       state, 
       pincode, 
       phone_number,
-      gst_number
+      email_id,
+      gst_number,
+      grade,
+      preferred_transport_1,
+      preferred_transport_2,
+      default_discount
     } = req.body;
 
     validateRequired(req.body, ['name']);
@@ -80,7 +85,12 @@ router.post('/',
             state: state || '',
             pincode: pincode || '',
             phone_number: phone_number || '',
+            email_id: email_id || '',
             gst_number: gst_number || '',
+            grade: grade || '',
+            preferred_transport_1: preferred_transport_1 || null,
+            preferred_transport_2: preferred_transport_2 || null,
+            default_discount: default_discount || null,
             created_by: req.user.id
           }
         ])
@@ -113,7 +123,12 @@ router.put('/:id',
       state, 
       pincode, 
       phone_number,
-      gst_number
+      email_id,
+      gst_number,
+      grade,
+      preferred_transport_1,
+      preferred_transport_2,
+      default_discount
     } = req.body;
 
     validateUUID(id, 'Party ID');
@@ -130,7 +145,12 @@ router.put('/:id',
           state: state || '',
           pincode: pincode || '',
           phone_number: phone_number || '',
+          email_id: email_id || '',
           gst_number: gst_number || '',
+          grade: grade || '',
+          preferred_transport_1: preferred_transport_1 || null,
+          preferred_transport_2: preferred_transport_2 || null,
+          default_discount: default_discount || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', id)

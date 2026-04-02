@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { api, Party } from '../lib/api';
+import { api, Party, PartyPhoneNumber } from '../lib/api';
 import * as XLSX from 'xlsx';
-import { Plus, Search, Edit2, Trash2, Users, MapPin, Phone, Upload, Download, Building, Award, X } from 'lucide-react';
-import { PartyTierSelector } from '../components/PartyTierSelector';
+import { Plus, Search, Edit2, Trash2, Users, MapPin, Phone, Upload, Download, Building, Award, X, Minus } from 'lucide-react';
 import { Breadcrumb } from '../components';
 
 const PartyEntry: React.FC = () => {
@@ -16,10 +15,16 @@ const PartyEntry: React.FC = () => {
   const [importLoading, setImportLoading] = useState(false);
   const [editingParty, setEditingParty] = useState<Party | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedParty, setSelectedParty] = useState<Party | null>(null);
   const [states, setStates] = useState<string[]>([]);
   const [districts, setDistricts] = useState<string[]>([]);
   const [cities, setCities] = useState<Array<{ city_name: string; zipcode: string }>>([]);
   const [selectedDistrict, setSelectedDistrict] = useState('');
+  const [transports, setTransports] = useState<Array<{ id: string; transport_name: string }>>([]);
+  const [phoneNumbers, setPhoneNumbers] = useState<PartyPhoneNumber[]>([
+    { phone_number: '', contact_name: '', designation: '', is_default: true }
+  ]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -28,20 +33,19 @@ const PartyEntry: React.FC = () => {
     state: '',
     pincode: '',
     phone_number: '',
+    email_id: '',
     gst_number: '',
-    volume_tier_id: '',
-    relationship_tier_id: '',
-    hybrid_auto_tier_id: '',
-    hybrid_manual_override: false,
-    hybrid_override_tier_id: '',
-    monthly_order_count: 0
+    grade: '',
+    preferred_transport_1: '',
+    preferred_transport_2: '',
+    default_discount: ''
   });
   const [gstError, setGstError] = useState('');
-  const [phoneError, setPhoneError] = useState('');
 
   useEffect(() => {
     fetchParties();
     fetchStates();
+    fetchTransports();
   }, []);
 
   const fetchStates = async () => {
@@ -50,6 +54,15 @@ const PartyEntry: React.FC = () => {
       setStates(data.states);
     } catch (err) {
       console.error('Failed to fetch states:', err);
+    }
+  };
+
+  const fetchTransports = async () => {
+    try {
+      const data = await api.fetchTransports();
+      setTransports(data.transportOptions || []);
+    } catch (err) {
+      console.error('Failed to fetch transports:', err);
     }
   };
 
@@ -93,6 +106,71 @@ const PartyEntry: React.FC = () => {
     });
   };
 
+  const applyLocationFromPincode = async (locationData: {
+    state: string;
+    district: string;
+    city: string;
+    pincode?: string;
+  }) => {
+    const normalizedState = locationData.state.trim();
+    const normalizedDistrict = locationData.district.trim();
+    const normalizedCity = locationData.city.trim();
+    const normalizedPincode = locationData.pincode?.trim() || '';
+
+    const matchedState = states.find(
+      (stateOption) => stateOption.trim().toLowerCase() === normalizedState.toLowerCase()
+    ) || normalizedState;
+
+    const districtData = await api.fetchDistricts(matchedState);
+    setDistricts(districtData.districts);
+
+    const matchedDistrict = districtData.districts.find(
+      (districtOption) => districtOption.trim().toLowerCase() === normalizedDistrict.toLowerCase()
+    ) || normalizedDistrict;
+
+    setSelectedDistrict(matchedDistrict);
+
+    const cityData = await api.fetchCities(matchedDistrict);
+    setCities(cityData.cities);
+
+    const matchedCity = cityData.cities.find(
+      (cityOption) => cityOption.city_name.trim().toLowerCase() === normalizedCity.toLowerCase()
+    )?.city_name || normalizedCity;
+
+    const matchedPincode = cityData.cities.find(
+      (cityOption) => cityOption.city_name.trim().toLowerCase() === matchedCity.toLowerCase()
+    )?.zipcode || normalizedPincode;
+
+    setFormData(prev => ({
+      ...prev,
+      state: matchedState,
+      city: matchedCity,
+      pincode: matchedPincode || normalizedPincode
+    }));
+  };
+
+  const handlePincodeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const pincode = e.target.value;
+    setFormData(prev => ({ ...prev, pincode }));
+
+    if (pincode.length === 6) {
+      try {
+        const locationData = await api.fetchLocationByPincode(pincode);
+        
+        if (locationData.found && locationData.state && locationData.district && locationData.city) {
+          await applyLocationFromPincode({
+            state: locationData.state,
+            district: locationData.district,
+            city: locationData.city,
+            pincode: locationData.pincode
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch location by pincode:', err);
+      }
+    }
+  };
+
   const fetchParties = async () => {
      try {
       setLoading(true);
@@ -108,21 +186,25 @@ const PartyEntry: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate GST number and phone number before submission
+    // Validate GST number before submission
     const isGSTValid = validateGSTNumber(formData.gst_number);
-    const isPhoneValid = validatePhoneNumber(formData.phone_number);
     
-    if (!isGSTValid || !isPhoneValid) {
+    if (!isGSTValid) {
       return;
     }
     
     setLoading(true);
 
     try {
-
-     await api.createOrEditParty({
-      ...formData
-     }, editingParty);
+      const result = await api.createOrEditParty({
+        ...formData
+      }, editingParty);
+      
+      // Save phone numbers if party was created/updated successfully
+      const partyId = editingParty?.id || result?.id;
+      if (partyId) {
+        await api.savePartyPhoneNumbers(partyId, phoneNumbers);
+      }
       
       resetForm();
       fetchParties();
@@ -131,6 +213,42 @@ const PartyEntry: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleView = (party: Party) => {
+    setSelectedParty(party);
+    setShowViewModal(true);
+  };
+
+  const addPhoneNumber = () => {
+    if (phoneNumbers.length < 5) {
+      setPhoneNumbers([...phoneNumbers, { phone_number: '', contact_name: '', designation: '', is_default: false }]);
+    }
+  };
+
+  const removePhoneNumber = (index: number) => {
+    if (phoneNumbers.length > 1) {
+      const newPhoneNumbers = phoneNumbers.filter((_, i) => i !== index);
+      // If we removed the default, make the first one default
+      if (phoneNumbers[index].is_default && newPhoneNumbers.length > 0) {
+        newPhoneNumbers[0].is_default = true;
+      }
+      setPhoneNumbers(newPhoneNumbers);
+    }
+  };
+
+  const updatePhoneNumber = (index: number, field: keyof PartyPhoneNumber, value: string | boolean) => {
+    const newPhoneNumbers = [...phoneNumbers];
+    newPhoneNumbers[index] = { ...newPhoneNumbers[index], [field]: value };
+    
+    // If setting this as default, unset others
+    if (field === 'is_default' && value === true) {
+      newPhoneNumbers.forEach((pn, i) => {
+        if (i !== index) pn.is_default = false;
+      });
+    }
+    
+    setPhoneNumbers(newPhoneNumbers);
   };
 
   const handleEdit = async (party: Party) => {
@@ -143,13 +261,12 @@ const PartyEntry: React.FC = () => {
       state: party.state,
       pincode: party.pincode,
       phone_number: party.phone_number,
+      email_id: party.email_id || '',
       gst_number: party.gst_number,
-      volume_tier_id: party.volume_tier_id || '',
-      relationship_tier_id: party.relationship_tier_id || '',
-      hybrid_auto_tier_id: party.hybrid_auto_tier_id || '',
-      hybrid_manual_override: party.hybrid_manual_override || false,
-      hybrid_override_tier_id: party.hybrid_override_tier_id || '',
-      monthly_order_count: party.monthly_order_count || 0
+      grade: party.grade || '',
+      preferred_transport_1: party.preferred_transport_1 || '',
+      preferred_transport_2: party.preferred_transport_2 || '',
+      default_discount: party.default_discount || ''
     });
     
     // Load districts and cities for editing
@@ -164,6 +281,20 @@ const PartyEntry: React.FC = () => {
       } catch (err) {
         console.error('Failed to load location data:', err);
       }
+    }
+
+    // Load phone numbers for this party
+    try {
+      const phoneData = await api.fetchPartyPhoneNumbers(party.id);
+      if (phoneData.phoneNumbers && phoneData.phoneNumbers.length > 0) {
+        setPhoneNumbers(phoneData.phoneNumbers);
+      } else {
+        // If no phone numbers exist, initialize with one default entry
+        setPhoneNumbers([{ phone_number: '', contact_name: '', designation: '', is_default: true }]);
+      }
+    } catch (err) {
+      console.error('Failed to load phone numbers:', err);
+      setPhoneNumbers([{ phone_number: '', contact_name: '', designation: '', is_default: true }]);
     }
     
     setShowCreateForm(true);
@@ -193,7 +324,9 @@ const PartyEntry: React.FC = () => {
         'State': 'Maharashtra',
         'Pincode': '400001',
         'Phone Number': '9876543210',
-        'GST Number': '27AAAAA0000A1Z5'
+        'Email ID': 'abc@textiles.com',
+        'GST Number': '27AAAAA0000A1Z5',
+        'Grade': 'A+'
       },
       {
         'Party Name': 'XYZ Fabrics Pvt Ltd',
@@ -203,7 +336,9 @@ const PartyEntry: React.FC = () => {
         'State': 'Gujarat',
         'Pincode': '395007',
         'Phone Number': '9123456789',
-        'GST Number': '24BBBBB1111B2Y6'
+        'Email ID': 'xyz@fabrics.com',
+        'GST Number': '24BBBBB1111B2Y6',
+        'Grade': 'A'
       }
     ];
 
@@ -220,7 +355,9 @@ const PartyEntry: React.FC = () => {
       { width: 15 }, // State
       { width: 10 }, // Pincode
       { width: 15 }, // Phone Number
-      { width: 20 }  // GST Number
+      { width: 25 }, // Email ID
+      { width: 20 }, // GST Number
+      { width: 10 }  // Grade
     ];
 
     XLSX.writeFile(wb, 'party_details_sample.xlsx');
@@ -251,7 +388,9 @@ const PartyEntry: React.FC = () => {
           state: row['State'] || '',
           pincode: row['Pincode'] || '',
           phone_number: row['Phone Number'] || '',
+          email_id: row['Email ID'] || '',
           gst_number: row['GST Number'] || '',
+          grade: row['Grade'] || '',
           isValid: !!(row['Party Name']) // At least party name is required
         }));
         
@@ -304,22 +443,21 @@ const PartyEntry: React.FC = () => {
       state: '',
       pincode: '',
       phone_number: '',
+      email_id: '',
       gst_number: '',
-      volume_tier_id: '',
-      relationship_tier_id: '',
-      hybrid_auto_tier_id: '',
-      hybrid_manual_override: false,
-      hybrid_override_tier_id: '',
-      monthly_order_count: 0
+      grade: '',
+      preferred_transport_1: '',
+      preferred_transport_2: '',
+      default_discount: ''
     });
     setSelectedDistrict('');
     setDistricts([]);
     setCities([]);
+    setPhoneNumbers([{ phone_number: '', contact_name: '', designation: '', is_default: true }]);
     setShowCreateForm(false);
     setEditingParty(null);
     setError('');
     setGstError('');
-    setPhoneError('');
   };
 
   const formatDate = (dateString: string) => {
@@ -348,51 +486,25 @@ const PartyEntry: React.FC = () => {
     return true;
   };
 
-  const validatePhoneNumber = (phoneNumber: string) => {
-    if (!phoneNumber) {
-      setPhoneError('');
-      return true;
-    }
-    
-    // Remove any non-digit characters for validation
-    const cleanPhone = phoneNumber.replace(/\D/g, '');
-    
-    // Indian mobile number validation: 10 digits starting with 6-9
-    const mobileRegex = /^[6-9]\d{9}$/;
-    
-    if (cleanPhone.length !== 10) {
-      setPhoneError('Phone number must be exactly 10 digits');
-      return false;
-    }
-    
-    if (!mobileRegex.test(cleanPhone)) {
-      setPhoneError('Invalid mobile number. Must start with 6-9 and be 10 digits');
-      return false;
-    }
-    
-    setPhoneError('');
-    return true;
-  };
-
   const handleGSTChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.toUpperCase();
     setFormData({ ...formData, gst_number: value });
     validateGSTNumber(value);
   };
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, ''); // Only allow digits
-    setFormData({ ...formData, phone_number: value });
-    validatePhoneNumber(value);
-  };
 
   const filteredParties = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return parties.filter(party =>
       party.name.toLowerCase().includes(term) ||
-      party.city.toLowerCase().includes(term) ||
-      party.state.toLowerCase().includes(term) ||
-      party.gst_number.toLowerCase().includes(term)
+      party.description.toLowerCase().includes(term) ||
+      (party.address && party.address.toLowerCase().includes(term)) ||
+      (party.phone_number && party.phone_number.toLowerCase().includes(term)) ||
+      (party.email_id && party.email_id.toLowerCase().includes(term)) ||
+      (party.gst_number && party.gst_number.toLowerCase().includes(term)) ||
+      (party.pincode && party.pincode.toLowerCase().includes(term)) ||
+      (party.city && party.city.toLowerCase().includes(term)) ||
+      (party.state && party.state.toLowerCase().includes(term))
     );
   }, [parties, searchTerm]);
 
@@ -503,7 +615,11 @@ const PartyEntry: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {filteredParties.map((party) => (
-                <tr key={party.id} className="transition-colors duration-200 hover:bg-gray-50">
+                <tr 
+                  key={party.id} 
+                  className="transition-colors duration-200 hover:bg-gray-50 cursor-pointer"
+                  onClick={() => handleView(party)}
+                >
                   <td className="px-6 py-4">
                     <div className="text-sm font-medium text-gray-900">{party.name}</div>
                   </td>
@@ -554,14 +670,20 @@ const PartyEntry: React.FC = () => {
                   <td className="whitespace-nowrap px-6 py-4 text-sm font-medium">
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => handleEdit(party)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(party);
+                        }}
                         className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
                         title="Edit party"
                       >
                         <Edit2 className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(party.id, party.name)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(party.id, party.name);
+                        }}
                         className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
                         title="Delete party"
                       >
@@ -596,7 +718,11 @@ const PartyEntry: React.FC = () => {
           ) : (
             <div className="space-y-4 p-4">
               {filteredParties.map((party) => (
-                <div key={party.id} className="rounded-lg border bg-gray-50 p-4">
+                <div 
+                  key={party.id} 
+                  className="rounded-lg border bg-gray-50 p-4 cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleView(party)}
+                >
                   {/* Party Header */}
                   <div className="mb-3 flex items-center justify-between">
                     <div className="flex items-center">
@@ -664,14 +790,20 @@ const PartyEntry: React.FC = () => {
                   {/* Actions */}
                   <div className="flex justify-end space-x-2 border-t pt-2">
                     <button
-                      onClick={() => handleEdit(party)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(party);
+                      }}
                       className="text-blue-600 hover:text-blue-900 p-2 rounded hover:bg-blue-50"
                       title="Edit party"
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => handleDelete(party.id, party.name)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(party.id, party.name);
+                      }}
                       className="text-red-600 hover:text-red-900 p-2 rounded hover:bg-red-50"
                       title="Delete party"
                     >
@@ -743,6 +875,19 @@ const PartyEntry: React.FC = () => {
                 />
               </div>
 
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Pincode
+                </label>
+                <input
+                  type="text"
+                  value={formData.pincode}
+                  onChange={handlePincodeChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter pincode"
+                />
+              </div>
+
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -795,36 +940,107 @@ const PartyEntry: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Pincode
-                </label>
-                <input
-                  type="text"
-                  value={formData.pincode}
-                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter pincode"
-                />
+              {/* Phone Numbers Section */}
+              <div className="border-t pt-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Phone Numbers
+                  </label>
+                  {phoneNumbers.length < 5 && (
+                    <button
+                      type="button"
+                      onClick={addPhoneNumber}
+                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Phone Number
+                    </button>
+                  )}
+                </div>
+                
+                <div className="space-y-3">
+                  {phoneNumbers.map((phoneNumber, index) => (
+                    <div key={index} className="border rounded-lg p-3 bg-gray-50">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Phone Number *
+                          </label>
+                          <input
+                            type="tel"
+                            value={phoneNumber.phone_number}
+                            onChange={(e) => updatePhoneNumber(index, 'phone_number', e.target.value.replace(/\D/g, ''))}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="10-digit number"
+                            maxLength={10}
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Contact Name
+                          </label>
+                          <input
+                            type="text"
+                            value={phoneNumber.contact_name}
+                            onChange={(e) => updatePhoneNumber(index, 'contact_name', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Name"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Designation
+                          </label>
+                          <input
+                            type="text"
+                            value={phoneNumber.designation}
+                            onChange={(e) => updatePhoneNumber(index, 'designation', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="e.g., Manager"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                          <input
+                            type="radio"
+                            checked={phoneNumber.is_default}
+                            onChange={() => updatePhoneNumber(index, 'is_default', true)}
+                            className="text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-xs">Default for communication</span>
+                        </label>
+                        
+                        {phoneNumbers.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removePhoneNumber(index)}
+                            className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800"
+                          >
+                            <Minus className="h-3 w-3" />
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Phone Number
+                  Email ID
                 </label>
                 <input
-                  type="tel"
-                  value={formData.phone_number}
-                  onChange={handlePhoneChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    phoneError ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter 10-digit mobile number"
-                  maxLength={10}
+                  type="email"
+                  value={formData.email_id}
+                  onChange={(e) => setFormData({ ...formData, email_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter email address"
                 />
-                {phoneError && (
-                  <p className="mt-1 text-sm text-red-600">{phoneError}</p>
-                )}
               </div>
 
               <div>
@@ -846,31 +1062,97 @@ const PartyEntry: React.FC = () => {
                 )}
               </div>
 
-              {/* Pricing Tier Section */}
-              <div className="border-t pt-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <Award className="w-5 h-5 text-indigo-600" />
-                  <h3 className="text-lg font-semibold text-gray-900">Pricing Tier</h3>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Client Grade
+                </label>
+                <select
+                  value={formData.grade}
+                  onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Grade</option>
+                  <option value="A+">A+ (Premium Client)</option>
+                  <option value="A">A (Reliable Client)</option>
+                  <option value="B">B (Average Client)</option>
+                  <option value="C">C (Risky Client)</option>
+                  <option value="D">D (High Risk / Problematic)</option>
+                </select>
+                {formData.grade && (
+                  <p className="mt-1 text-xs text-gray-600">
+                    {formData.grade === 'A+' && '✓ High volume + always on-time payment + strong relationship'}
+                    {formData.grade === 'A' && '✓ Good volume + mostly on-time payment'}
+                    {formData.grade === 'B' && '⚠ Moderate orders + occasional delays'}
+                    {formData.grade === 'C' && '⚠ Low volume OR frequent payment delays'}
+                    {formData.grade === 'D' && '⚠ Payment issues / returns / disputes'}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Preferred Transport 1
+                  </label>
+                  <select
+                    value={formData.preferred_transport_1}
+                    onChange={(e) => setFormData({ ...formData, preferred_transport_1: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select Transport</option>
+                    {transports.map((transport) => (
+                      <option key={transport.id} value={transport.id}>
+                        {transport.transport_name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <PartyTierSelector
-                  partyId={editingParty?.id}
-                  volumeTierId={formData.volume_tier_id}
-                  relationshipTierId={formData.relationship_tier_id}
-                  hybridAutoTierId={formData.hybrid_auto_tier_id}
-                  hybridManualOverride={formData.hybrid_manual_override}
-                  hybridOverrideTierId={formData.hybrid_override_tier_id}
-                  monthlyOrderCount={formData.monthly_order_count}
-                  onTierChange={(tierData) => {
-                    setFormData({
-                      ...formData,
-                      volume_tier_id: tierData.volumeTierId || formData.volume_tier_id,
-                      relationship_tier_id: tierData.relationshipTierId || formData.relationship_tier_id,
-                      hybrid_auto_tier_id: tierData.hybridAutoTierId || formData.hybrid_auto_tier_id,
-                      hybrid_manual_override: tierData.hybridManualOverride !== undefined ? tierData.hybridManualOverride : formData.hybrid_manual_override,
-                      hybrid_override_tier_id: tierData.hybridOverrideTierId || formData.hybrid_override_tier_id
-                    });
-                  }}
-                />
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Preferred Transport 2
+                  </label>
+                  <select
+                    value={formData.preferred_transport_2}
+                    onChange={(e) => setFormData({ ...formData, preferred_transport_2: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select Transport</option>
+                    {transports.map((transport) => (
+                      <option key={transport.id} value={transport.id}>
+                        {transport.transport_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Default Discount Section */}
+              <div className="border-t pt-4">
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Default Discount Tier
+                  </label>
+                  <select
+                    value={formData.default_discount}
+                    onChange={(e) => setFormData({ ...formData, default_discount: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select Discount Tier</option>
+                    <option value="gold">Gold - 47.45% Discount</option>
+                    <option value="silver">Silver - 45% Discount</option>
+                    <option value="copper">Copper - 40% Discount</option>
+                    <option value="retail">Retail - 30% Discount</option>
+                  </select>
+                  {formData.default_discount && (
+                    <p className="mt-1 text-xs text-gray-600">
+                      {formData.default_discount === 'gold' && '✓ 47.45% discount will be applied to all prices for this party'}
+                      {formData.default_discount === 'silver' && '✓ 45% discount will be applied to all prices for this party'}
+                      {formData.default_discount === 'copper' && '✓ 40% discount will be applied to all prices for this party'}
+                      {formData.default_discount === 'retail' && '✓ 30% discount will be applied to all prices for this party'}
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">
@@ -945,8 +1227,9 @@ const PartyEntry: React.FC = () => {
                 <h3 className="mb-2 text-sm font-medium text-blue-900">Expected Excel Format:</h3>
                 <div className="space-y-1 text-xs text-blue-800">
                   <p><strong>Required Column:</strong> Party Name</p>
-                  <p><strong>Optional Columns:</strong> Description, Address, City, State, Pincode, Phone Number, GST Number</p>
+                  <p><strong>Optional Columns:</strong> Description, Address, City, State, Pincode, Phone Number, Email ID, GST Number, Grade</p>
                   <p><strong>Note:</strong> Column names must match exactly (case-sensitive)</p>
+                  <p><strong>Grade Values:</strong> A+, A, B, C, D</p>
                 </div>
               </div>
 
@@ -1018,6 +1301,118 @@ const PartyEntry: React.FC = () => {
         </div>
       )}
       </div>
+
+      {/* View Party Modal */}
+      {showViewModal && selectedParty && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="relative w-full max-w-2xl rounded-lg bg-white shadow-lg">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Party Details</h2>
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="px-6 py-4">
+              <div className="space-y-3">
+                {/* Party Name */}
+                <div className="flex items-center">
+                  <Users className="mr-3 h-4 w-4 text-gray-400" />
+                  <span className="font-medium text-gray-900">{selectedParty.name}</span>
+                </div>
+
+                {/* Description */}
+                {selectedParty.description && (
+                  <div className="text-sm text-gray-700 ml-7">
+                    {selectedParty.description}
+                  </div>
+                )}
+
+                {/* Phone Number */}
+                {selectedParty.phone_number && (
+                  <div className="flex items-center">
+                    <Phone className="mr-3 h-4 w-4 text-gray-400" />
+                    <span className="text-sm text-gray-700">{selectedParty.phone_number}</span>
+                  </div>
+                )}
+
+                {/* Email ID */}
+                {selectedParty.email_id && (
+                  <div className="flex items-center">
+                    <Building className="mr-3 h-4 w-4 text-gray-400" />
+                    <span className="text-sm text-gray-700">{selectedParty.email_id}</span>
+                  </div>
+                )}
+
+                {/* Address */}
+                {(selectedParty.address || selectedParty.city || selectedParty.state || selectedParty.pincode) && (
+                  <div className="flex items-start">
+                    <MapPin className="mr-3 mt-0.5 h-4 w-4 text-gray-400" />
+                    <div className="text-sm text-gray-700">
+                      {selectedParty.address && (
+                        <div className="mb-1">{selectedParty.address}</div>
+                      )}
+                      <div>
+                        {selectedParty.city && <span>{selectedParty.city}</span>}
+                        {selectedParty.state && <span>, {selectedParty.state}</span>}
+                        {selectedParty.pincode && <span> - {selectedParty.pincode}</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* GST Number */}
+                {selectedParty.gst_number && (
+                  <div className="flex items-center">
+                    <Building className="mr-3 h-4 w-4 text-gray-400" />
+                    <span className="rounded border bg-gray-100 px-2 py-1 font-mono text-xs text-gray-900">
+                      {selectedParty.gst_number}
+                    </span>
+                  </div>
+                )}
+
+                {/* Grade */}
+                {selectedParty.grade && (
+                  <div className="flex items-center">
+                    <Award className="mr-3 h-4 w-4 text-gray-400" />
+                    <div>
+                      <span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${
+                        selectedParty.grade === 'A+' ? 'bg-green-100 text-green-800' :
+                        selectedParty.grade === 'A' ? 'bg-blue-100 text-blue-800' :
+                        selectedParty.grade === 'B' ? 'bg-yellow-100 text-yellow-800' :
+                        selectedParty.grade === 'C' ? 'bg-orange-100 text-orange-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        Grade {selectedParty.grade}
+                      </span>
+                      <span className="ml-2 text-xs text-gray-600">
+                        {selectedParty.grade === 'A+' && '(Premium Client)'}
+                        {selectedParty.grade === 'A' && '(Reliable Client)'}
+                        {selectedParty.grade === 'B' && '(Average Client)'}
+                        {selectedParty.grade === 'C' && '(Risky Client)'}
+                        {selectedParty.grade === 'D' && '(High Risk)'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Party ID */}
+                {selectedParty.party_id && (
+                  <div className="flex items-center">
+                    <Award className="mr-3 h-4 w-4 text-gray-400" />
+                    <span className="text-sm text-gray-700">Party ID: {selectedParty.party_id}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

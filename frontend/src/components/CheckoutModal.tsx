@@ -68,8 +68,12 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
           phone_number: party.phone_number || ''
         });
         
-        // Pre-fill party name
-        setFormData(prev => ({ ...prev, party_name: party.name || '' }));
+        // Pre-fill party name and preferred transport
+        setFormData(prev => ({ 
+          ...prev, 
+          party_name: party.name || '',
+          transport: party.preferred_transport_1 || '' // Auto-populate with preferred transport
+        }));
       } else if (user?.parties?.name) {
         // Fallback to user.parties if available
         setFormData(prev => ({ ...prev, party_name: user.parties?.name || '' }));
@@ -87,7 +91,7 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
     
     if (!partyId) {
       setPartyDetails(null);
-      setFormData(prev => ({ ...prev, party_name: '' }));
+      setFormData(prev => ({ ...prev, party_name: '', transport: '' }));
       return;
     }
 
@@ -103,8 +107,12 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
         phone_number: party.phone_number || ''
       });
       
-      // Update party name in form
-      setFormData(prev => ({ ...prev, party_name: party.name || '' }));
+      // Update party name and preferred transport in form
+      setFormData(prev => ({ 
+        ...prev, 
+        party_name: party.name || '',
+        transport: party.preferred_transport_1 || '' // Auto-populate with preferred transport
+      }));
     } catch (err) {
       console.error('Failed to load party details:', err);
       setError('Failed to load party details');

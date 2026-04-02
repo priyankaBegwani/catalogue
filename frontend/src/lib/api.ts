@@ -176,18 +176,15 @@ export interface Party {
   state: string;
   pincode: string;
   phone_number: string;
+  email_id: string;
   gst_number: string;
+  grade: string;
+  preferred_transport_1?: string;
+  preferred_transport_2?: string;
+  default_discount?: string;
   created_at: string;
   updated_at?: string;
   user_profiles?: UserProfile | null;
-  // Pricing tier fields
-  volume_tier_id?: string;
-  relationship_tier_id?: string;
-  hybrid_auto_tier_id?: string;
-  hybrid_manual_override?: boolean;
-  hybrid_override_tier_id?: string;
-  monthly_order_count?: number;
-  tier_last_updated?: string;
 }
 
 export interface ImportPartyData {
@@ -198,8 +195,21 @@ export interface ImportPartyData {
   state: string;
   pincode: string;
   phone_number: string;
+  email_id: string;
   gst_number: string;
+  grade: string;
   rowNumber: number;
+}
+
+export interface PartyPhoneNumber {
+  id?: string;
+  party_id?: string;
+  phone_number: string;
+  contact_name: string;
+  designation: string;
+  is_default: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ImportTransportData {
@@ -718,6 +728,18 @@ class ApiClient {
     }
 
     return { successCount, errors };
+  }
+
+  async fetchPartyPhoneNumbers(partyId: string): Promise<{ phoneNumbers: PartyPhoneNumber[] }> {
+    return this.request(`/api/party-phone-numbers/${partyId}`, { errorMsg: 'Failed to fetch phone numbers' });
+  }
+
+  async savePartyPhoneNumbers(partyId: string, phoneNumbers: PartyPhoneNumber[]): Promise<void> {
+    return this.request(`/api/party-phone-numbers/${partyId}`, { 
+      method: 'POST', 
+      body: { phoneNumbers }, 
+      errorMsg: 'Failed to save phone numbers' 
+    });
   }
 
   async importTransports(validRows: ImportTransportData[]) {
