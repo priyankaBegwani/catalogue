@@ -202,7 +202,9 @@ router.post('/checkout',
       party_name, 
       expected_delivery_date,
       transport,
-      remarks
+      remarks,
+      discount_tier,
+      discount_percentage
     } = req.body;
 
     validateRequired(req.body, ['party_name']);
@@ -252,6 +254,8 @@ router.post('/checkout',
           expected_delivery_date: expected_delivery_date || null,
           transport: transport || '',
           remarks: remarks || '',
+          discount_tier: discount_tier || null,
+          discount_percentage: discount_percentage || null,
           status: 'pending'
         }
       ])

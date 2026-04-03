@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Upload, Download, FileDown, ChevronDown, Truck } from 'lucide-react';
 import { api, Transport } from '../lib/api';
-import * as XLSX from 'xlsx';
 import { Breadcrumb } from '../components';
-import { backendConfig } from '../config/backend';
 
 // Hooks
 import { useTransportForm } from '../hooks/useTransportForm';
@@ -15,7 +13,8 @@ import {
   TransportTable, 
   TransportMobileCard, 
   ViewTransportModal,
-  TransportFormModal 
+  TransportFormModal,
+  ImportModal
 } from '../components/transport';
 
 // Utils
@@ -256,8 +255,9 @@ const TransportEntry: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pb-2 sm:pb-8">
       <Breadcrumb items={[{ label: 'Transport Entry', path: '/transport-entry' }]} />
+      <div className="space-y-6">
 
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -304,13 +304,6 @@ const TransportEntry: React.FC = () => {
                 >
                   <FileDown className="h-4 w-4" />
                   Export to PDF
-                </button>
-                <button
-                  onClick={generateSampleExcel}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-t"
-                >
-                  <Download className="h-4 w-4" />
-                  Download Sample
                 </button>
               </div>
             )}
@@ -425,69 +418,20 @@ const TransportEntry: React.FC = () => {
         />
       )}
 
-      {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="w-full max-w-4xl rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="mb-4 text-xl font-semibold">Import Transport Options</h2>
-            
-            <div className="mb-4">
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileUpload}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-            </div>
-
-            {importPreview.length > 0 && (
-              <div className="mb-4 max-h-96 overflow-auto">
-                <p className="mb-2 text-sm text-gray-600">Preview ({importPreview.length} rows)</p>
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Transport Name</th>
-                      <th className="px-3 py-2 text-left">Description</th>
-                      <th className="px-3 py-2 text-left">Phone</th>
-                      <th className="px-3 py-2 text-left">City</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {importPreview.slice(0, 10).map((row, idx) => (
-                      <tr key={idx}>
-                        <td className="px-3 py-2">{row['Transport Name']}</td>
-                        <td className="px-3 py-2">{row['Description']}</td>
-                        <td className="px-3 py-2">{row['Phone Number']}</td>
-                        <td className="px-3 py-2">{row['City']}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setShowImportModal(false);
-                  setImportFile(null);
-                  setImportPreview([]);
-                }}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleImport}
-                disabled={importLoading || importPreview.length === 0}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {importLoading ? 'Importing...' : 'Import'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ImportModal
+        isOpen={showImportModal}
+        importPreview={importPreview}
+        importLoading={importLoading}
+        onClose={() => {
+          setShowImportModal(false);
+          setImportFile(null);
+          setImportPreview([]);
+        }}
+        onFileUpload={handleFileUpload}
+        onImport={handleImport}
+        onDownloadSample={generateSampleExcel}
+      />
+      </div>
     </div>
   );
 };

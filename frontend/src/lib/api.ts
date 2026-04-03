@@ -173,6 +173,7 @@ export interface Party {
   description: string;
   address: string;
   city: string;
+  district: string;
   state: string;
   pincode: string;
   phone_number: string;
@@ -192,6 +193,7 @@ export interface ImportPartyData {
   description: string;
   address: string;
   city: string;
+  district: string;
   state: string;
   pincode: string;
   phone_number: string;
@@ -641,6 +643,8 @@ class ApiClient {
     expected_delivery_date?: string;
     transport?: string;
     remarks?: string;
+    discount_tier?: string;
+    discount_percentage?: number;
   }): Promise<any> {
     return this.request('/api/orders/checkout', { method: 'POST', body: checkoutData, errorMsg: 'Failed to checkout' });
   }

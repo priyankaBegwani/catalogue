@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { X, Package, Calendar, Truck, FileText, CheckCircle, MapPin } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { getDiscountPercentage } from '../utils/discountCalculator';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
   const [transportOptions, setTransportOptions] = useState<any[]>([]);
   const [partyList, setPartyList] = useState<any[]>([]);
   const [selectedPartyId, setSelectedPartyId] = useState<string>('');
+  const [partyDiscount, setPartyDiscount] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     party_name: '',
@@ -68,6 +70,9 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
           phone_number: party.phone_number || ''
         });
         
+        // Set party discount
+        setPartyDiscount(party.default_discount || null);
+        
         // Pre-fill party name and preferred transport
         setFormData(prev => ({ 
           ...prev, 
@@ -91,6 +96,7 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
     
     if (!partyId) {
       setPartyDetails(null);
+      setPartyDiscount(null);
       setFormData(prev => ({ ...prev, party_name: '', transport: '' }));
       return;
     }
@@ -106,6 +112,9 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
         pincode: party.pincode || '',
         phone_number: party.phone_number || ''
       });
+      
+      // Set party discount
+      setPartyDiscount(party.default_discount || null);
       
       // Update party name and preferred transport in form
       setFormData(prev => ({ 
@@ -135,7 +144,9 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
         party_name: formData.party_name.trim(),
         expected_delivery_date: formData.expected_delivery_date || undefined,
         transport: formData.transport || undefined,
-        remarks: formData.remarks || undefined
+        remarks: formData.remarks || undefined,
+        discount_tier: partyDiscount || undefined,
+        discount_percentage: partyDiscount ? getDiscountPercentage(partyDiscount) : undefined
       });
 
       setSuccess(true);
@@ -160,6 +171,7 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
     setError('');
     setSuccess(false);
     setPartyDetails(null);
+    setPartyDiscount(null);
     setTransportOptions([]);
     setPartyList([]);
     setSelectedPartyId('');
@@ -275,6 +287,28 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
                       <p className="text-sm text-gray-700">{partyDetails.phone_number}</p>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Discount Information */}
+              {partyDiscount && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-green-800">
+                        {partyDiscount.charAt(0).toUpperCase() + partyDiscount.slice(1)} Tier Discount Applied
+                      </p>
+                      <p className="text-xs text-green-600 mt-0.5">
+                        {getDiscountPercentage(partyDiscount)}% off will be applied to this order
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-green-700">
+                        {getDiscountPercentage(partyDiscount)}%
+                      </p>
+                      <p className="text-xs text-green-600">OFF</p>
+                    </div>
+                  </div>
                 </div>
               )}
 

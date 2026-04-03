@@ -153,7 +153,7 @@ export const TransportFormModal: React.FC<TransportFormModalProps> = ({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                City
+                City / Town / Locality
               </label>
               <select
                 value={formData.city}

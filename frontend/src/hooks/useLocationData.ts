@@ -5,6 +5,7 @@ export const useLocationData = () => {
   const [states, setStates] = useState<string[]>([]);
   const [districts, setDistricts] = useState<string[]>([]);
   const [cities, setCities] = useState<Array<{ city_name: string; zipcode: string; is_major_city: boolean }>>([]);
+  const [selectedDistrict, setSelectedDistrict] = useState('');
 
   useEffect(() => {
     fetchStates();
@@ -142,6 +143,8 @@ export const useLocationData = () => {
     states,
     districts,
     cities,
+    selectedDistrict,
+    setSelectedDistrict,
     setDistricts,
     setCities,
     applyLocationFromPincode,

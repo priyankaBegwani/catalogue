@@ -3,6 +3,7 @@ import { api, CartItem } from '../lib/api';
 import { X, Trash2, Minus, Plus, ShoppingBag, ChevronDown, ChevronUp, Package } from 'lucide-react';
 import { CheckoutModal } from './CheckoutModal';
 import { useAuth } from '../contexts/AuthContext';
+import { calculateDiscountedPrice, getDiscountPercentage } from '../utils/discountCalculator';
 
 interface CartModalProps {
   isOpen: boolean;
@@ -10,18 +11,21 @@ interface CartModalProps {
 }
 
 export function CartModal({ isOpen, onClose }: CartModalProps) {
+  const { user } = useAuth();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showCheckout, setShowCheckout] = useState(false);
+  const [partyDiscount, setPartyDiscount] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       loadCart();
+      loadPartyDiscount();
     }
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   const loadCart = async () => {
     try {
@@ -32,6 +36,20 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
       setError(err instanceof Error ? err.message : 'Failed to load cart');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPartyDiscount = async () => {
+    try {
+      if (user?.party_id) {
+        const party = await api.getPartyById(user.party_id);
+        setPartyDiscount(party.default_discount || null);
+      } else {
+        setPartyDiscount(null);
+      }
+    } catch (err) {
+      console.error('Failed to load party discount:', err);
+      setPartyDiscount(null);
     }
   };
 
@@ -171,6 +189,28 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
 
         {cartItems.length > 0 && (
           <div className="border-t border-gray-200 p-4 sm:p-6 bg-gray-50">
+            {/* Discount Information */}
+            {partyDiscount && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-green-800">
+                      {partyDiscount.charAt(0).toUpperCase() + partyDiscount.slice(1)} Tier Discount
+                    </p>
+                    <p className="text-xs text-green-600 mt-0.5">
+                      {getDiscountPercentage(partyDiscount)}% off applied to all items
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-green-700">
+                      {getDiscountPercentage(partyDiscount)}%
+                    </p>
+                    <p className="text-xs text-green-600">OFF</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Checkout Button */}
             <button
               onClick={() => setShowCheckout(true)}

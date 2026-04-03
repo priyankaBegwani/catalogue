@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, ShoppingCart, Plus, Minus, Check, AlertCircle } from 'lucide-react';
 import { api, Design, SizeSet } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import { calculateDiscountedPrice, getDiscountPercentage } from '../utils/discountCalculator';
 
 interface AddToCartModalProps {
   isOpen: boolean;
@@ -29,15 +30,34 @@ export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedCol
   // Admin users always have access to individual sizes, other users need can_order_individual_sizes enabled
   const canOrderIndividualSizes = isAdmin || (user?.can_order_individual_sizes ?? false);
   const [viewMode, setViewMode] = useState<'individual' | 'sets'>(canOrderIndividualSizes ? 'individual' : 'sets');
+  const [partyDiscount, setPartyDiscount] = useState<string | null>(null);
 
   const selectedColor = design.design_colors?.[selectedColorIndex];
   const displayPrice = typeof design.price === 'number' ? design.price : null;
+  const discountedPrice = displayPrice !== null && partyDiscount 
+    ? calculateDiscountedPrice(displayPrice, partyDiscount) 
+    : displayPrice;
 
   useEffect(() => {
     if (isOpen && selectedColor) {
       loadSizeData();
+      loadPartyDiscount();
     }
-  }, [isOpen, selectedColor]);
+  }, [isOpen, selectedColor, user]);
+
+  const loadPartyDiscount = async () => {
+    try {
+      if (user?.party_id) {
+        const party = await api.getPartyById(user.party_id);
+        setPartyDiscount(party.default_discount || null);
+      } else {
+        setPartyDiscount(null);
+      }
+    } catch (err) {
+      console.error('Failed to load party discount:', err);
+      setPartyDiscount(null);
+    }
+  };
 
   const loadSizeData = async () => {
     try {
@@ -249,7 +269,19 @@ export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedCol
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{selectedColor.color_name}</p>
                     {displayPrice !== null ? (
-                      <p className="text-sm text-gray-600">₹{displayPrice.toLocaleString()}/piece</p>
+                      <div className="flex items-center gap-2">
+                        {partyDiscount ? (
+                          <>
+                            <p className="text-sm text-gray-400 line-through">₹{displayPrice.toLocaleString()}</p>
+                            <p className="text-sm font-semibold text-green-600">₹{discountedPrice?.toLocaleString()}/piece</p>
+                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                              {getDiscountPercentage(partyDiscount)}% OFF
+                            </span>
+                          </>
+                        ) : (
+                          <p className="text-sm text-gray-600">₹{displayPrice.toLocaleString()}/piece</p>
+                        )}
+                      </div>
                     ) : (
                       <p className="text-sm text-gray-600">Price not available</p>
                     )}
