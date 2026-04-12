@@ -24,6 +24,23 @@ export function Navbar() {
   useEffect(() => {
     loadCartCount();
     loadWishlistCount();
+
+    // Listen for cart and wishlist updates from other components
+    const handleCartUpdate = () => {
+      loadCartCount();
+    };
+
+    const handleWishlistUpdate = () => {
+      loadWishlistCount();
+    };
+
+    window.addEventListener('cartUpdated', handleCartUpdate);
+    window.addEventListener('wishlistUpdated', handleWishlistUpdate);
+
+    return () => {
+      window.removeEventListener('cartUpdated', handleCartUpdate);
+      window.removeEventListener('wishlistUpdated', handleWishlistUpdate);
+    };
   }, []);
 
   const loadCartCount = async () => {
@@ -427,7 +444,7 @@ export function Navbar() {
               </button>
             </div>
             <div className="p-4 sm:p-6">
-              <Wishlist isModal onClose={handleWishlistModalClose} onUpdate={loadWishlistCount} />
+              <Wishlist isModal onUpdate={loadWishlistCount} />
             </div>
           </div>
         </div>

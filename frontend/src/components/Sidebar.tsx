@@ -33,96 +33,143 @@ interface SidebarProps {
 export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogglePin }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const currentPage = location.pathname.slice(1) || 'catalogue';
-  const { isAdmin } = useAuth();
+  const { hasPermission, isAdmin, user, permissions } = useAuth();
   const branding = useBranding();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['management', 'system']));
 
   const navigationStructure = useMemo(() => {
-    const structure: any[] = [
-      // Top-level items visible to all
-      {
+    // Debug logging
+    console.log('Sidebar - Building navigation structure');
+    console.log('User:', user);
+    console.log('Permissions:', permissions);
+    console.log('isAdmin:', isAdmin);
+    console.log('hasPermission test (dashboard, view):', hasPermission('dashboard', 'view'));
+    console.log('hasPermission test (catalogue, view):', hasPermission('catalogue', 'view'));
+    
+    const structure: any[] = [];
+
+    // Catalogue - visible only if user has catalogue view permission
+    if (hasPermission('catalogue', 'view')) {
+      structure.push({
         type: 'item',
         id: 'catalogue',
         label: 'Catalogue',
         icon: ShoppingBag,
         path: '/catalogue',
-        adminOnly: false,
-      },
-    ];
+      });
+    }
 
-    // Admin sections
-    if (isAdmin) {
-      structure.push(
-        {
-          type: 'item',
-          id: 'admin',
-          label: 'Dashboard',
-          icon: BarChart3,
-          path: '/admin',
-          adminOnly: true,
-        },
-        {
-          type: 'section',
-          id: 'management',
-          label: 'Management',
-          icon: Briefcase,
-          adminOnly: true,
-          items: [
-            {
-              id: 'designs',
-              label: 'Designs',
-              icon: Palette,
-              path: '/designs',
-            },
-            {
-              id: 'orders',
-              label: 'Orders',
-              icon: Package,
-              path: '/orders',
-            },
-            {
-              id: 'users',
-              label: 'Users',
-              icon: Users,
-              path: '/users',
-            },
-            {
-              id: 'parties',
-              label: 'Parties',
-              icon: UserPlus,
-              path: '/parties',
-            },
-            {
-              id: 'transport',
-              label: 'Transport',
-              icon: Truck,
-              path: '/transport',
-            },
-          ],
-        },
-        {
-          type: 'section',
-          id: 'system',
-          label: 'System',
-          icon: Cog,
-          adminOnly: true,
-          items: [
-            {
-              id: 'pricing-tiers',
-              label: 'Pricing Tiers',
-              icon: TrendingUp,
-              path: '/pricing-tiers',
-            },
-            {
-              id: 'settings',
-              label: 'Settings',
-              icon: SettingsIcon,
-              path: '/settings',
-            },
-          ],
-        }
-      );
+    // Dashboard - visible if user has dashboard view permission
+    if (hasPermission('dashboard', 'view')) {
+      structure.push({
+        type: 'item',
+        id: 'dashboard',
+        label: 'Dashboard',
+        icon: BarChart3,
+        path: '/dashboard',
+      });
+    }
+
+    // Management section - build dynamically based on permissions
+    const managementItems: any[] = [];
+
+    // Designs - only for Admin and Staff (check permission)
+    if (hasPermission('designs', 'view')) {
+      managementItems.push({
+        id: 'designs',
+        label: 'Designs',
+        icon: Palette,
+        path: '/designs',
+      });
+    }
+
+    // Cart & Wishlist Analytics - only for Admin and Staff
+    if (hasPermission('analytics', 'view_carts')) {
+      managementItems.push({
+        id: 'analytics',
+        label: 'Cart & Wishlist Analytics',
+        icon: TrendingUp,
+        path: '/analytics/cart-wishlist',
+      });
+    }
+
+    if (hasPermission('orders', 'view')) {
+      managementItems.push({
+        id: 'orders',
+        label: 'Orders',
+        icon: Package,
+        path: '/orders',
+      });
+    }
+
+    if (hasPermission('users', 'view')) {
+      managementItems.push({
+        id: 'users',
+        label: 'Users',
+        icon: Users,
+        path: '/users',
+      });
+    }
+
+    if (hasPermission('parties', 'view')) {
+      managementItems.push({
+        id: 'parties',
+        label: 'Parties',
+        icon: UserPlus,
+        path: '/parties',
+      });
+    }
+
+    if (hasPermission('transport', 'view')) {
+      managementItems.push({
+        id: 'transport',
+        label: 'Transport',
+        icon: Truck,
+        path: '/transport',
+      });
+    }
+
+    // Only show Management section if there are items
+    if (managementItems.length > 0) {
+      structure.push({
+        type: 'section',
+        id: 'management',
+        label: 'Management',
+        icon: Briefcase,
+        items: managementItems,
+      });
+    }
+
+    // System section - build dynamically based on permissions
+    const systemItems: any[] = [];
+
+    if (hasPermission('pricing', 'view')) {
+      systemItems.push({
+        id: 'pricing-tiers',
+        label: 'Pricing Tiers',
+        icon: TrendingUp,
+        path: '/pricing-tiers',
+      });
+    }
+
+    if (hasPermission('settings', 'view')) {
+      systemItems.push({
+        id: 'settings',
+        label: 'Settings',
+        icon: SettingsIcon,
+        path: '/settings',
+      });
+    }
+
+    // Only show System section if there are items
+    if (systemItems.length > 0) {
+      structure.push({
+        type: 'section',
+        id: 'system',
+        label: 'System',
+        icon: Cog,
+        items: systemItems,
+      });
     }
 
     // Bottom items visible to all
@@ -133,7 +180,6 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
         label: 'About Us',
         icon: Info,
         path: '/about',
-        adminOnly: false,
       },
       {
         type: 'item',
@@ -141,12 +187,11 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
         label: 'Contact Us',
         icon: Phone,
         path: '/contact',
-        adminOnly: false,
       }
     );
 
     return structure;
-  }, [isAdmin]);
+  }, [hasPermission]);
 
   const handleNavigate = useCallback((path: string) => {
     navigate(path);
@@ -167,8 +212,17 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
 
   return (
     <>
-      {/* Overlay - shows only on mobile/tablet when sidebar is open */}
-      {isOpen && (
+      {/* Overlay - shows when sidebar is open and not pinned */}
+      {/* On mobile/tablet: always show when open */}
+      {/* On desktop: only show when open and NOT pinned */}
+      {isOpen && !isPinned && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={onClose}
+        />
+      )}
+      {/* Mobile-only overlay (for when sidebar might be pinned on desktop but should still have overlay on mobile) */}
+      {isOpen && isPinned && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
           onClick={onClose}
@@ -224,7 +278,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
             {navigationStructure.map((item) => {
               if (item.type === 'item') {
                 const Icon = item.icon;
-                const isActive = currentPage === item.id;
+                const isActive = location.pathname === item.path;
 
                 return (
                   <button
@@ -253,7 +307,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
               if (item.type === 'section') {
                 const SectionIcon = item.icon;
                 const isExpanded = expandedSections.has(item.id);
-                const hasActiveChild = item.items.some((child: any) => currentPage === child.id);
+                const hasActiveChild = item.items.some((child: any) => location.pathname === child.path);
 
                 return (
                   <div key={item.id} className="space-y-1">
@@ -285,7 +339,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
                       <div className="ml-4 space-y-1 border-l-2 border-slate-700/50 pl-2">
                         {item.items.map((subItem: any) => {
                           const SubIcon = subItem.icon;
-                          const isActive = currentPage === subItem.id;
+                          const isActive = location.pathname === subItem.path;
 
                           return (
                             <button

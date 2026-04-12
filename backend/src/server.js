@@ -19,6 +19,9 @@ import ordersRoutes from './routes/orders.js';
 import adminRoutes from './routes/admin.js';
 import brandsRoutes from './routes/brands.js';
 import whatsappRoutes from './routes/whatsappWebhook.js';
+import rolesRoutes from './routes/roles.js';
+import userPartyAssociationsRoutes from './routes/user-party-associations.js';
+import analyticsRoutes from './routes/analytics.js';
 
 const app = express();
 
@@ -89,6 +92,9 @@ app.use('/api/locations', locationRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/brands', brandsRoutes);
+app.use('/api/roles', rolesRoutes);
+app.use('/api/user-party-associations', userPartyAssociationsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/webhook/whatsapp', whatsappRoutes);
 
 // 404 handler

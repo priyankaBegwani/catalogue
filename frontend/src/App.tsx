@@ -20,10 +20,11 @@ import {
   AboutUs,
   ResetPassword,
 } from './pages';
+import CartWishlistAnalytics from './pages/CartWishlistAnalytics';
 import { Sidebar, TopBar, TawkToChat } from './components';
 
 function AppContent() {
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isAdmin, hasPermission } = useAuth();
   const [showSetup, setShowSetup] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPinned, setSidebarPinned] = useState<boolean>(() => {
@@ -86,7 +87,7 @@ function AppContent() {
         <Route path="/" element={<Navigate to={isAdmin ? '/admin' : '/catalogue'} replace />} />
         <Route
           path="/dashboard"
-          element={isAdmin ? <Dashboard /> : <Navigate to="/catalogue" replace />}
+          element={hasPermission('dashboard', 'view') ? <Dashboard /> : <Navigate to="/catalogue" replace />}
         />
         <Route
           path="/admin"
@@ -94,6 +95,7 @@ function AppContent() {
         />
         <Route path="/catalogue" element={<Catalogue />} />
         <Route path="/designs" element={<DesignManagement />} />
+        <Route path="/analytics/cart-wishlist" element={<CartWishlistAnalytics />} />
         <Route path="/users" element={<UserManagement />} />
         <Route path="/parties" element={<PartyEntry />} />
         <Route path="/transport" element={<TransportEntry />} />

@@ -9,7 +9,8 @@ export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
-  role: 'admin' | 'retailer' | 'guest';
+  role_id: string;
+  user_roles?: UserRole;
   party_id?: string | null;
   parties?: {
     id?: string;
@@ -37,6 +38,97 @@ export interface LoginHistory {
     full_name: string;
     role: 'admin' | 'retailer' | 'guest';
   };
+}
+
+export interface RolePermissions {
+  catalogue: {
+    view: boolean;
+    order: boolean;
+  };
+  dashboard: {
+    view: boolean;
+    edit?: boolean;
+  };
+  parties: {
+    view: boolean;
+    create: boolean;
+    edit: boolean;
+    delete: boolean;
+    export?: boolean;
+    import?: boolean;
+  };
+  transport: {
+    view: boolean;
+    create: boolean;
+    edit: boolean;
+    delete: boolean;
+    export?: boolean;
+    import?: boolean;
+  };
+  designs: {
+    view: boolean;
+    create: boolean;
+    edit: boolean;
+    delete: boolean;
+    upload?: boolean;
+  };
+  orders: {
+    view: boolean;
+    create: boolean;
+    edit: boolean;
+    delete: boolean;
+    fulfill?: boolean;
+    cancel?: boolean;
+  };
+  users: {
+    view: boolean;
+    create: boolean;
+    edit: boolean;
+    delete: boolean;
+    manage_roles?: boolean;
+  };
+  pricing: {
+    view: boolean;
+    edit: boolean;
+  };
+  reports: {
+    view: boolean;
+    export?: boolean;
+  };
+  settings: {
+    view: boolean;
+    edit: boolean;
+  };
+  analytics?: {
+    view_carts: boolean;
+    view_wishlists: boolean;
+    message_users: boolean;
+  };
+}
+
+export interface UserRole {
+  id: string;
+  role_name: string;
+  role_description: string;
+  permissions: RolePermissions;
+  is_system_role: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserPartyAssociation {
+  id: string;
+  user_id: string;
+  party_id: string;
+  parties?: {
+    id: string;
+    party_id: string;
+    name: string;
+    city?: string;
+    state?: string;
+  };
+  created_at: string;
+  created_by?: string;
 }
 
 export interface DesignCategory {
@@ -271,6 +363,15 @@ export interface Order {
   id: string;
   order_number: string;
   party_name: string;
+  party_id?: string | null;
+  ordered_by_user_id?: string | null;
+  ordered_by_user?: {
+    id: string;
+    full_name: string;
+    user_roles?: {
+      role_name: string;
+    };
+  };
   date_of_order: string;
   expected_delivery_date: string | null;
   transport: string;
@@ -287,6 +388,8 @@ export interface OrdersResponse {
 
 export interface CreateOrderData {
   party_name: string;
+  party_id?: string;
+  ordered_by_user_id?: string;
   date_of_order: string;
   expected_delivery_date?: string;
   transport: string;
@@ -419,15 +522,16 @@ class ApiClient {
     email: string;
     password: string;
     full_name: string;
-    role: 'admin' | 'retailer' | 'guest';
+    role_id: string;
     party_id?: string;
+    can_order_individual_sizes?: boolean;
   }): Promise<UserProfile> {
     return this.request('/api/users', { method: 'POST', body: userData, errorMsg: 'Failed to create user' });
   }
 
   async updateUser(
     id: string,
-    updates: { full_name?: string; is_active?: boolean; party_id?: string; can_order_individual_sizes?: boolean }
+    updates: { full_name?: string; is_active?: boolean; party_id?: string; can_order_individual_sizes?: boolean; role_id?: string }
   ): Promise<UserProfile> {
     return this.request(`/api/users/${id}`, { method: 'PATCH', body: updates, errorMsg: 'Failed to update user' });
   }
@@ -898,6 +1002,61 @@ class ApiClient {
     return this.request('/api/admin/alerts', { errorMsg: 'Failed to fetch alerts' });
   }
 
+  /* Roles related functions */
+  async getRoles(): Promise<{ roles: UserRole[] }> {
+    return this.request('/api/roles', { errorMsg: 'Failed to fetch roles' });
+  }
+
+  async getRole(id: string): Promise<{ role: UserRole }> {
+    return this.request(`/api/roles/${id}`, { errorMsg: 'Failed to fetch role' });
+  }
+
+  async createRole(roleData: { role_name: string; role_description: string; permissions: RolePermissions }): Promise<{ role: UserRole; message: string }> {
+    return this.request('/api/roles', { method: 'POST', body: roleData, errorMsg: 'Failed to create role' });
+  }
+
+  async updateRole(id: string, roleData: { role_name: string; role_description: string; permissions: RolePermissions }): Promise<{ role: UserRole; message: string }> {
+    return this.request(`/api/roles/${id}`, { method: 'PUT', body: roleData, errorMsg: 'Failed to update role' });
+  }
+
+  async deleteRole(id: string): Promise<{ message: string }> {
+    return this.request(`/api/roles/${id}`, { method: 'DELETE', errorMsg: 'Failed to delete role' });
+  }
+
+  /* User Party Associations related functions */
+  async getUserPartyAssociations(userId: string): Promise<{ associations: UserPartyAssociation[] }> {
+    return this.request(`/api/user-party-associations/user/${userId}`, { errorMsg: 'Failed to fetch party associations' });
+  }
+
+  async addPartyAssociation(userId: string, partyId: string): Promise<{ association: UserPartyAssociation; message: string }> {
+    return this.request('/api/user-party-associations', { 
+      method: 'POST', 
+      body: { user_id: userId, party_id: partyId }, 
+      errorMsg: 'Failed to add party association' 
+    });
+  }
+
+  async addBulkPartyAssociations(userId: string, partyIds: string[]): Promise<{ associations: UserPartyAssociation[]; message: string }> {
+    return this.request('/api/user-party-associations/bulk', { 
+      method: 'POST', 
+      body: { user_id: userId, party_ids: partyIds }, 
+      errorMsg: 'Failed to add party associations' 
+    });
+  }
+
+  async deletePartyAssociation(associationId: string): Promise<{ message: string }> {
+    return this.request(`/api/user-party-associations/${associationId}`, { 
+      method: 'DELETE', 
+      errorMsg: 'Failed to delete party association' 
+    });
+  }
+
+  async deleteUserPartyAssociation(userId: string, partyId: string): Promise<{ message: string }> {
+    return this.request(`/api/user-party-associations/user/${userId}/party/${partyId}`, { 
+      method: 'DELETE', 
+      errorMsg: 'Failed to delete party association' 
+    });
+  }
 }
 
 export const api = new ApiClient();

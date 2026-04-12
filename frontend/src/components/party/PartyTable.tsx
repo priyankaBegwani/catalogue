@@ -36,7 +36,7 @@ export const PartyTable: React.FC<PartyTableProps> = ({
             Address
           </th>
           <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-            Location
+            Place of Supply
           </th>
           <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
             Created At

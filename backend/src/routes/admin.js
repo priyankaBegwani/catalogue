@@ -202,11 +202,14 @@ router.get('/parties/active', authenticateUser, requireAdmin, async (req, res) =
         full_name,
         updated_at,
         party_id,
+        role_id,
         parties!user_profiles_party_id_fkey (
           name
+        ),
+        user_roles!user_profiles_role_id_fkey (
+          role_name
         )
       `)
-      .eq('role', 'retailer')
       .gte('updated_at', thirtyDaysAgo.toISOString())
       .order('updated_at', { ascending: false })
       .limit(10);
@@ -267,12 +270,15 @@ router.get('/parties/stagnant', authenticateUser, requireAdmin, async (req, res)
         full_name,
         updated_at,
         party_id,
+        role_id,
         parties!user_profiles_party_id_fkey (
           name,
           phone_number
+        ),
+        user_roles!user_profiles_role_id_fkey (
+          role_name
         )
       `)
-      .eq('role', 'retailer')
       .lt('updated_at', sixtyDaysAgo.toISOString())
       .order('updated_at', { ascending: true })
       .limit(10);

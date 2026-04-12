@@ -6,15 +6,15 @@ import { authenticateUser } from '../middleware/auth.js';
 const router = express.Router();
 
 // Fire-and-forget login history write (non-critical audit log)
-function recordLoginAttempt(req, userId, status) {
+function recordLoginAttempt(req, userId, success) {
   supabase
     .from('login_history')
     .insert({
       user_id: userId,
-      login_time: new Date().toISOString(),
+      login_at: new Date().toISOString(),
       ip_address: req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress,
       user_agent: req.headers['user-agent'],
-      status
+      success: success === 'success'
     })
     .then(({ error }) => {
       if (error) console.error('Login history write failed:', error.message);
@@ -134,9 +134,19 @@ router.post('/login', async (req, res) => {
 
     let { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('*')
+      .select('*, parties!user_profiles_party_id_fkey(id, name, city, state), user_roles(*)')
       .eq('id', data.user.id)
       .maybeSingle();
+
+    if (profileError) {
+      console.error('Profile fetch error:', profileError);
+      return res.status(500).json({ error: 'Failed to fetch user profile' });
+    }
+
+    if (!profile) {
+      console.error('Profile not found for user:', data.user.id);
+      return res.status(404).json({ error: 'User profile not found' });
+    }
 
     if (!profile.is_active) {
       return res.status(403).json({ error: 'User account is inactive' });
@@ -165,10 +175,10 @@ router.post('/logout', authenticateUser, async (req, res) => {
     // Update the most recent login record with logout time
     await supabase
       .from('login_history')
-      .update({ logout_time: new Date().toISOString() })
+      .update({ logout_at: new Date().toISOString() })
       .eq('user_id', req.user.id)
-      .is('logout_time', null)
-      .order('login_time', { ascending: false })
+      .is('logout_at', null)
+      .order('login_at', { ascending: false })
       .limit(1);
 
     await supabase.auth.admin.signOut(token);
@@ -184,22 +194,14 @@ router.get('/me', authenticateUser, async (req, res) => {
   try {
     // Return real user data from the authenticated session
     // req.user and req.profile are set by the authenticateUser middleware
+    // req.profile already includes user_roles from the middleware
     res.json({
       user: {
         id: req.user.id,
         email: req.user.email,
         created_at: req.user.created_at
       },
-      profile: {
-        id: req.profile.id,
-        email: req.profile.email,
-        full_name: req.profile.full_name,
-        role: req.profile.role,
-        party_id: req.profile.party_id,
-        is_active: req.profile.is_active,
-        created_at: req.profile.created_at,
-        updated_at: req.profile.updated_at
-      }
+      profile: req.profile
     });
   } catch (error) {
     console.error('Get user error:', error);

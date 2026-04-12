@@ -24,7 +24,7 @@ router.get('/',
     const users = await executeQuery(
       supabase
         .from('user_profiles')
-        .select('*, parties!user_profiles_party_id_fkey(name)')
+        .select('*, parties!user_profiles_party_id_fkey(name), user_roles(*)')
         .order('created_at', { ascending: false }),
       'Failed to fetch users'
     );
@@ -37,19 +37,31 @@ router.post('/',
   authenticateUser, 
   requireAdmin, 
   asyncHandler(async (req, res) => {
-    const { email, password, full_name, role, party_id, can_order_individual_sizes } = req.body;
+    const { email, password, full_name, role_id, party_id, can_order_individual_sizes } = req.body;
 
     // Validate required fields
-    validateRequired(req.body, ['email', 'password', 'full_name', 'role']);
+    validateRequired(req.body, ['email', 'password', 'full_name', 'role_id']);
     validateEmail(email);
-    validateRole(role);
+    validateUUID(role_id, 'Role ID');
 
-    // Business logic validation
-    if (role === 'retailer' && !party_id) {
+    // Verify role exists
+    const roleExists = await supabaseAdmin
+      .from('user_roles')
+      .select('id, role_name')
+      .eq('id', role_id)
+      .single();
+
+    if (!roleExists.data) {
+      throw new AppError('Invalid role_id', 400);
+    }
+
+    // Business logic validation based on role name
+    const roleName = roleExists.data.role_name;
+    if (roleName === 'Retailer' && !party_id) {
       throw new AppError('Party is required for retailer users', 400);
     }
 
-    if (role === 'admin' && party_id) {
+    if (roleName === 'Admin' && party_id) {
       throw new AppError('Admin users cannot be associated with a party', 400);
     }
 
@@ -60,7 +72,7 @@ router.post('/',
       email_confirm: true,
       user_metadata: {
         full_name,
-        role,
+        role_id,
         party_id: party_id || null,
         can_order_individual_sizes: can_order_individual_sizes ?? false
       }
@@ -74,7 +86,7 @@ router.post('/',
     const profile = await getOneOrFail(
       supabaseAdmin
         .from('user_profiles')
-        .select('*, parties!user_profiles_party_id_fkey(name)')
+        .select('*, parties!user_profiles_party_id_fkey(name), user_roles(*)')
         .eq('id', authData.user.id),
       'User profile not found after creation'
     ).catch(async (error) => {
@@ -95,7 +107,7 @@ router.patch('/:id',
   requireAdmin, 
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { full_name, is_active, party_id, can_order_individual_sizes } = req.body;
+    const { full_name, is_active, party_id, can_order_individual_sizes, role_id } = req.body;
 
     validateUUID(id, 'User ID');
 
@@ -104,6 +116,24 @@ router.patch('/:id',
     if (is_active !== undefined) updates.is_active = is_active;
     if (party_id !== undefined) updates.party_id = party_id;
     if (can_order_individual_sizes !== undefined) updates.can_order_individual_sizes = can_order_individual_sizes;
+    
+    // Validate and add role_id if provided
+    if (role_id !== undefined) {
+      validateUUID(role_id, 'Role ID');
+      
+      // Verify role exists
+      const roleExists = await supabaseAdmin
+        .from('user_roles')
+        .select('id')
+        .eq('id', role_id)
+        .single();
+
+      if (!roleExists.data) {
+        throw new AppError('Invalid role_id', 400);
+      }
+      
+      updates.role_id = role_id;
+    }
 
     if (Object.keys(updates).length === 0) {
       throw new AppError('No valid fields to update', 400);
@@ -116,7 +146,7 @@ router.patch('/:id',
         .from('user_profiles')
         .update(updates)
         .eq('id', id)
-        .select()
+        .select('*, parties!user_profiles_party_id_fkey(name), user_roles(*)')
         .single(),
       'Failed to update user'
     );
@@ -205,19 +235,22 @@ router.get('/login-history',
         .select(`
           id,
           user_id,
-          login_time,
-          logout_time,
+          login_at,
+          logout_at,
           ip_address,
           user_agent,
-          status,
+          success,
           user_profiles!login_history_user_id_fkey (
             id,
             email,
             full_name,
-            role
+            role_id,
+            user_roles!user_profiles_role_id_fkey (
+              role_name
+            )
           )
         `)
-        .order('login_time', { ascending: false })
+        .order('login_at', { ascending: false })
         .limit(limit),
       'Failed to fetch login history'
     );
@@ -226,16 +259,16 @@ router.get('/login-history',
     const formattedHistory = loginHistory.map(record => ({
       id: record.id,
       user_id: record.user_id,
-      login_time: record.login_time,
-      logout_time: record.logout_time,
+      login_at: record.login_at,
+      logout_at: record.logout_at,
       ip_address: record.ip_address,
       user_agent: record.user_agent,
-      status: record.status,
+      success: record.success,
       user: record.user_profiles ? {
         id: record.user_profiles.id,
         email: record.user_profiles.email,
         full_name: record.user_profiles.full_name,
-        role: record.user_profiles.role
+        role_name: record.user_profiles.user_roles?.role_name || null
       } : null
     }));
 

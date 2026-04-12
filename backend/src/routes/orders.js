@@ -73,6 +73,40 @@ async function insertOrderRemarks(orderId, order_remarks) {
   if (error) console.error('Order remarks creation error:', error);
 }
 
+async function attachOrderedByUsers(orders) {
+  const ordersArray = Array.isArray(orders) ? orders : (orders ? [orders] : []);
+  const orderedByIds = [...new Set(ordersArray.map(order => order?.ordered_by_user_id).filter(Boolean))];
+
+  if (orderedByIds.length === 0) {
+    return Array.isArray(orders)
+      ? ordersArray.map(order => ({ ...order, ordered_by_user: null }))
+      : (orders ? { ...orders, ordered_by_user: null } : orders);
+  }
+
+  const { data: userProfiles, error } = await supabase
+    .from('user_profiles')
+    .select(`
+      id,
+      full_name,
+      user_roles (
+        role_name
+      )
+    `)
+    .in('id', orderedByIds);
+
+  if (error) {
+    throw new AppError('Failed to fetch ordered by users', 500, { dbError: error.message });
+  }
+
+  const usersMap = new Map((userProfiles || []).map(profile => [profile.id, profile]));
+  const enrichedOrders = ordersArray.map(order => ({
+    ...order,
+    ordered_by_user: order.ordered_by_user_id ? (usersMap.get(order.ordered_by_user_id) || null) : null,
+  }));
+
+  return Array.isArray(orders) ? enrichedOrders : enrichedOrders[0] || null;
+}
+
 /**
  * Fetch the complete order with items + remarks.
  */
@@ -82,7 +116,7 @@ async function fetchCompleteOrder(orderId) {
     .select(ORDER_SELECT)
     .eq('id', orderId)
     .single();
-  return data;
+  return attachOrderedByUsers(data);
 }
 
 // Get transport options for dropdown
@@ -163,7 +197,8 @@ router.get('/',
   asyncHandler(async (req, res) => {
     let query = supabase.from('orders').select(ORDER_SELECT);
 
-    if (req.profile?.role !== 'admin') {
+    // Admin can see all orders, others see only their own
+    if (req.profile?.user_roles?.role_name !== 'Admin') {
       query = query.eq('user_id', req.user.id);
     }
 
@@ -172,7 +207,9 @@ router.get('/',
       'Failed to fetch orders'
     );
 
-    res.json({ orders });
+    const enrichedOrders = await attachOrderedByUsers(orders);
+
+    res.json({ orders: enrichedOrders });
   })
 );
 
@@ -185,12 +222,14 @@ router.get('/:id',
     
     let query = supabase.from('orders').select(ORDER_SELECT).eq('id', id);
 
-    if (req.profile?.role !== 'admin') {
+    // Admin can see all orders, others see only their own
+    if (req.profile?.user_roles?.role_name !== 'Admin') {
       query = query.eq('user_id', req.user.id);
     }
 
     const order = await executeQuery(query.single(), 'Order not found');
-    res.json(order);
+    const enrichedOrder = await attachOrderedByUsers(order);
+    res.json(enrichedOrder);
   })
 );
 
@@ -199,7 +238,8 @@ router.post('/checkout',
   authenticateUser, 
   asyncHandler(async (req, res) => {
     const { 
-      party_name, 
+      party_name,
+      party_id,
       expected_delivery_date,
       transport,
       remarks,
@@ -208,6 +248,11 @@ router.post('/checkout',
     } = req.body;
 
     validateRequired(req.body, ['party_name']);
+
+    // Validate party_id if provided
+    if (party_id) {
+      validateUUID(party_id, 'Party ID');
+    }
 
     // Get user's cart items
     const { data: cartItems, error: cartError } = await supabase
@@ -250,6 +295,7 @@ router.post('/checkout',
           order_number,
           user_id: req.user.id,
           party_name,
+          party_id: party_id || null,
           date_of_order: new Date().toISOString().split('T')[0],
           expected_delivery_date: expected_delivery_date || null,
           transport: transport || '',
@@ -371,15 +417,30 @@ router.post('/checkout',
 
 // Create new order with items
 router.post('/', authenticateUser, asyncHandler(async (req, res) => {
-  const { party_name, date_of_order, expected_delivery_date, transport, remarks, order_items, order_remarks } = req.body;
+  const { 
+    party_name, 
+    party_id, 
+    date_of_order, 
+    expected_delivery_date, 
+    transport, 
+    remarks, 
+    order_items, 
+    order_remarks 
+  } = req.body;
 
   const { validItems } = validateOrderPayload({ party_name, order_items, order_remarks });
+
+  // Validate party_id if provided
+  if (party_id) {
+    validateUUID(party_id, 'Party ID');
+  }
 
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .insert([{
       user_id: req.user.id,
       party_name,
+      party_id: party_id || null,
       date_of_order: date_of_order || new Date().toISOString().split('T')[0],
       expected_delivery_date: expected_delivery_date || null,
       transport: transport || '',
@@ -525,7 +586,7 @@ router.post('/:id/items', authenticateUser, asyncHandler(async (req, res) => {
 
   // Verify order exists and user has access
   let orderQuery = supabase.from('orders').select('id').eq('id', id);
-  if (req.profile?.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     orderQuery = orderQuery.eq('user_id', req.user.id);
   }
   const { data: order, error: orderError } = await orderQuery.single();
@@ -571,7 +632,7 @@ router.post('/:id/items', authenticateUser, asyncHandler(async (req, res) => {
 router.delete('/:orderId/items/:itemId', authenticateUser, asyncHandler(async (req, res) => {
   const { orderId, itemId } = req.params;
 
-  if (req.profile?.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     throw new AppError('Only admins can delete order items', 403);
   }
 
@@ -602,7 +663,7 @@ router.patch('/:orderId/items/:itemId', authenticateUser, asyncHandler(async (re
   const { orderId, itemId } = req.params;
   const { sizes_quantities } = req.body;
 
-  if (req.profile?.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     throw new AppError('Only admins can update order items', 403);
   }
 

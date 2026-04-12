@@ -11,7 +11,7 @@ const getUserProfile = async (userId, token) => {
   return cache.getOrSet(cacheKey, async () => {
     const { data: profile, error } = await supabase
       .from('user_profiles')
-      .select('*')
+      .select('*, user_roles(*)')
       .eq('id', userId)
       .eq('is_active', true)
       .maybeSingle();
@@ -55,10 +55,63 @@ export const authenticateUser = async (req, res, next) => {
 };
 
 export const requireAdmin = (req, res, next) => {
-  if (req.profile?.role !== 'admin') {
+  // Check new role system only (old role field has been removed)
+  const isAdmin = req.profile?.user_roles?.role_name === 'Admin';
+  
+  if (!isAdmin) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
+};
+
+/**
+ * Check if user has specific permission
+ * @param {string} module - Module name (e.g., 'parties', 'orders')
+ * @param {string} action - Action name (e.g., 'view', 'create', 'edit')
+ */
+export const requirePermission = (module, action) => {
+  return (req, res, next) => {
+    const userRoles = req.profile?.user_roles;
+    
+    if (!userRoles || !userRoles.permissions) {
+      return res.status(403).json({ error: 'Access denied: No permissions found' });
+    }
+
+    const modulePermissions = userRoles.permissions[module];
+    
+    if (!modulePermissions || !modulePermissions[action]) {
+      return res.status(403).json({ 
+        error: `Access denied: Missing ${action} permission for ${module}` 
+      });
+    }
+
+    next();
+  };
+};
+
+/**
+ * Check if user has any of the specified permissions
+ * @param {Array} permissions - Array of {module, action} objects
+ */
+export const requireAnyPermission = (permissions) => {
+  return (req, res, next) => {
+    const userRoles = req.profile?.user_roles;
+    
+    if (!userRoles || !userRoles.permissions) {
+      return res.status(403).json({ error: 'Access denied: No permissions found' });
+    }
+
+    const hasPermission = permissions.some(({ module, action }) => {
+      const modulePermissions = userRoles.permissions[module];
+      return modulePermissions && modulePermissions[action];
+    });
+
+    if (!hasPermission) {
+      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
+    }
+
+    next();
+  };
 };
 
 export const optionalAuth = async (req, res, next) => {

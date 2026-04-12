@@ -1,0 +1,4 @@
+{
+  "typescript.tsserver.maxTsServerMemory": 512,
+  "typescript.disableAutomaticTypeAcquisition": true
+}

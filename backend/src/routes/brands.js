@@ -6,7 +6,7 @@ const router = express.Router();
 
 // Middleware to check if user is admin
 const requireAdmin = (req, res, next) => {
-  if (req.profile.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
@@ -16,7 +16,7 @@ const requireAdmin = (req, res, next) => {
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const isAuthenticated = !!req.user;
-    const isAdmin = req.profile?.role === 'admin';
+    const isAdmin = req.profile?.user_roles?.role_name === 'Admin';
 
     let query = supabase
       .from('brands')

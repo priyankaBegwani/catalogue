@@ -11,7 +11,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Direct upload endpoint - frontend sends file to backend
 router.post('/upload', authenticateUser, upload.single('file'), async (req, res) => {
   try {
-    if (req.profile.role !== 'admin') {
+    if (req.profile?.user_roles?.role_name !== 'Admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -44,7 +44,7 @@ router.post('/upload', authenticateUser, upload.single('file'), async (req, res)
 
 router.delete('/delete', authenticateUser, async (req, res) => {
   try {
-    if (req.profile.role !== 'admin') {
+    if (req.profile?.user_roles?.role_name !== 'Admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 

@@ -43,10 +43,17 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
       loadCartCount();
     };
 
+    // Listen for wishlist updates from other components
+    const handleWishlistUpdate = () => {
+      loadWishlistCount();
+    };
+
     window.addEventListener('cartUpdated', handleCartUpdate);
+    window.addEventListener('wishlistUpdated', handleWishlistUpdate);
 
     return () => {
       window.removeEventListener('cartUpdated', handleCartUpdate);
+      window.removeEventListener('wishlistUpdated', handleWishlistUpdate);
     };
   }, []);
 
@@ -407,7 +414,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               </button>
             </div>
             <div className="p-4 sm:p-6">
-              <Wishlist onClose={handleWishlistModalClose} />
+              <Wishlist isModal onUpdate={loadWishlistCount} />
             </div>
           </div>
         </div>

@@ -1222,22 +1222,29 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
         <div className="space-y-1">
           <div className="flex gap-1">
             <button
+              type="button"
               onClick={onEdit}
               className="flex-1 py-1 border border-blue-300 text-blue-600 rounded hover:bg-blue-50 transition text-[10px] font-medium"
             >
               Edit
             </button>
             <button
+              type="button"
               onClick={onToggleActive}
-              className={`flex-1 py-1 rounded text-[10px] font-medium transition ${
+              className={`shrink-0 inline-flex h-5 w-9 items-center rounded-full border transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 ${
                 design.is_active
-                  ? 'bg-green-50 text-green-700 border border-green-300 hover:bg-green-100'
-                  : 'bg-red-50 text-red-700 border border-red-300 hover:bg-red-100'
+                  ? 'justify-end border-green-400 bg-green-500 hover:bg-green-600'
+                  : 'justify-start border-gray-300 bg-gray-300 hover:bg-gray-400'
               }`}
+              title={design.is_active ? 'Set inactive' : 'Set active'}
+              aria-label={design.is_active ? 'Set inactive' : 'Set active'}
             >
-              {design.is_active ? 'Active' : 'Inactive'}
+              <span
+                className="mx-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200"
+              />
             </button>
             <button
+              type="button"
               onClick={onDelete}
               className="px-2 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50 transition"
               title="Delete"

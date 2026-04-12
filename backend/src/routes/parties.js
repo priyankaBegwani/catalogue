@@ -19,13 +19,54 @@ router.get('/',
   authenticateUser, 
   cacheMiddleware(300), // Cache for 5 minutes
   asyncHandler(async (req, res) => {
-    const parties = await executeQuery(
-      supabaseAdmin
-        .from('parties')
-        .select(`*`)
-        .order('created_at', { ascending: false }),
-      'Failed to fetch parties'
-    );
+    const userRole = req.profile?.user_roles?.role_name;
+    const userId = req.profile?.id;
+
+    let parties;
+
+    // Admin can see all parties
+    if (userRole === 'Admin') {
+      parties = await executeQuery(
+        supabaseAdmin
+          .from('parties')
+          .select(`*`)
+          .order('created_at', { ascending: false }),
+        'Failed to fetch parties'
+      );
+    } 
+    // Distributor can only see their associated parties
+    else if (userRole === 'Distributor') {
+      // Get party IDs associated with this user
+      const { data: associations } = await supabaseAdmin
+        .from('user_party_associations')
+        .select('party_id')
+        .eq('user_id', userId);
+
+      if (!associations || associations.length === 0) {
+        return res.json({ parties: [] });
+      }
+
+      const partyIds = associations.map(a => a.party_id);
+
+      parties = await executeQuery(
+        supabaseAdmin
+          .from('parties')
+          .select(`*`)
+          .in('id', partyIds)
+          .order('created_at', { ascending: false }),
+        'Failed to fetch parties'
+      );
+    }
+    // Other roles (Sales, Staff, etc.) can see all parties
+    else {
+      parties = await executeQuery(
+        supabaseAdmin
+          .from('parties')
+          .select(`*`)
+          .order('created_at', { ascending: false }),
+        'Failed to fetch parties'
+      );
+    }
 
     res.json({ parties });
   })
@@ -69,7 +110,8 @@ router.post('/',
       grade,
       preferred_transport_1,
       preferred_transport_2,
-      default_discount
+      default_discount,
+      place_of_supply
     } = req.body;
 
     validateRequired(req.body, ['name']);
@@ -93,6 +135,7 @@ router.post('/',
             preferred_transport_1: preferred_transport_1 || null,
             preferred_transport_2: preferred_transport_2 || null,
             default_discount: default_discount || null,
+            place_of_supply: place_of_supply || '',
             created_by: req.user.id
           }
         ])

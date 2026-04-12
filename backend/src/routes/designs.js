@@ -312,7 +312,7 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
 }));
 
 router.post('/', authenticateUser, asyncHandler(async (req, res) => {
-  if (req.profile.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     throw new AppError('Admin access required', 403);
   }
 
@@ -372,7 +372,7 @@ router.post('/', authenticateUser, asyncHandler(async (req, res) => {
 }));
 
 router.put('/:id', authenticateUser, asyncHandler(async (req, res) => {
-  if (req.profile.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     throw new AppError('Admin access required', 403);
   }
 
@@ -391,19 +391,27 @@ router.put('/:id', authenticateUser, asyncHandler(async (req, res) => {
   if (price !== undefined) updateData.price = price;
   if (is_active !== undefined) updateData.is_active = is_active;
 
-  const { data: design, error } = await supabase
+  const { data: updatedDesign, error } = await supabase
     .from('designs')
     .update(updateData)
     .eq('id', id)
-    .select(DESIGN_WITH_COLORS_SELECT)
+    .select('id')
     .single();
 
   if (error) throw new AppError(error.message, 400);
+
+  const { data: design, error: fetchError } = await supabase
+    .from('designs')
+    .select(DESIGN_WITH_COLORS_SELECT)
+    .eq('id', updatedDesign.id)
+    .single();
+
+  if (fetchError) throw new AppError(fetchError.message, 400);
   res.json(design);
 }));
 
 router.delete('/:id', authenticateUser, asyncHandler(async (req, res) => {
-  if (req.profile.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     throw new AppError('Admin access required', 403);
   }
 
@@ -431,7 +439,7 @@ router.delete('/:id', authenticateUser, asyncHandler(async (req, res) => {
 }));
 
 router.post('/:id/colors', authenticateUser, asyncHandler(async (req, res) => {
-  if (req.profile.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     throw new AppError('Admin access required', 403);
   }
 
@@ -459,7 +467,7 @@ router.post('/:id/colors', authenticateUser, asyncHandler(async (req, res) => {
 }));
 
 router.put('/colors/:colorId', authenticateUser, asyncHandler(async (req, res) => {
-  if (req.profile.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     throw new AppError('Admin access required', 403);
   }
 
@@ -486,7 +494,7 @@ router.put('/colors/:colorId', authenticateUser, asyncHandler(async (req, res) =
 }));
 
 router.delete('/colors/:colorId', authenticateUser, asyncHandler(async (req, res) => {
-  if (req.profile.role !== 'admin') {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     throw new AppError('Admin access required', 403);
   }
 

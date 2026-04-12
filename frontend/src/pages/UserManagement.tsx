@@ -1,19 +1,27 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api, UserProfile, Party, LoginHistory } from '../lib/api';
-import { UserPlus, Edit2, XCircle, CheckCircle, Trash2, Users, Clock, UserX, Activity, LogIn } from 'lucide-react';
+import { api, UserProfile, Party, LoginHistory, UserRole } from '../lib/api';
+import { UserPlus, Edit2, XCircle, CheckCircle, Trash2, Users, Clock, UserX, Activity, LogIn, Shield } from 'lucide-react';
 import { formatDate, getRelativeTime } from '../utils/dateUtils';
 import { ErrorAlert, Breadcrumb } from '../components';
+import { RolesTab } from '../components/roles/RolesTab';
+import { RoleFormModal } from '../components/roles/RoleFormModal';
+import { PartyAssociationsModal } from '../components/users/PartyAssociationsModal';
 
-type TabType = 'users' | 'login-history' | 'inactive-users';
+type TabType = 'users' | 'login-history' | 'inactive-users' | 'roles';
 
 export function UserManagement() {
   const [activeTab, setActiveTab] = useState<TabType>('users');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loginHistory, setLoginHistory] = useState<LoginHistory[]>([]);
   const [inactiveUsers, setInactiveUsers] = useState<UserProfile[]>([]);
+  const [roles, setRoles] = useState<UserRole[]>([]);
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<UserRole | null>(null);
+  const [managingPartiesUser, setManagingPartiesUser] = useState<UserProfile | null>(null);
   const [error, setError] = useState('');
 
   const loadData = useCallback(async () => {
@@ -30,6 +38,9 @@ export function UserManagement() {
           break;
         case 'inactive-users':
           await loadInactiveUsers();
+          break;
+        case 'roles':
+          await loadRoles();
           break;
       }
     } catch (err) {
@@ -58,6 +69,14 @@ export function UserManagement() {
     setInactiveUsers(data);
   }, []);
 
+  const loadRoles = useCallback(async () => {
+    const data = await api.getRoles();
+    setRoles(data.roles);
+    if (data.roles.length > 0 && !selectedRole) {
+      setSelectedRole(data.roles[0]);
+    }
+  }, [selectedRole]);
+
   const handleToggleActive = useCallback(async (user: UserProfile) => {
     try {
       await api.updateUser(user.id, { is_active: !user.is_active });
@@ -80,11 +99,52 @@ export function UserManagement() {
     }
   }, [loadUsers]);
 
+  const handleCreateRole = useCallback(() => {
+    setEditingRole(null);
+    setShowRoleModal(true);
+  }, []);
+
+  const handleEditRole = useCallback((role: UserRole) => {
+    setEditingRole(role);
+    setShowRoleModal(true);
+  }, []);
+
+  const handleDeleteRole = useCallback(async (role: UserRole) => {
+    if (!confirm(`Are you sure you want to delete role "${role.role_name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await api.deleteRole(role.id);
+      await loadRoles();
+      if (selectedRole?.id === role.id) {
+        setSelectedRole(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete role');
+    }
+  }, [loadRoles, selectedRole]);
+
+  const handleRoleSubmit = useCallback(async (roleData: any) => {
+    try {
+      if (editingRole) {
+        await api.updateRole(editingRole.id, roleData);
+      } else {
+        await api.createRole(roleData);
+      }
+      await loadRoles();
+      setShowRoleModal(false);
+      setEditingRole(null);
+    } catch (err) {
+      throw err;
+    }
+  }, [editingRole, loadRoles]);
 
   const tabs = [
     { id: 'users', label: 'Users', icon: Users },
     { id: 'login-history', label: 'Login History', icon: Clock },
     { id: 'inactive-users', label: 'Inactive Users', icon: UserX },
+    { id: 'roles', label: 'User Roles', icon: Shield },
   ];
 
   if (loading && (users.length === 0 && loginHistory.length === 0 && inactiveUsers.length === 0)) {
@@ -171,6 +231,18 @@ export function UserManagement() {
         />
       )}
 
+      {activeTab === 'roles' && (
+        <RolesTab
+          roles={roles}
+          loading={loading}
+          onSelectRole={setSelectedRole}
+          selectedRole={selectedRole}
+          onCreateRole={handleCreateRole}
+          onEditRole={handleEditRole}
+          onDeleteRole={handleDeleteRole}
+        />
+      )}
+
       {showCreateModal && (
         <CreateUserModal
           onClose={() => setShowCreateModal(false)}
@@ -189,6 +261,17 @@ export function UserManagement() {
             setEditingUser(null);
             loadUsers();
           }}
+        />
+      )}
+
+      {showRoleModal && (
+        <RoleFormModal
+          role={editingRole}
+          onClose={() => {
+            setShowRoleModal(false);
+            setEditingRole(null);
+          }}
+          onSubmit={handleRoleSubmit}
         />
       )}
     </div>
@@ -253,19 +336,25 @@ function UsersTab({ users, loading, onEdit, onToggleActive, onDelete }: {
                 <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
                   <span
                     className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${
-                      user.role === 'admin'
+                      user.user_roles?.role_name === 'Admin'
                         ? 'bg-blue-100 text-blue-800'
-                        : user.role === 'retailer'
+                        : user.user_roles?.role_name === 'Retailer'
                         ? 'bg-green-100 text-green-800'
+                        : user.user_roles?.role_name === 'Distributor'
+                        ? 'bg-purple-100 text-purple-800'
+                        : user.user_roles?.role_name === 'Sales'
+                        ? 'bg-orange-100 text-orange-800'
+                        : user.user_roles?.role_name === 'Staff'
+                        ? 'bg-indigo-100 text-indigo-800'
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    {user.role}
+                    {user.user_roles?.role_name || 'Unknown'}
                   </span>
                 </td>
                 <td className="hidden xl:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-600">
-                    {user.role === 'retailer' ? user.parties?.name ?? '-' : '-'}
+                    {user.user_roles?.role_name === 'Retailer' ? user.parties?.name ?? '-' : '-'}
                   </div>
                 </td>
                 <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
@@ -545,15 +634,18 @@ interface EditUserModalProps {
 function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) {
   const [formData, setFormData] = useState({
     full_name: user.full_name,
+    role_id: user.role_id || '',
     party_id: user.party_id || '',
     can_order_individual_sizes: user.can_order_individual_sizes ?? false,
   });
   const [parties, setParties] = useState<Party[]>([]);
+  const [roles, setRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     loadParties();
+    loadRoles();
   }, []);
 
   const loadParties = async () => {
@@ -565,16 +657,27 @@ function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) {
     }
   };
 
+  const loadRoles = async () => {
+    try {
+      const data = await api.getRoles();
+      setRoles(data.roles);
+    } catch (err) {
+      console.error('Failed to load roles:', err);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
+      const selectedRole = roles.find(r => r.id === formData.role_id);
       await api.updateUser(user.id, {
         full_name: formData.full_name,
+        role_id: formData.role_id,
         can_order_individual_sizes: formData.can_order_individual_sizes,
-        ...(user.role === 'retailer' && { party_id: formData.party_id })
+        ...(selectedRole?.role_name === 'Retailer' && { party_id: formData.party_id })
       });
       onSuccess();
     } catch (err) {
@@ -620,16 +723,29 @@ function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) {
 
           <div>
             <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Role</label>
-            <input
-              type="text"
-              value={user.role}
-              disabled
-              className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed capitalize"
-            />
-            <p className="text-xs text-gray-500 mt-1">Role cannot be changed</p>
+            <select
+              value={formData.role_id}
+              onChange={(e) => {
+                const selectedRole = roles.find(r => r.id === e.target.value);
+                setFormData({ 
+                  ...formData, 
+                  role_id: e.target.value,
+                  party_id: selectedRole?.role_name === 'Retailer' ? formData.party_id : '' 
+                });
+              }}
+              required
+              className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              <option value="">Select a role</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.role_name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {user.role === 'retailer' && (
+          {roles.find(r => r.id === formData.role_id)?.role_name === 'Retailer' && (
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Party</label>
               <select
@@ -647,7 +763,7 @@ function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) {
             </div>
           )}
 
-          {user.role !== 'admin' && (
+          {roles.find(r => r.id === formData.role_id)?.role_name !== 'Admin' && (
             <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
               <input
                 type="checkbox"
@@ -700,16 +816,18 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
     email: '',
     password: '',
     full_name: '',
-    role: 'retailer' as 'admin' | 'retailer' | 'guest',
+    role_id: '',
     party_id: '',
     can_order_individual_sizes: false,
   });
   const [parties, setParties] = useState<Party[]>([]);
+  const [roles, setRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     loadParties();
+    loadRoles();
   }, []);
 
   const loadParties = async () => {
@@ -718,6 +836,20 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
       setParties(data.parties);
     } catch (err) {
       console.error('Failed to load parties:', err);
+    }
+  };
+
+  const loadRoles = async () => {
+    try {
+      const data = await api.getRoles();
+      setRoles(data.roles);
+      // Set default role to Retailer if available
+      const retailerRole = data.roles.find(r => r.role_name === 'Retailer');
+      if (retailerRole && !formData.role_id) {
+        setFormData(prev => ({ ...prev, role_id: retailerRole.id }));
+      }
+    } catch (err) {
+      console.error('Failed to load roles:', err);
     }
   };
 
@@ -797,20 +929,28 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
           <div>
             <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Role</label>
             <select
-              value={formData.role}
+              value={formData.role_id}
               onChange={(e) => {
-                const newRole = e.target.value as 'admin' | 'retailer' | 'guest';
-                setFormData({ ...formData, role: newRole, party_id: newRole === 'retailer' ? formData.party_id : '' });
+                const selectedRole = roles.find(r => r.id === e.target.value);
+                setFormData({ 
+                  ...formData, 
+                  role_id: e.target.value,
+                  party_id: selectedRole?.role_name === 'Retailer' ? formData.party_id : '' 
+                });
               }}
+              required
               className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
             >
-              <option value="retailer">Retailer</option>
-              <option value="admin">Admin</option>
-              <option value="guest">Guest</option>
+              <option value="">Select a role</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.role_name}
+                </option>
+              ))}
             </select>
           </div>
 
-          {formData.role === 'retailer' && (
+          {roles.find(r => r.id === formData.role_id)?.role_name === 'Retailer' && (
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Party *</label>
               <select
@@ -829,7 +969,7 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
             </div>
           )}
 
-          {formData.role !== 'admin' && (
+          {roles.find(r => r.id === formData.role_id)?.role_name !== 'Admin' && (
             <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
               <input
                 type="checkbox"

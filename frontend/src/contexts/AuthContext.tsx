@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import { api, UserProfile } from '../lib/api';
+import { api, UserProfile, RolePermissions } from '../lib/api';
+import { hasPermission, isAdmin as checkIsAdmin } from '../utils/permissions';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -7,6 +8,9 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   isAdmin: boolean;
+  hasPermission: (module: keyof RolePermissions, action: string) => boolean;
+  permissions: RolePermissions | null;
+  roleName: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -16,11 +20,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkAuth = async () => {
+      const tokenAtStart = localStorage.getItem('access_token');
+
       try {
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-          setLoading(false);
+        if (!tokenAtStart) {
+          if (isMounted) {
+            setLoading(false);
+          }
           return;
         }
 
@@ -28,17 +37,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await new Promise(resolve => setTimeout(resolve, 0));
         
         const data = await api.getCurrentUser();
-        setUser(data.profile);
+        if (isMounted) {
+          setUser(data.profile);
+        }
       } catch (error) {
         console.error('Auth check failed:', error);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+
+        if (localStorage.getItem('access_token') === tokenAtStart) {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     checkAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -58,9 +78,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = checkIsAdmin(user);
+  const permissions = user?.user_roles?.permissions || null;
+  const roleName = user?.user_roles?.role_name || 'Unknown';
 
-  const value = useMemo(() => ({ user, loading, login, logout, isAdmin }), [user, loading, login, logout, isAdmin]);
+  const checkPermission = useCallback((module: keyof RolePermissions, action: string) => {
+    return hasPermission(user, module, action);
+  }, [user]);
+
+  const value = useMemo(() => ({ 
+    user, 
+    loading, 
+    login, 
+    logout, 
+    isAdmin, 
+    hasPermission: checkPermission,
+    permissions,
+    roleName
+  }), [user, loading, login, logout, isAdmin, checkPermission, permissions, roleName]);
 
   return (
     <AuthContext.Provider value={value}>

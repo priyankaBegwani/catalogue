@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api, CartItem } from '../lib/api';
-import { X, Trash2, Minus, Plus, ShoppingBag, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { X, Trash2, Minus, Plus, ShoppingBag, ChevronDown, ChevronUp, Package, Heart } from 'lucide-react';
 import { CheckoutModal } from './CheckoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateDiscountedPrice, getDiscountPercentage } from '../utils/discountCalculator';
@@ -82,6 +82,43 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
       setUpdatingItems(prev => {
         const next = new Set(prev);
         next.delete(itemId);
+        return next;
+      });
+    }
+  };
+
+  const handleMoveToWishlist = async (item: CartItem) => {
+    try {
+      setUpdatingItems(prev => new Set(prev).add(item.id));
+      
+      // Add to wishlist
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('/api/wishlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ design_id: item.design.id }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to add to wishlist');
+      }
+
+      // Remove from cart
+      await api.removeFromCart(item.id);
+      await loadCart();
+      
+      // Show success message
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to move to wishlist');
+    } finally {
+      setUpdatingItems(prev => {
+        const next = new Set(prev);
+        next.delete(item.id);
         return next;
       });
     }
@@ -180,6 +217,7 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
                   onToggle={() => toggleGroup(key)}
                   onUpdateQuantity={handleUpdateQuantity}
                   onRemove={handleRemoveItem}
+                  onMoveToWishlist={handleMoveToWishlist}
                   updatingItems={updatingItems}
                 />
               ))}
@@ -246,10 +284,11 @@ interface GroupedCartCardProps {
   onToggle: () => void;
   onUpdateQuantity: (itemId: string, quantity: number) => void;
   onRemove: (itemId: string) => void;
+  onMoveToWishlist: (item: CartItem) => void;
   updatingItems: Set<string>;
 }
 
-function GroupedCartCard({ groupKey, group, isExpanded, onToggle, onUpdateQuantity, onRemove, updatingItems }: GroupedCartCardProps) {
+function GroupedCartCard({ groupKey, group, isExpanded, onToggle, onUpdateQuantity, onRemove, onMoveToWishlist, updatingItems }: GroupedCartCardProps) {
   // Get first available image from color or design
   const firstImage = group.color.image_urls?.[0] || 
                      group.design.design_colors?.find((c: any) => c.id === group.color.id)?.image_urls?.[0] ||
@@ -365,17 +404,30 @@ function GroupedCartCard({ groupKey, group, isExpanded, onToggle, onUpdateQuanti
                     </div>
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemove(item.id);
-                    }}
-                    disabled={isUpdating}
-                    className="text-red-500 hover:text-red-600 transition disabled:opacity-50 p-2 hover:bg-red-50 rounded-lg"
-                    title="Remove this size"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMoveToWishlist(item);
+                      }}
+                      disabled={isUpdating}
+                      className="text-pink-500 hover:text-pink-600 transition disabled:opacity-50 p-2 hover:bg-pink-50 rounded-lg"
+                      title="Move to Wishlist"
+                    >
+                      <Heart className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(item.id);
+                      }}
+                      disabled={isUpdating}
+                      className="text-red-500 hover:text-red-600 transition disabled:opacity-50 p-2 hover:bg-red-50 rounded-lg"
+                      title="Remove this size"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               );
             })}

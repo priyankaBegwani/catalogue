@@ -1615,6 +1615,38 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
   const showPriceToCustomers = localStorage.getItem('show_price_to_customers') !== 'false';
   const shouldShowPrice = isAdmin || (isAuthenticated && showPriceToCustomers);
 
+  // Add to wishlist function
+  const handleAddToWishlist = async (designId: string) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('/api/wishlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ design_id: designId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        // Check if item is already in wishlist
+        if (error.error === 'Item already in wishlist') {
+          alert('This item is already in your wishlist!');
+          return;
+        }
+        throw new Error(error.error || 'Failed to add to wishlist');
+      }
+
+      alert('Added to wishlist successfully!');
+      // Dispatch event to update wishlist count in header
+      window.dispatchEvent(new Event('wishlistUpdated'));
+    } catch (error) {
+      console.error('Error adding to wishlist:', error);
+      alert(error instanceof Error ? error.message : 'Failed to add to wishlist');
+    }
+  };
+
   // WhatsApp share function - direct share like design management page
   const shareOnWhatsApp = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1945,19 +1977,31 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         </div>
       </div>
 
-      {/* Add to Cart Button - Appears on Hover */}
+      {/* Add to Cart and Wishlist Buttons - Appears on Hover */}
       {isAuthenticated && onAddToCart && (
         <div className="px-3 pb-3 sm:px-4 sm:pb-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddToCart(design, selectedColorIndex);
-            }}
-            className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 flex items-center justify-center gap-2 text-sm shadow-md"
-          >
-            <ShoppingCart className="w-4 h-4" />
-            Add to Cart
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddToCart(design, selectedColorIndex);
+              }}
+              className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 flex items-center justify-center gap-2 text-sm shadow-md"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              Add to Cart
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddToWishlist(design.id);
+              }}
+              className="bg-white border-2 border-primary text-primary py-2.5 px-3 rounded-lg font-semibold hover:bg-primary hover:text-white transition duration-200 flex items-center justify-center shadow-md"
+              title="Add to Wishlist"
+            >
+              <Heart className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>
