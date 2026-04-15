@@ -3,6 +3,7 @@ export { Sidebar } from './Sidebar';
 export { TopBar } from './TopBar';
 export { PartyTierSelector } from './PartyTierSelector';
 export { AddDesignModal } from './AddDesignModal';
+export { ImportDesignsModal } from './ImportDesignsModal';
 export { ViewDesignModal } from './ViewDesignModal';
 export { CartModal } from './CartModal';
 export { CheckoutModal } from './CheckoutModal';

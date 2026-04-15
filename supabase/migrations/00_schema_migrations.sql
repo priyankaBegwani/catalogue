@@ -184,6 +184,11 @@ CREATE TABLE IF NOT EXISTS designs (
   style_id uuid REFERENCES design_styles(id) ON DELETE SET NULL,
   fabric_type_id uuid REFERENCES fabric_types(id) ON DELETE SET NULL,
   brand_id uuid REFERENCES brands(id) ON DELETE SET NULL,
+  tags text[] NOT NULL DEFAULT '{}',
+  work_type text CHECK (work_type IN ('plain', 'printed', 'emboidered', 'chikankari', 'shaded', 'handwork')),
+  occasion text CHECK (occasion IN ('festive', 'casual', 'wedding', 'office wear', 'daily wear')),
+  collection text CHECK (collection IN ('summer collection', 'winter collection', 'puja collection', 'eid collection')),
+  design_month_year date,
   available_sizes text[] DEFAULT ARRAY['S', 'M', 'L', 'XL', 'XXL'],
   price numeric(10,2) DEFAULT 0,
   whatsapp_image_url text,
@@ -198,6 +203,8 @@ CREATE INDEX IF NOT EXISTS idx_designs_style_id ON designs(style_id);
 CREATE INDEX IF NOT EXISTS idx_designs_fabric_type_id ON designs(fabric_type_id);
 CREATE INDEX IF NOT EXISTS idx_designs_brand_id ON designs(brand_id);
 CREATE INDEX IF NOT EXISTS idx_designs_is_active ON designs(is_active);
+CREATE INDEX IF NOT EXISTS idx_designs_tags_gin ON designs USING gin(tags);
+CREATE INDEX IF NOT EXISTS idx_designs_design_month_year ON designs(design_month_year);
 
 -- Design Colors
 CREATE TABLE IF NOT EXISTS design_colors (

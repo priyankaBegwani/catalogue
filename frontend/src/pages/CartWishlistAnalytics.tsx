@@ -24,10 +24,19 @@ interface CartItem {
   };
   designs: {
     id: string;
-    design_number: string;
-    design_name: string;
-    category: string;
-    image_url: string;
+    design_no: string;
+    name: string;
+    category_id: string;
+    whatsapp_image_url: string;
+    design_categories: {
+      name: string;
+    } | null;
+    design_styles: {
+      name: string;
+    } | null;
+    fabric_types: {
+      name: string;
+    } | null;
   };
 }
 
@@ -52,10 +61,19 @@ interface WishlistItem {
   };
   designs: {
     id: string;
-    design_number: string;
-    design_name: string;
-    category: string;
-    image_url: string;
+    design_no: string;
+    name: string;
+    category_id: string;
+    whatsapp_image_url: string;
+    design_categories: {
+      name: string;
+    } | null;
+    design_styles: {
+      name: string;
+    } | null;
+    fabric_types: {
+      name: string;
+    } | null;
   };
 }
 
@@ -64,6 +82,9 @@ interface DemandSummary {
   design_number: string;
   design_name: string;
   image_url: string;
+  category_name: string;
+  style_name: string;
+  fabric_name: string;
   cart_count: number;
   cart_quantity: number;
   wishlist_count: number;
@@ -270,14 +291,56 @@ function CartItemsTable({ items, onMessageUser }: { items: CartItem[]; onMessage
                 )}
               </td>
               <td className="px-6 py-4">
-                <div className="flex items-center gap-3">
-                  {item.designs.image_url && (
-                    <img src={item.designs.image_url} alt={item.designs.design_number} className="w-12 h-12 object-cover rounded" />
-                  )}
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{item.designs.design_number}</div>
-                    <div className="text-xs text-gray-500">{item.designs.design_name}</div>
-                    <div className="text-xs text-gray-400">{item.designs.category}</div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    {item.designs.whatsapp_image_url ? (
+                      <div className="relative group">
+                        <img 
+                          src={item.designs.whatsapp_image_url} 
+                          alt={item.designs.design_no} 
+                          className="w-24 h-24 object-cover rounded-lg border-2 border-gray-300 shadow-md cursor-pointer transition-all duration-200 hover:border-blue-500 hover:shadow-lg" 
+                          onError={(e) => {
+                            console.log('Image failed to load:', item.designs.whatsapp_image_url);
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling.style.display = 'flex';
+                          }}
+                        />
+                        <div className="hidden w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg border-2 border-gray-300 flex-col items-center justify-center">
+                          <div className="text-gray-500 text-xs font-medium">No Image</div>
+                          <div className="text-gray-400 text-xs">{item.designs.design_no}</div>
+                        </div>
+                        {/* Hover tooltip */}
+                        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full mt-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                          Design Preview
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg border-2 border-gray-300 flex flex-col items-center justify-center">
+                        <div className="text-gray-500 text-xs font-medium">No Image</div>
+                        <div className="text-gray-400 text-xs">{item.designs.design_no}</div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900">{item.designs.design_no}</div>
+                    <div className="text-xs text-gray-600 mb-1 truncate">{item.designs.name}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {item.designs.design_categories?.name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          {item.designs.design_categories.name}
+                        </span>
+                      )}
+                      {item.designs.design_styles?.name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                          {item.designs.design_styles.name}
+                        </span>
+                      )}
+                      {item.designs.fabric_types?.name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                          {item.designs.fabric_types.name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </td>
@@ -345,14 +408,56 @@ function WishlistItemsTable({ items, onMessageUser }: { items: WishlistItem[]; o
                 )}
               </td>
               <td className="px-6 py-4">
-                <div className="flex items-center gap-3">
-                  {item.designs.image_url && (
-                    <img src={item.designs.image_url} alt={item.designs.design_number} className="w-12 h-12 object-cover rounded" />
-                  )}
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{item.designs.design_number}</div>
-                    <div className="text-xs text-gray-500">{item.designs.design_name}</div>
-                    <div className="text-xs text-gray-400">{item.designs.category}</div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    {item.designs.whatsapp_image_url ? (
+                      <div className="relative group">
+                        <img 
+                          src={item.designs.whatsapp_image_url} 
+                          alt={item.designs.design_no} 
+                          className="w-24 h-24 object-cover rounded-lg border-2 border-gray-300 shadow-md cursor-pointer transition-all duration-200 hover:border-blue-500 hover:shadow-lg" 
+                          onError={(e) => {
+                            console.log('Image failed to load:', item.designs.whatsapp_image_url);
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling.style.display = 'flex';
+                          }}
+                        />
+                        <div className="hidden w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg border-2 border-gray-300 flex-col items-center justify-center">
+                          <div className="text-gray-500 text-xs font-medium">No Image</div>
+                          <div className="text-gray-400 text-xs">{item.designs.design_no}</div>
+                        </div>
+                        {/* Hover tooltip */}
+                        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full mt-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                          Design Preview
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg border-2 border-gray-300 flex flex-col items-center justify-center">
+                        <div className="text-gray-500 text-xs font-medium">No Image</div>
+                        <div className="text-gray-400 text-xs">{item.designs.design_no}</div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900">{item.designs.design_no}</div>
+                    <div className="text-xs text-gray-600 mb-1 truncate">{item.designs.name}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {item.designs.design_categories?.name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          {item.designs.design_categories.name}
+                        </span>
+                      )}
+                      {item.designs.design_styles?.name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                          {item.designs.design_styles.name}
+                        </span>
+                      )}
+                      {item.designs.fabric_types?.name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                          {item.designs.fabric_types.name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </td>
@@ -402,13 +507,56 @@ function DemandSummaryTable({ items }: { items: DemandSummary[] }) {
           {items.map((item) => (
             <tr key={item.design_id} className="hover:bg-gray-50">
               <td className="px-6 py-4">
-                <div className="flex items-center gap-3">
-                  {item.image_url && (
-                    <img src={item.image_url} alt={item.design_number} className="w-12 h-12 object-cover rounded" />
-                  )}
-                  <div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    {item.image_url ? (
+                      <div className="relative group">
+                        <img 
+                          src={item.image_url} 
+                          alt={item.design_number} 
+                          className="w-24 h-24 object-cover rounded-lg border-2 border-gray-300 shadow-md cursor-pointer transition-all duration-200 hover:border-blue-500 hover:shadow-lg" 
+                          onError={(e) => {
+                            console.log('Image failed to load:', item.image_url);
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling.style.display = 'flex';
+                          }}
+                        />
+                        <div className="hidden w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg border-2 border-gray-300 flex-col items-center justify-center">
+                          <div className="text-gray-500 text-xs font-medium">No Image</div>
+                          <div className="text-gray-400 text-xs">{item.design_number}</div>
+                        </div>
+                        {/* Hover tooltip */}
+                        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full mt-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                          Design Preview
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg border-2 border-gray-300 flex flex-col items-center justify-center">
+                        <div className="text-gray-500 text-xs font-medium">No Image</div>
+                        <div className="text-gray-400 text-xs">{item.design_number}</div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-gray-900">{item.design_number}</div>
-                    <div className="text-xs text-gray-500">{item.design_name}</div>
+                    <div className="text-xs text-gray-600 mb-1 truncate">{item.design_name}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {item.category_name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          {item.category_name}
+                        </span>
+                      )}
+                      {item.style_name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                          {item.style_name}
+                        </span>
+                      )}
+                      {item.fabric_name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                          {item.fabric_name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </td>

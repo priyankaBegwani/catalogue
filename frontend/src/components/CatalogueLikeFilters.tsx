@@ -11,7 +11,11 @@ export interface FilterState {
   colors: string[];
   designNo: string;
   sortBy: 'name' | 'price_low' | 'price_high' | 'newest' | 'popularity';
-  tags: DesignTag[];
+  tags: string[];
+  workTypes: string[];
+  occasions: string[];
+  collections: string[];
+  designMonthYear: string;
 }
 
 export function getDesignTags(design: Design): DesignTag[] {
@@ -71,11 +75,19 @@ const tagLabels: Record<DesignTag, string> = {
   'low-stock': 'Low Stock'
 };
 
+const DEFAULT_WORK_TYPE_OPTIONS = ['plain', 'printed', 'emboidered', 'chikankari', 'shaded', 'handwork'];
+const DEFAULT_OCCASION_OPTIONS = ['festive', 'casual', 'wedding', 'office wear', 'daily wear'];
+const DEFAULT_COLLECTION_OPTIONS = ['summer collection', 'winter collection', 'puja collection', 'eid collection'];
+
 export function getActiveFilterCount(filters: FilterState, selectedFabricType: string, selectedBrand: string, selectedStyle: string, selectedCreatedMonth?: string) {
   return (
     filters.categories.length +
     filters.colors.length +
     filters.tags.length +
+    filters.workTypes.length +
+    filters.occasions.length +
+    filters.collections.length +
+    (filters.designMonthYear ? 1 : 0) +
     (filters.designNo ? 1 : 0) +
     (filters.priceRange.min > 0 || filters.priceRange.max < 100000 ? 1 : 0) +
     (selectedFabricType ? 1 : 0) +
@@ -89,12 +101,24 @@ function toggleArrayValue(current: string[], value: string) {
   return current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
 }
 
+function toTitleCase(value: string) {
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getTagLabel(tag: string) {
+  return tagLabels[tag as DesignTag] || toTitleCase(tag);
+}
+
 export function DesktopFiltersSidebar({
   categories,
   fabricTypes,
   brands,
   styles,
   availableColors,
+  availableTags,
+  availableWorkTypes,
+  availableOccasions,
+  availableCollections,
   filters,
   setFilters,
   selectedFabricType,
@@ -116,6 +140,10 @@ export function DesktopFiltersSidebar({
   brands: Brand[];
   styles: DesignStyle[];
   availableColors: string[];
+  availableTags: string[];
+  availableWorkTypes: string[];
+  availableOccasions: string[];
+  availableCollections: string[];
   filters: FilterState;
   setFilters: (next: FilterState) => void;
   selectedFabricType: string;
@@ -133,6 +161,9 @@ export function DesktopFiltersSidebar({
   showFabric: boolean;
 }) {
   const activeCount = getActiveFilterCount(filters, selectedFabricType, selectedBrand, selectedStyle, selectedCreatedMonth);
+  const workTypeOptions = availableWorkTypes.length > 0 ? availableWorkTypes : DEFAULT_WORK_TYPE_OPTIONS;
+  const occasionOptions = availableOccasions.length > 0 ? availableOccasions : DEFAULT_OCCASION_OPTIONS;
+  const collectionOptions = availableCollections.length > 0 ? availableCollections : DEFAULT_COLLECTION_OPTIONS;
   
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
@@ -163,11 +194,9 @@ export function DesktopFiltersSidebar({
               onChange={(e) => setFilters({ ...filters, sortBy: e.target.value as any })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
             >
-              <option value="newest">Newly Added</option>
               <option value="popularity">Popularity</option>
               <option value="price_low">Price: Low to High</option>
               <option value="price_high">Price: High to Low</option>
-              <option value="name">Name (A-Z)</option>
             </select>
           </div>
 
@@ -265,6 +294,7 @@ export function DesktopFiltersSidebar({
             </div>
           )}
 
+          {availableTags.length > 0 && (
           <div className="border-t border-gray-200 pt-3">
             <button
               onClick={() => toggleSection('tags')}
@@ -274,18 +304,128 @@ export function DesktopFiltersSidebar({
               <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.tags ? 'rotate-180' : ''}`} />
             </button>
             {expandedSections.tags && (
-              <div className="space-y-2">
-                {(Object.keys(tagLabels) as DesignTag[]).map((tag) => (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {availableTags.map((tag) => (
                   <label key={tag} className="flex items-center space-x-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={filters.tags.includes(tag)}
-                      onChange={() => setFilters({ ...filters, tags: toggleArrayValue(filters.tags, tag) as DesignTag[] })}
+                      onChange={() => setFilters({ ...filters, tags: toggleArrayValue(filters.tags, tag) })}
                       className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                     />
-                    <span className="text-sm text-gray-700">{tagLabels[tag]}</span>
+                    <span className="text-sm text-gray-700">{getTagLabel(tag)}</span>
                   </label>
                 ))}
+              </div>
+            )}
+          </div>
+          )}
+
+          {workTypeOptions.length > 0 && (
+            <div className="border-t border-gray-200 pt-3">
+              <button
+                onClick={() => toggleSection('workType')}
+                className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 mb-2 hover:text-primary transition"
+              >
+                <span>Work Type {filters.workTypes.length > 0 && `(${filters.workTypes.length})`}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.workType ? 'rotate-180' : ''}`} />
+              </button>
+              {expandedSections.workType && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {workTypeOptions.map((item) => (
+                    <label key={item} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.workTypes.includes(item)}
+                        onChange={() => setFilters({ ...filters, workTypes: toggleArrayValue(filters.workTypes, item) })}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                      />
+                      <span className="text-sm text-gray-700">{toTitleCase(item)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {occasionOptions.length > 0 && (
+            <div className="border-t border-gray-200 pt-3">
+              <button
+                onClick={() => toggleSection('occasion')}
+                className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 mb-2 hover:text-primary transition"
+              >
+                <span>Occasion {filters.occasions.length > 0 && `(${filters.occasions.length})`}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.occasion ? 'rotate-180' : ''}`} />
+              </button>
+              {expandedSections.occasion && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {occasionOptions.map((item) => (
+                    <label key={item} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.occasions.includes(item)}
+                        onChange={() => setFilters({ ...filters, occasions: toggleArrayValue(filters.occasions, item) })}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                      />
+                      <span className="text-sm text-gray-700">{toTitleCase(item)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {collectionOptions.length > 0 && (
+            <div className="border-t border-gray-200 pt-3">
+              <button
+                onClick={() => toggleSection('collection')}
+                className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 mb-2 hover:text-primary transition"
+              >
+                <span>Collection {filters.collections.length > 0 && `(${filters.collections.length})`}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.collection ? 'rotate-180' : ''}`} />
+              </button>
+              {expandedSections.collection && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {collectionOptions.map((item) => (
+                    <label key={item} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.collections.includes(item)}
+                        onChange={() => setFilters({ ...filters, collections: toggleArrayValue(filters.collections, item) })}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                      />
+                      <span className="text-sm text-gray-700">{toTitleCase(item)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="border-t border-gray-200 pt-3">
+            <button
+              onClick={() => toggleSection('designMonthYear')}
+              className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 mb-2 hover:text-primary transition"
+            >
+              <span>Design Month & Year {filters.designMonthYear && '(1)'}</span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.designMonthYear ? 'rotate-180' : ''}`} />
+            </button>
+            {expandedSections.designMonthYear && (
+              <div>
+                <input
+                  type="month"
+                  value={filters.designMonthYear}
+                  onChange={(e) => setFilters({ ...filters, designMonthYear: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
+                {filters.designMonthYear && (
+                  <button
+                    onClick={() => setFilters({ ...filters, designMonthYear: '' })}
+                    className="text-xs text-primary hover:text-primary-dark mt-2"
+                  >
+                    Clear filter
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -386,35 +526,7 @@ export function DesktopFiltersSidebar({
             </div>
           )}
 
-          {availableCreatedMonths && availableCreatedMonths.length > 0 && (
-            <div className="border-t border-gray-200 pt-3">
-              <button
-                onClick={() => toggleSection('month')}
-                className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 mb-2 hover:text-primary transition"
-              >
-                <span>Created Month {selectedCreatedMonth && '(1)'}</span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.month ? 'rotate-180' : ''}`} />
-              </button>
-              {expandedSections.month && (
-                <div>
-                  <input
-                    type="month"
-                    value={selectedCreatedMonth}
-                    onChange={(e) => setSelectedCreatedMonth(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                  {selectedCreatedMonth && (
-                    <button 
-                      onClick={() => setSelectedCreatedMonth('')} 
-                      className="text-xs text-primary hover:text-primary-dark mt-2"
-                    >
-                      Clear filter
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          
 
           <div className="border-t border-gray-200 pt-3">
             <button
@@ -448,6 +560,10 @@ export function MobileFiltersSheet({
   brands,
   styles,
   availableColors,
+  availableTags,
+  availableWorkTypes,
+  availableOccasions,
+  availableCollections,
   filters,
   setFilters,
   selectedFabricType,
@@ -471,6 +587,10 @@ export function MobileFiltersSheet({
   brands: Brand[];
   styles: DesignStyle[];
   availableColors: string[];
+  availableTags: string[];
+  availableWorkTypes: string[];
+  availableOccasions: string[];
+  availableCollections: string[];
   filters: FilterState;
   setFilters: (next: FilterState) => void;
   selectedFabricType: string;
@@ -488,6 +608,9 @@ export function MobileFiltersSheet({
   showFabric: boolean;
 }) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const workTypeOptions = availableWorkTypes.length > 0 ? availableWorkTypes : DEFAULT_WORK_TYPE_OPTIONS;
+  const occasionOptions = availableOccasions.length > 0 ? availableOccasions : DEFAULT_OCCASION_OPTIONS;
+  const collectionOptions = availableCollections.length > 0 ? availableCollections : DEFAULT_COLLECTION_OPTIONS;
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -601,6 +724,7 @@ export function MobileFiltersSheet({
             </div>
           )}
 
+          {availableTags.length > 0 && (
           <div className="border-t border-gray-200 pt-4">
             <button
               onClick={() => toggleSection('tags')}
@@ -610,18 +734,128 @@ export function MobileFiltersSheet({
               <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.tags ? 'rotate-180' : ''}`} />
             </button>
             {expandedSections.tags && (
-              <div className="space-y-2">
-                {(Object.keys(tagLabels) as DesignTag[]).map((tag) => (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {availableTags.map((tag) => (
                   <label key={tag} className="flex items-center space-x-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={filters.tags.includes(tag)}
-                      onChange={() => setFilters({ ...filters, tags: toggleArrayValue(filters.tags, tag) as DesignTag[] })}
+                      onChange={() => setFilters({ ...filters, tags: toggleArrayValue(filters.tags, tag) })}
                       className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                     />
-                    <span className="text-sm text-gray-700">{tagLabels[tag]}</span>
+                    <span className="text-sm text-gray-700">{getTagLabel(tag)}</span>
                   </label>
                 ))}
+              </div>
+            )}
+          </div>
+          )}
+
+          {workTypeOptions.length > 0 && (
+            <div className="border-t border-gray-200 pt-4">
+              <button
+                onClick={() => toggleSection('workType')}
+                className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 mb-2"
+              >
+                <span>Work Type {filters.workTypes.length > 0 && `(${filters.workTypes.length})`}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.workType ? 'rotate-180' : ''}`} />
+              </button>
+              {expandedSections.workType && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {workTypeOptions.map((item) => (
+                    <label key={item} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.workTypes.includes(item)}
+                        onChange={() => setFilters({ ...filters, workTypes: toggleArrayValue(filters.workTypes, item) })}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                      />
+                      <span className="text-sm text-gray-700">{toTitleCase(item)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {occasionOptions.length > 0 && (
+            <div className="border-t border-gray-200 pt-4">
+              <button
+                onClick={() => toggleSection('occasion')}
+                className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 mb-2"
+              >
+                <span>Occasion {filters.occasions.length > 0 && `(${filters.occasions.length})`}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.occasion ? 'rotate-180' : ''}`} />
+              </button>
+              {expandedSections.occasion && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {occasionOptions.map((item) => (
+                    <label key={item} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.occasions.includes(item)}
+                        onChange={() => setFilters({ ...filters, occasions: toggleArrayValue(filters.occasions, item) })}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                      />
+                      <span className="text-sm text-gray-700">{toTitleCase(item)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {collectionOptions.length > 0 && (
+            <div className="border-t border-gray-200 pt-4">
+              <button
+                onClick={() => toggleSection('collection')}
+                className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 mb-2"
+              >
+                <span>Collection {filters.collections.length > 0 && `(${filters.collections.length})`}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.collection ? 'rotate-180' : ''}`} />
+              </button>
+              {expandedSections.collection && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {collectionOptions.map((item) => (
+                    <label key={item} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.collections.includes(item)}
+                        onChange={() => setFilters({ ...filters, collections: toggleArrayValue(filters.collections, item) })}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                      />
+                      <span className="text-sm text-gray-700">{toTitleCase(item)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="border-t border-gray-200 pt-4">
+            <button
+              onClick={() => toggleSection('designMonthYear')}
+              className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 mb-2"
+            >
+              <span>Design Month & Year {filters.designMonthYear && '(1)'}</span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.designMonthYear ? 'rotate-180' : ''}`} />
+            </button>
+            {expandedSections.designMonthYear && (
+              <div>
+                <input
+                  type="month"
+                  value={filters.designMonthYear}
+                  onChange={(e) => setFilters({ ...filters, designMonthYear: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
+                {filters.designMonthYear && (
+                  <button
+                    onClick={() => setFilters({ ...filters, designMonthYear: '' })}
+                    className="text-xs text-primary hover:text-primary-dark mt-2"
+                  >
+                    Clear filter
+                  </button>
+                )}
               </div>
             )}
           </div>

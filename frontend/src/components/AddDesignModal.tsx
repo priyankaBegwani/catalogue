@@ -2,6 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import { api, DesignCategory, DesignStyle, FabricType, Design, Brand } from '../lib/api';
 import { uploadDesignImage } from '../lib/storage';
 import { X, Plus, Trash2, Upload, Video, MessageCircle, Lightbulb, Copy, Edit } from 'lucide-react';
+import { ColorSelection } from './ColorSelection';
+
+const PRESET_TAG_OPTIONS = ['New Arrival', 'Best Seller', 'Fast Moving'] as const;
+const WORK_TYPE_OPTIONS = ['plain', 'printed', 'emboidered', 'chikankari', 'shaded', 'handwork'] as const;
+const OCCASION_OPTIONS = ['festive', 'casual', 'wedding', 'office wear', 'daily wear'] as const;
+const COLLECTION_OPTIONS = ['summer collection', 'winter collection', 'puja collection', 'eid collection'] as const;
+
+const formatMonthYearForInput = (value?: string | null) => {
+  if (!value) return '';
+  const match = String(value).match(/^(\d{4})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}` : '';
+};
 
 interface AddDesignModalProps {
   onClose: () => void;
@@ -33,52 +45,35 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     design_no: '',
     name: '',
     description: '',
+    department: '',
+    tags: [] as string[],
+    work_type: '',
+    occasion: '',
+    collection: '',
+    design_month_year: '',
     category_id: '',
     style_id: '',
     fabric_type_id: '',
     brand_id: '',
     available_sizes: [] as string[],
     whatsapp_image_url: '',
-    price: 0,
+    price: '' as number | '',
   });
   const [categories, setCategories] = useState<DesignCategory[]>([]);
   const [styles, setStyles] = useState<DesignStyle[]>([]);
   const [fabricTypes, setFabricTypes] = useState<FabricType[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
-  const [sizeInput, setSizeInput] = useState('');
   const [colors, setColors] = useState<ColorData[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [uploadingWhatsAppImage, setUploadingWhatsAppImage] = useState(false);
   const [error, setError] = useState('');
   const [showSampleDescriptions, setShowSampleDescriptions] = useState(false);
+  const [customTagInput, setCustomTagInput] = useState('');
   const prevCategoryRef = useRef<string>('');
-  const colorNameRefs = useRef<Array<HTMLInputElement | null>>([]);
   const sizeInputRefs = useRef<Array<Record<string, HTMLInputElement | null>>>([]);
   const formRef = useRef<HTMLFormElement | null>(null);
   const colorsSectionRef = useRef<HTMLDivElement | null>(null);
-
-  const scrollInputIntoView = (element: HTMLElement | null) => {
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
-  const focusNextField = (index: number, currentField: 'name') => {
-    if (currentField === 'name') {
-      const sizeInputs = sizeInputRefs.current[index];
-      const firstSizeInput = sizeInputs ? sizeInputs['S'] : null;
-      if (firstSizeInput) {
-        firstSizeInput.focus();
-        scrollInputIntoView(firstSizeInput);
-      }
-    }
-  };
-
-  useEffect(() => {
-    colorNameRefs.current = colorNameRefs.current.slice(0, colors.length);
-    sizeInputRefs.current = sizeInputRefs.current.slice(0, colors.length);
-  }, [colors.length]);
 
   useEffect(() => {
     loadCategories();
@@ -90,23 +85,26 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         design_no: editingDesign.design_no || '',
         name: editingDesign.name || '',
         description: editingDesign.description || '',
+        department: editingDesign.department || '',
+        tags: editingDesign.tags || [],
+        work_type: editingDesign.work_type || '',
+        occasion: editingDesign.occasion || '',
+        collection: editingDesign.collection || '',
+        design_month_year: formatMonthYearForInput(editingDesign.design_month_year),
         category_id: editingDesign.category_id || '',
         style_id: editingDesign.style_id || '',
         fabric_type_id: editingDesign.fabric_type_id || '',
         brand_id: editingDesign.brand_id || '',
         available_sizes: editingDesign.available_sizes || [],
         whatsapp_image_url: editingDesign.whatsapp_image_url || '',
-        price: editingDesign.price || 0,
+        price: editingDesign.price ?? '',
       });
       prevCategoryRef.current = editingDesign.category_id || '';
       // Load styles for the editing design's category
       if (editingDesign.category_id) {
         loadStyles(editingDesign.category_id).then(() => {
           // Ensure style_id is set after styles are loaded
-          setFormData(prev => ({
-            ...prev,
-            style_id: editingDesign.style_id || ''
-          }));
+          setFormData(prev => ({ ...prev, style_id: editingDesign.style_id || '' }));
         });
       }
       // Pre-populate colors
@@ -206,23 +204,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     prevCategoryRef.current = formData.category_id;
   }, [formData.category_id]);
 
-  const handleAddSize = () => {
-    if (sizeInput.trim() && !formData.available_sizes.includes(sizeInput.trim())) {
-      setFormData({
-        ...formData,
-        available_sizes: [...formData.available_sizes, sizeInput.trim()]
-      });
-      setSizeInput('');
-    }
-  };
-
-  const handleRemoveSize = (size: string) => {
-    setFormData({
-      ...formData,
-      available_sizes: formData.available_sizes.filter(s => s !== size)
-    });
-  };
-
   const createEmptyColor = (): ColorData => ({
     color_name: '',
     color_code: '#000000',
@@ -243,7 +224,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
   });
 
   const handleAddColor = () => {
-    const newColorIndex = colors.length;
     setColors(prev => [...prev, createEmptyColor()]);
 
     setTimeout(() => {
@@ -254,18 +234,11 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         const top = colorsSection.offsetTop - formEl.offsetTop;
         formEl.scrollTo({ top, behavior: 'smooth' });
       }
-
-      const nameInput = colorNameRefs.current[newColorIndex];
-      if (nameInput) {
-        // Avoid browser auto-scrolling the entire page on focus.
-        nameInput.focus({ preventScroll: true });
-      }
     }, 0);
   };
 
   const handleRemoveColor = (index: number) => {
     setColors(colors.filter((_, i) => i !== index));
-    colorNameRefs.current.splice(index, 1);
     sizeInputRefs.current.splice(index, 1);
   };
 
@@ -303,7 +276,6 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     if (!files || files.length === 0) return;
 
     const newColors = [...colors];
-    const existingFiles = newColors[index].uploadingVideos || [];
     // Limit to 1 video per color
     newColors[index].uploadingVideos = [files[0]];
     setColors(newColors);
@@ -334,13 +306,19 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         design_no: formData.design_no,
         name: formData.name,
         description: formData.description,
+        department: (formData.department || undefined) as 'mens' | 'boys' | undefined,
+        tags: formData.tags,
+        work_type: (formData.work_type || undefined) as 'plain' | 'printed' | 'emboidered' | 'chikankari' | 'shaded' | 'handwork' | undefined,
+        occasion: (formData.occasion || undefined) as 'festive' | 'casual' | 'wedding' | 'office wear' | 'daily wear' | undefined,
+        collection: (formData.collection || undefined) as 'summer collection' | 'winter collection' | 'puja collection' | 'eid collection' | undefined,
+        design_month_year: formData.design_month_year || undefined,
         category_id: formData.category_id || undefined,
         style_id: formData.style_id || undefined,
         fabric_type_id: formData.fabric_type_id || undefined,
         brand_id: formData.brand_id || undefined,
         available_sizes: formData.available_sizes,
         whatsapp_image_url: formData.whatsapp_image_url || undefined,
-        price: formData.price || 0
+        price: formData.price === '' ? 0 : formData.price
       };
 
       const colorsWithImages = await Promise.all(
@@ -421,6 +399,33 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
     }
   };
 
+  const toggleTag = (tag: string) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.includes(tag)
+        ? prev.tags.filter(existingTag => existingTag !== tag)
+        : [...prev.tags, tag]
+    }));
+  };
+
+  const addCustomTag = () => {
+    const normalizedTag = customTagInput.trim();
+    if (!normalizedTag) return;
+
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.includes(normalizedTag) ? prev.tags : [...prev.tags, normalizedTag]
+    }));
+    setCustomTagInput('');
+  };
+
+  const removeTag = (tag: string) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(existingTag => existingTag !== tag)
+    }));
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl w-full max-w-4xl my-4 sm:my-8">
@@ -441,8 +446,8 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
             </div>
           )}
 
-          {/* Brand and Category - Side by side on desktop */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+          {/* Brand, Department and Category */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Brand
@@ -463,7 +468,22 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
 
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-                Category *
+                Department
+              </label>
+              <select
+                value={formData.department}
+                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                <option value="">Select department</option>
+                <option value="mens">Mens</option>
+                <option value="boys">Boys</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Product *
               </label>
               <select
                 value={formData.category_id}
@@ -478,7 +498,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
                 required
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
               >
-                <option value="">Select a category</option>
+                <option value="">Select a product</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -492,7 +512,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-                Design Name *
+                Item Name *
               </label>
               <input
                 type="text"
@@ -560,6 +580,75 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          {/* Work Type, Occasion, Collection and Month-Year */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Work Type
+              </label>
+              <select
+                value={formData.work_type}
+                onChange={(e) => setFormData({ ...formData, work_type: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                <option value="">Select work type</option>
+                {WORK_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option.replace(/\b\w/g, (char) => char.toUpperCase())}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Occasion
+              </label>
+              <select
+                value={formData.occasion}
+                onChange={(e) => setFormData({ ...formData, occasion: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                <option value="">Select occasion</option>
+                {OCCASION_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option.replace(/\b\w/g, (char) => char.toUpperCase())}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Collection
+              </label>
+              <select
+                value={formData.collection}
+                onChange={(e) => setFormData({ ...formData, collection: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                <option value="">Select collection</option>
+                {COLLECTION_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option.replace(/\b\w/g, (char) => char.toUpperCase())}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Design Month & Year
+              </label>
+              <input
+                type="month"
+                value={formData.design_month_year}
+                onChange={(e) => setFormData({ ...formData, design_month_year: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              />
             </div>
           </div>
 
@@ -677,6 +766,74 @@ Net Quantity: 1`
             />
           </div>
 
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+              Tags
+            </label>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {PRESET_TAG_OPTIONS.map((tag) => {
+                const isSelected = formData.tags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    className={`px-3 py-1.5 rounded-full border text-xs sm:text-sm font-medium transition ${
+                      isSelected
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-primary hover:text-primary'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customTagInput}
+                onChange={(e) => setCustomTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addCustomTag();
+                  }
+                }}
+                className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                placeholder="Add custom tag"
+              />
+              <button
+                type="button"
+                onClick={addCustomTag}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-primary text-primary hover:bg-primary hover:text-white transition"
+              >
+                Add
+              </button>
+            </div>
+
+            {formData.tags.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {formData.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs sm:text-sm font-medium"
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      className="text-primary/70 hover:text-primary"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Price - Common for all colors */}
           <div>
             <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
@@ -685,12 +842,15 @@ Net Quantity: 1`
             <input
               type="number"
               value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => setFormData({
+                ...formData,
+                price: e.target.value === '' ? '' : Number(e.target.value)
+              })}
               required
               min="0"
-              step="0.01"
+              step="1"
               className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="0.00"
+              placeholder="0"
             />
             <p className="text-xs text-gray-500 mt-1">This price applies to all color variants</p>
           </div>
@@ -760,9 +920,23 @@ Net Quantity: 1`
 
             <div className="space-y-3 sm:space-y-4">
               {colors.map((color, index) => (
-                <div key={index} className="p-3 sm:p-4 border border-gray-200 rounded-lg space-y-2 sm:space-y-3">
+                <div
+                  key={index}
+                  className={`p-3 sm:p-4 border rounded-lg space-y-2 sm:space-y-3 ${
+                    color.in_stock
+                      ? 'border-gray-200 bg-white'
+                      : 'border-red-300 bg-gray-50 opacity-80'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm sm:text-base font-medium text-gray-900">Color #{index + 1}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className={`text-sm sm:text-base font-medium ${color.in_stock ? 'text-gray-900' : 'text-gray-500'}`}>Color #{index + 1}</h4>
+                      {!color.in_stock && (
+                        <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                          Out of Stock
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleRemoveColor(index)}
@@ -772,48 +946,40 @@ Net Quantity: 1`
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Color Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={color.color_name}
-                        onChange={(e) => handleColorChange(index, 'color_name', e.target.value)}
-                        onBlur={() => focusNextField(index, 'name')}
-                        required
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                        placeholder="e.g., Navy Blue"
-                        ref={(el) => {
-                          colorNameRefs.current[index] = el || null;
-                        }}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <ColorSelection
+                      value={{
+                        color_name: color.color_name,
+                        color_code: color.color_code
+                      }}
+                      onChange={(next) => {
+                        const newColors = [...colors];
+                        newColors[index] = {
+                          ...newColors[index],
+                          color_name: next.color_name,
+                          color_code: next.color_code
+                        };
+                        setColors(newColors);
+                      }}
+                    />
+                    <input
+                      type="hidden"
+                      required
+                      value={color.color_name}
+                      readOnly
+                    />
+                  </div>
 
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Color Code
-                      </label>
+                  <div>
+                    <label className="flex items-center space-x-2 text-xs font-medium text-gray-700">
                       <input
-                        type="color"
-                        value={color.color_code}
-                        onChange={(e) => handleColorChange(index, 'color_code', e.target.value)}
-                        className="w-full h-10 border border-gray-300 rounded-lg"
+                        type="checkbox"
+                        checked={color.in_stock}
+                        onChange={(e) => handleColorChange(index, 'in_stock', e.target.checked)}
+                        className="rounded border-gray-300 text-primary focus:ring-primary"
                       />
-                    </div>
-
-                    <div>
-                      <label className="flex items-center space-x-2 text-xs font-medium text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={color.in_stock}
-                          onChange={(e) => handleColorChange(index, 'in_stock', e.target.checked)}
-                          className="rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <span>In Stock</span>
-                      </label>
-                    </div>
+                      <span>In Stock</span>
+                    </label>
                   </div>
 
                   {/* Size-specific quantities */}

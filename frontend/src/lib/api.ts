@@ -180,6 +180,12 @@ export interface Design {
   design_no: string;
   name: string;
   description: string;
+  department?: 'mens' | 'boys' | null;
+  tags?: string[];
+  work_type?: 'plain' | 'printed' | 'emboidered' | 'chikankari' | 'shaded' | 'handwork' | null;
+  occasion?: 'festive' | 'casual' | 'wedding' | 'office wear' | 'daily wear' | null;
+  collection?: 'summer collection' | 'winter collection' | 'puja collection' | 'eid collection' | null;
+  design_month_year?: string | null;
   category_id: string | null;
   style_id: string | null;
   fabric_type_id: string | null;
@@ -188,6 +194,7 @@ export interface Design {
   whatsapp_image_url?: string;
   price: number;
   is_active: boolean;
+  is_archived?: boolean;
   created_at: string;
   updated_at: string;
   created_by: string;
@@ -220,6 +227,7 @@ export interface DesignColor {
   };
   image_urls: string[];
   video_urls?: string[];
+  is_active?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -602,6 +610,12 @@ class ApiClient {
     design_no: string;
     name: string;
     description?: string;
+    department?: 'mens' | 'boys';
+    tags?: string[];
+    work_type?: 'plain' | 'printed' | 'emboidered' | 'chikankari' | 'shaded' | 'handwork';
+    occasion?: 'festive' | 'casual' | 'wedding' | 'office wear' | 'daily wear';
+    collection?: 'summer collection' | 'winter collection' | 'puja collection' | 'eid collection';
+    design_month_year?: string;
     category_id?: string;
     style_id?: string;
     fabric_type_id?: string;
@@ -634,6 +648,12 @@ class ApiClient {
       design_no?: string;
       name?: string;
       description?: string;
+      department?: 'mens' | 'boys';
+      tags?: string[];
+      work_type?: 'plain' | 'printed' | 'emboidered' | 'chikankari' | 'shaded' | 'handwork';
+      occasion?: 'festive' | 'casual' | 'wedding' | 'office wear' | 'daily wear';
+      collection?: 'summer collection' | 'winter collection' | 'puja collection' | 'eid collection';
+      design_month_year?: string;
       category_id?: string;
       style_id?: string;
       fabric_type_id?: string;
@@ -642,6 +662,7 @@ class ApiClient {
       whatsapp_image_url?: string;
       price?: number;
       is_active?: boolean;
+      is_archived?: boolean;
     }
   ): Promise<Design> {
     return this.request(`/api/designs/${id}`, { method: 'PUT', body: updates, errorMsg: 'Failed to update design' });
@@ -698,6 +719,7 @@ class ApiClient {
         XXXL: number;
       };
       image_urls?: string[];
+      is_active?: boolean;
     }
   ): Promise<DesignColor> {
     return this.request(`/api/designs/colors/${colorId}`, { method: 'PUT', body: updates, errorMsg: 'Failed to update color' });

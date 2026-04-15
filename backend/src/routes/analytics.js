@@ -46,7 +46,10 @@ router.get('/cart-items',
           design_no,
           name,
           category_id,
-          whatsapp_image_url
+          whatsapp_image_url,
+          design_categories(name),
+          design_styles(name),
+          fabric_types(name)
         ),
         design_colors!cart_items_color_id_fkey(
           id,
@@ -128,7 +131,10 @@ router.get('/wishlist-items',
           design_no,
           name,
           category_id,
-          whatsapp_image_url
+          whatsapp_image_url,
+          design_categories(name),
+          design_styles(name),
+          fabric_types(name)
         )
       `)
       .order('created_at', { ascending: false });
@@ -197,12 +203,12 @@ router.get('/demand-summary',
     // Get cart items grouped by design
     const { data: cartData } = await supabase
       .from('cart_items')
-      .select('design_id, quantity, designs(design_no, name, whatsapp_image_url)');
+      .select('design_id, quantity, designs(design_no, name, whatsapp_image_url, design_categories(name), design_styles(name), fabric_types(name))');
 
     // Get wishlist items grouped by design
     const { data: wishlistData } = await supabase
       .from('wishlist_items')
-      .select('design_id, designs(design_no, name, whatsapp_image_url)');
+      .select('design_id, designs(design_no, name, whatsapp_image_url, design_categories(name), design_styles(name), fabric_types(name))');
 
     // Aggregate by design
     const demandMap = new Map();
@@ -216,6 +222,9 @@ router.get('/demand-summary',
             design_number: item.designs?.design_no,
             design_name: item.designs?.name,
             image_url: item.designs?.whatsapp_image_url,
+            category_name: item.designs?.design_categories?.name,
+            style_name: item.designs?.design_styles?.name,
+            fabric_name: item.designs?.fabric_types?.name,
             cart_count: 0,
             cart_quantity: 0,
             wishlist_count: 0
@@ -236,6 +245,9 @@ router.get('/demand-summary',
             design_number: item.designs?.design_no,
             design_name: item.designs?.name,
             image_url: item.designs?.whatsapp_image_url,
+            category_name: item.designs?.design_categories?.name,
+            style_name: item.designs?.design_styles?.name,
+            fabric_name: item.designs?.fabric_types?.name,
             cart_count: 0,
             cart_quantity: 0,
             wishlist_count: 0

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile, Brand, DesignStyle } from '../lib/api';
-import { Eye, Package, Heart, ShoppingCart, ImageIcon, Filter, X, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck, Plus, Search, ArrowLeft, ChevronDown } from 'lucide-react';
+import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile, Brand, DesignStyle, Party } from '../lib/api';
+import { COLOR_GROUPS, ALL_COLORS } from '../lib/colorConstants';
+import { Package, Heart, ShoppingCart, ImageIcon, Filter, X, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck, Plus, Search, ArrowLeft, ArrowRight, ChevronDown, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getWhatsAppUrl, useBranding } from '../hooks/useBranding';
 import { AddToCartModal } from '../components/AddToCartModal';
@@ -13,6 +14,57 @@ import {
 } from '../components/CatalogueLikeFilters';
 
 export type DesignTag = 'new-arrival' | 'trending' | 'best-seller' | 'fast-repeat' | 'ready-to-ship' | 'low-stock';
+
+// Pricing utility function
+const calculateDiscountedPrice = (originalPrice: number, userProfile: UserProfile | null, selectedParty: Party | null, isAdmin: boolean): { price: number; isDiscounted: boolean } => {
+  // Admin sees original price unless party is selected
+  if (isAdmin && !selectedParty) {
+    return { price: originalPrice, isDiscounted: false };
+  }
+
+  // Determine which party to use for discount
+  const partyForDiscount = selectedParty || (userProfile?.parties ? {
+    id: userProfile.parties.id || '',
+    party_id: userProfile.parties.party_id || '',
+    name: userProfile.parties.name || '',
+    default_discount: userProfile.parties.default_discount || undefined
+  } as Party : null);
+
+  // If no party or no discount, return original price
+  if (!partyForDiscount?.default_discount) {
+    return { price: originalPrice, isDiscounted: false };
+  }
+
+  // Parse discount percentage
+  const discountPercentage = parseFloat(partyForDiscount.default_discount);
+  if (isNaN(discountPercentage) || discountPercentage <= 0) {
+    return { price: originalPrice, isDiscounted: false };
+  }
+
+  // Calculate discounted price
+  const discountAmount = (originalPrice * discountPercentage) / 100;
+  const discountedPrice = originalPrice - discountAmount;
+  
+  return { price: Math.max(0, discountedPrice), isDiscounted: true };
+};
+
+function getManualTagClasses(tag: string) {
+  const normalized = tag.trim().toLowerCase();
+
+  if (normalized === 'new arrival') {
+    return 'bg-blue-100 text-blue-700 border-blue-200';
+  }
+
+  if (normalized === 'best seller') {
+    return 'bg-amber-100 text-amber-700 border-amber-200';
+  }
+
+  if (normalized === 'fast moving') {
+    return 'bg-green-100 text-green-700 border-green-200';
+  }
+
+  return 'bg-white/95 text-gray-800 border-gray-200';
+}
 
 // Utility function to calculate design tags
 function getDesignTags(design: Design): DesignTag[] {
@@ -109,6 +161,11 @@ const tagConfig: Record<DesignTag, { label: string; color: string; bgColor: stri
   }
 };
 
+function toComputedTagLabel(tag: string) {
+  const config = tagConfig[tag as DesignTag];
+  return config ? config.label : tag;
+}
+
 // Highlight tag presets - maps to existing filter logic
 interface HighlightTag {
   id: string;
@@ -183,15 +240,59 @@ const highlightTags: HighlightTag[] = [
   }
 ];
 
+function isCatalogueVisibleDesign(design: Design) {
+  if (!design.is_active) return false;
+  if (design.is_archived === true) return false;
+
+  const colors = design.design_colors || [];
+  if (colors.length === 0) return true;
+
+  return colors.some(color => color.is_active !== false && color.in_stock !== false);
+}
+
+function sanitizeCatalogueDesigns(designs: Design[]) {
+  return designs
+    .filter(isCatalogueVisibleDesign)
+    .map((design) => ({
+      ...design,
+      design_colors: (design.design_colors || []).filter(color => color.is_active !== false && color.in_stock !== false)
+    }));
+}
+
 export function Catalogue() {
   const { user, isAdmin } = useAuth();
   const branding = useBranding();
+  
+  // Check if user has access to special brands (Indiecraft, Babumoshai)
+  const hasSpecialBrandAccess = useMemo(() => {
+    if (!user?.user_roles?.role_name) return false;
+    const userRole = user.user_roles.role_name.toLowerCase();
+    return userRole === 'admin' || userRole === 'sales' || userRole === 'staff';
+  }, [user?.user_roles?.role_name]);
+  
   const [designs, setDesigns] = useState<Design[]>([]);
   const [allDesigns, setAllDesigns] = useState<Design[]>([]); // For autocomplete - unfiltered
   const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([]);
   const [categories, setCategories] = useState<DesignCategory[]>([]);
   const [fabricTypes, setFabricTypes] = useState<FabricType[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
+  
+  // Filter brands for tabs only - hide Indiecraft and Babumoshai tabs from non-authorized users
+  // But designs from these brands are still visible in "All Brands" view and search
+  const visibleBrandTabs = useMemo(() => {
+    return brands.filter(brand => {
+      const brandName = brand.name.toLowerCase();
+      const isSpecialBrand = brandName.includes('indiecraft') || brandName.includes('babumoshai');
+      
+      // If it's a special brand tab, only show to users with special access
+      if (isSpecialBrand) {
+        return hasSpecialBrandAccess;
+      }
+      
+      // Show all other brand tabs to everyone
+      return true;
+    });
+  }, [brands, hasSpecialBrandAccess]);
   const [styles, setStyles] = useState<DesignStyle[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedFabricType, setSelectedFabricType] = useState<string>('');
@@ -211,7 +312,11 @@ export function Catalogue() {
     colors: [],
     designNo: '',
     sortBy: 'newest',
-    tags: []
+    tags: [],
+    workTypes: [],
+    occasions: [],
+    collections: [],
+    designMonthYear: ''
   });
   const [selectedDesigns, setSelectedDesigns] = useState<Set<string>>(new Set());
   const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
@@ -251,6 +356,44 @@ export function Catalogue() {
       .map(([value, label]) => ({ value, label }));
   }, [designs]);
 
+  const getCombinedDesignTags = (design: Design) => {
+    const computedTags = getDesignTags(design).map((tag) => toComputedTagLabel(tag));
+    const manualTags = (design.tags || []).map((tag) => tag.trim()).filter(Boolean);
+    return Array.from(new Set([...computedTags, ...manualTags]));
+  };
+
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    designs.forEach((design) => {
+      getCombinedDesignTags(design).forEach((tag) => tagSet.add(tag));
+    });
+    return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
+  }, [designs]);
+
+  const availableWorkTypes = useMemo(() => {
+    const values = new Set<string>();
+    designs.forEach((design) => {
+      if (design.work_type) values.add(design.work_type);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [designs]);
+
+  const availableOccasions = useMemo(() => {
+    const values = new Set<string>();
+    designs.forEach((design) => {
+      if (design.occasion) values.add(design.occasion);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [designs]);
+
+  const availableCollections = useMemo(() => {
+    const values = new Set<string>();
+    designs.forEach((design) => {
+      if (design.collection) values.add(design.collection);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [designs]);
+
   useEffect(() => {
     loadCategories();
     loadFabricTypes();
@@ -268,17 +411,26 @@ export function Catalogue() {
     
     const categories = params.get('categories')?.split(',').filter(Boolean) || [];
     const colors = params.get('colors')?.split(',').filter(Boolean) || [];
-    const tags = params.get('tags')?.split(',').filter(Boolean) as DesignTag[] || [];
+    const tags = (params.get('tags')?.split(',').filter(Boolean) || []).map((tag) => toComputedTagLabel(tag));
+    const workTypes = params.get('workTypes')?.split(',').filter(Boolean) || [];
+    const occasions = params.get('occasions')?.split(',').filter(Boolean) || [];
+    const collections = params.get('collections')?.split(',').filter(Boolean) || [];
+    const designMonthYear = params.get('designMonthYear') || '';
     const minPrice = params.get('minPrice');
     const maxPrice = params.get('maxPrice');
     const designNo = params.get('designNo') || '';
     const sortBy = params.get('sortBy') as FilterState['sortBy'] || 'newest';
     
-    if (categories.length > 0 || colors.length > 0 || tags.length > 0 || minPrice || maxPrice || designNo) {
+    if (categories.length > 0 || colors.length > 0 || tags.length > 0 || workTypes.length > 0 || occasions.length > 0 || collections.length > 0 || designMonthYear || minPrice || maxPrice || designNo) {
       setFilters({
         categories,
+        brands: [],
         colors,
         tags,
+        workTypes,
+        occasions,
+        collections,
+        designMonthYear,
         priceRange: {
           min: minPrice ? Number(minPrice) : 0,
           max: maxPrice ? Number(maxPrice) : 100000
@@ -500,7 +652,7 @@ export function Catalogue() {
         undefined, // No style filter
         true // Only fetch active designs for catalogue
       );
-      setAllDesigns(data);
+      setAllDesigns(sanitizeCatalogueDesigns(data));
     } catch (err) {
       console.error('Failed to load all designs for autocomplete:', err);
     }
@@ -516,7 +668,7 @@ export function Catalogue() {
         selectedStyle || undefined,
         true // Only fetch active designs for catalogue
       );
-      setDesigns(data);
+      setDesigns(sanitizeCatalogueDesigns(data));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load designs');
     } finally {
@@ -547,7 +699,7 @@ export function Catalogue() {
   };
 
   const applyFilters = () => {
-    let filtered = [...designs];
+    let filtered = designs.filter(isCatalogueVisibleDesign);
 
     // Master search - search across all fields
     if (masterSearch.trim()) {
@@ -584,6 +736,7 @@ export function Catalogue() {
         
         // Search in color names
         if (design.design_colors?.some(color => 
+          color.is_active !== false &&
           color.color_name?.toLowerCase().includes(searchTerm)
         )) return true;
         
@@ -607,7 +760,7 @@ export function Catalogue() {
     // Filter by colors
     if (filters.colors.length > 0) {
       filtered = filtered.filter(d => 
-        d.design_colors?.some(c => filters.colors.includes(c.color_name))
+        d.design_colors?.some(c => c.is_active !== false && filters.colors.includes(c.color_name))
       );
     }
 
@@ -621,8 +774,30 @@ export function Catalogue() {
     // Filter by tags
     if (filters.tags.length > 0) {
       filtered = filtered.filter(d => {
-        const designTags = getDesignTags(d);
+        const designTags = getCombinedDesignTags(d);
         return filters.tags.some(tag => designTags.includes(tag));
+      });
+    }
+
+    if (filters.workTypes.length > 0) {
+      filtered = filtered.filter((d) => !!d.work_type && filters.workTypes.includes(d.work_type));
+    }
+
+    if (filters.occasions.length > 0) {
+      filtered = filtered.filter((d) => !!d.occasion && filters.occasions.includes(d.occasion));
+    }
+
+    if (filters.collections.length > 0) {
+      filtered = filtered.filter((d) => !!d.collection && filters.collections.includes(d.collection));
+    }
+
+    if (filters.designMonthYear) {
+      filtered = filtered.filter((d) => {
+        if (!d.design_month_year) return false;
+        const raw = String(d.design_month_year);
+        const match = raw.match(/^(\d{4})-(\d{2})/);
+        if (!match) return false;
+        return `${match[1]}-${match[2]}` === filters.designMonthYear;
       });
     }
 
@@ -681,7 +856,7 @@ export function Catalogue() {
     }));
   };
 
-  const toggleTagFilter = (tag: DesignTag) => {
+  const toggleTagFilter = (tag: string) => {
     setFilters(prev => ({
       ...prev,
       tags: prev.tags.includes(tag)
@@ -698,7 +873,11 @@ export function Catalogue() {
       colors: [],
       designNo: '',
       sortBy: 'newest',
-      tags: []
+      tags: [],
+      workTypes: [],
+      occasions: [],
+      collections: [],
+      designMonthYear: ''
     });
     setSelectedCategory('');
     setSelectedFabricType('');
@@ -709,7 +888,7 @@ export function Catalogue() {
 
   // Toggle highlight tag preset - allows multiple selection
   const toggleHighlightPreset = (highlightTag: HighlightTag) => {
-    const presetTags = highlightTag.filterPreset.tags || [];
+    const presetTags = (highlightTag.filterPreset.tags || []).map((tag) => toComputedTagLabel(tag));
     const isCurrentlyActive = presetTags.some(tag => filters.tags.includes(tag));
     
     if (isCurrentlyActive) {
@@ -759,6 +938,18 @@ export function Catalogue() {
     }
     if (filters.tags.length > 0) {
       params.set('tags', filters.tags.join(','));
+    }
+    if (filters.workTypes.length > 0) {
+      params.set('workTypes', filters.workTypes.join(','));
+    }
+    if (filters.occasions.length > 0) {
+      params.set('occasions', filters.occasions.join(','));
+    }
+    if (filters.collections.length > 0) {
+      params.set('collections', filters.collections.join(','));
+    }
+    if (filters.designMonthYear) {
+      params.set('designMonthYear', filters.designMonthYear);
     }
     if (filters.priceRange.min > 0) {
       params.set('minPrice', filters.priceRange.min.toString());
@@ -1052,7 +1243,7 @@ export function Catalogue() {
 
   return (
     <>
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 lg:pb-6">
+     <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 lg:pb-6">
       {/* Breadcrumb and Search Bar - Inline on Desktop */}
       <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <Breadcrumb />
@@ -1201,6 +1392,10 @@ export function Catalogue() {
         brands={brands}
         styles={styles}
         availableColors={availableColors}
+        availableTags={[]}
+        availableWorkTypes={[]}
+        availableOccasions={[]}
+        availableCollections={[]}
         filters={filters}
         setFilters={setFilters}
         selectedFabricType={selectedFabricType}
@@ -1225,6 +1420,10 @@ export function Catalogue() {
           brands={brands}
           styles={styles}
           availableColors={availableColors}
+          availableTags={[]}
+          availableWorkTypes={[]}
+          availableOccasions={[]}
+          availableCollections={[]}
           filters={filters}
           setFilters={setFilters}
           selectedFabricType={selectedFabricType}
@@ -1246,7 +1445,7 @@ export function Catalogue() {
         <main className="flex-1">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             {/* Brand Tabs Header */}
-            {brands.length > 0 && (
+            {visibleBrandTabs.length > 0 && (
               <div className="border-b border-gray-200 bg-gray-50 px-3 sm:px-4 rounded-t-xl">
                 <div className="flex items-end justify-between gap-3">
                   <div className="flex items-end gap-2 overflow-x-auto scrollbar-hide">
@@ -1261,7 +1460,7 @@ export function Catalogue() {
                     >
                       All Brands
                     </button>
-                    {brands.map((brand) => (
+                    {visibleBrandTabs.map((brand) => (
                       <button
                         key={brand.id}
                         type="button"
@@ -1599,12 +1798,11 @@ interface DesignCardProps {
   onToggleSelection?: () => void;
   onShareClick?: (design: Design) => void;
   onAddToCart?: (design: Design, colorIndex: number) => void;
-}
-
-function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection, onShareClick, onAddToCart }: DesignCardProps) {
+}function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection, onShareClick, onAddToCart }: DesignCardProps) {
   const { user, isAdmin } = useAuth();
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const slideshowIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number; time: number } | null>(null);
   const colorCount = design.design_colors?.length || 0;
@@ -1614,6 +1812,26 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
   const isAuthenticated = !!user;
   const showPriceToCustomers = localStorage.getItem('show_price_to_customers') !== 'false';
   const shouldShowPrice = isAdmin || (isAuthenticated && showPriceToCustomers);
+
+  // Load user profile for party discount information
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (isAuthenticated) {
+        try {
+          const profile = await api.getProfile();
+          setUserProfile(profile);
+        } catch (error) {
+          console.error('Failed to load user profile:', error);
+        }
+      }
+    };
+    loadUserProfile();
+  }, [isAuthenticated]);
+
+  // Calculate discounted price
+  const { price: displayPrice, isDiscounted } = design.price 
+    ? calculateDiscountedPrice(design.price, userProfile, null, isAdmin)
+    : { price: 0, isDiscounted: false };
 
   // Add to wishlist function
   const handleAddToWishlist = async (designId: string) => {
@@ -1737,6 +1955,7 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
     setCurrentImageIndex(0);
   }, [selectedColorIndex]);
 
+
   // Handle swipe gestures
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     const touch = e.touches[0];
@@ -1773,7 +1992,7 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
     setTouchStart(null);
   };
 
-  return (
+    return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-xl transition duration-300 group cursor-pointer relative">
       {/* Bulk Selection Checkbox */}
       {bulkSelectionMode && (
@@ -1804,6 +2023,7 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+       
         {firstImage ? (
           <div className="w-full h-40 sm:h-72 lg:h-80 flex items-center justify-center bg-white">
             <img
@@ -1819,10 +2039,57 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
           </div>
         )}
 
+        {Array.isArray(design.tags) && design.tags.length > 0 && (
+          <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1">
+            {design.tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className={`px-2 py-1 text-[10px] font-semibold rounded-md border shadow-sm ${getManualTagClasses(tag)}`}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Design Tags - Myntra Style Badges */}
         {(() => {
           const designTags = getDesignTags(design);
           const priorityOrder: DesignTag[] = ['best-seller', 'trending', 'new-arrival', 'fast-repeat', 'ready-to-ship', 'low-stock'];
+
+          // Pricing utility function
+          const calculateDiscountedPrice = (originalPrice: number, userProfile: UserProfile | null, selectedParty: Party | null, isAdmin: boolean): { price: number; isDiscounted: boolean } => {
+            // Admin sees original price unless party is selected
+            if (isAdmin && !selectedParty) {
+              return { price: originalPrice, isDiscounted: false };
+            }
+
+            // Determine which party to use for discount
+            const partyForDiscount = selectedParty || (userProfile?.parties ? {
+              id: userProfile.parties.id || '',
+              party_id: userProfile.parties.party_id || '',
+              name: userProfile.parties.name || '',
+              default_discount: userProfile.parties.default_discount || undefined
+            } as Party : null);
+
+            // If no party or no discount, return original price
+            if (!partyForDiscount?.default_discount) {
+              return { price: originalPrice, isDiscounted: false };
+            }
+
+            // Parse discount percentage
+            const discountPercentage = parseFloat(partyForDiscount.default_discount);
+            if (isNaN(discountPercentage) || discountPercentage <= 0) {
+              return { price: originalPrice, isDiscounted: false };
+            }
+
+            // Calculate discounted price
+            const discountAmount = (originalPrice * discountPercentage) / 100;
+            const discountedPrice = originalPrice - discountAmount;
+            
+            return { price: Math.max(0, discountedPrice), isDiscounted: true };
+          };
+
           const sortedTags = designTags.sort((a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b));
           const displayTags = sortedTags.slice(0, 2);
           
@@ -1858,34 +2125,6 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
             ))}
           </div>
         )}
-
-        <div className="absolute inset-0 bg-black bg-opacity-0 sm:group-hover:bg-opacity-20 transition duration-300 flex items-center justify-center">
-          <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition duration-300">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onShareClick) {
-                  onShareClick(design);
-                } else {
-                  shareOnWhatsApp(e as any);
-                }
-              }}
-              className="bg-green-500 text-white w-11 h-11 sm:w-12 sm:h-12 sm:px-4 sm:py-3 text-sm sm:text-base rounded-full font-semibold flex items-center justify-center shadow-lg hover:bg-green-600 transition min-w-[44px] min-h-[44px]"
-              title="Swipe left or tap to share"
-            >
-              <MessageCircle className="w-5 h-5 sm:w-5 sm:h-5" />
-              
-            </button>
-            <button
-              onClick={onQuickView}
-              className="bg-white text-primary w-11 h-11 sm:w-12 sm:h-12 sm:px-4 sm:py-3 text-sm sm:text-base rounded-full font-semibold flex items-center justify-center shadow-lg hover:bg-primary hover:text-white transition min-w-[44px] min-h-[44px]"
-              title="Swipe right or tap to view"
-            >
-              <Eye className="w-5 h-5 sm:w-5 sm:h-5" />
-             
-            </button>
-          </div>
-        </div>
       </div>
 
       <div className="p-2 sm:p-4" onClick={onQuickView}>
@@ -1961,9 +2200,21 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         {/* Price */}
         <div className="flex items-baseline justify-between">
           {shouldShowPrice && design.price ? (
-            <span className="text-lg sm:text-xl font-bold text-primary">
-              ₹{design.price.toLocaleString()}
-            </span>
+            <div className="flex flex-col">
+              <span className="text-lg sm:text-xl font-bold text-primary">
+                ₹{displayPrice.toLocaleString()}
+              </span>
+              {isDiscounted && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 line-through">
+                    ₹{design.price.toLocaleString()}
+                  </span>
+                  <span className="text-xs text-green-600 font-semibold">
+                    {Math.round(((design.price - displayPrice) / design.price) * 100)}% OFF
+                  </span>
+                </div>
+              )}
+            </div>
           ) : !isAuthenticated ? (
             <span className="text-sm text-gray-600 font-medium">
               🔐 Login to view price
@@ -1977,33 +2228,71 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
         </div>
       </div>
 
-      {/* Add to Cart and Wishlist Buttons - Appears on Hover */}
-      {isAuthenticated && onAddToCart && (
-        <div className="px-3 pb-3 sm:px-4 sm:pb-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <div className="flex gap-2">
+      <div className="px-3 pb-3 sm:px-4 sm:pb-4">
+        <div className="pt-1">
+          {isAuthenticated && onAddToCart ? (
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onShareClick) {
+                      onShareClick(design);
+                    } else {
+                      shareOnWhatsApp(e as any);
+                    }
+                  }}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-200 bg-white text-green-700 shadow-sm hover:border-green-300 hover:bg-green-50 transition duration-200"
+                  title="Share on WhatsApp"
+                  aria-label="Share on WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddToWishlist(design.id);
+                  }}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-white text-primary shadow-sm hover:border-primary/40 hover:bg-primary/5 transition duration-200"
+                  title="Add to Wishlist"
+                  aria-label="Add to Wishlist"
+                >
+                  <Heart className="w-4 h-4" />
+                </button>
+              </div>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToCart(design, selectedColorIndex);
+                }}
+                className="flex-1 inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-white shadow-sm hover:bg-primary-dark transition duration-200"
+                title="Add to Cart"
+                aria-label="Add to Cart"
+              >
+                <ShoppingCart className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onAddToCart(design, selectedColorIndex);
+                if (onShareClick) {
+                  onShareClick(design);
+                } else {
+                  shareOnWhatsApp(e as any);
+                }
               }}
-              className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 flex items-center justify-center gap-2 text-sm shadow-md"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-green-500 text-white shadow-sm hover:bg-green-600 transition duration-200"
+              title="Share on WhatsApp"
+              aria-label="Share on WhatsApp"
             >
-              <ShoppingCart className="w-4 h-4" />
-              Add to Cart
+              <MessageCircle className="w-4 h-4" />
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAddToWishlist(design.id);
-              }}
-              className="bg-white border-2 border-primary text-primary py-2.5 px-3 rounded-lg font-semibold hover:bg-primary hover:text-white transition duration-200 flex items-center justify-center shadow-md"
-              title="Add to Wishlist"
-            >
-              <Heart className="w-4 h-4" />
-            </button>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -2040,10 +2329,43 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
   const [showSizeSelection, setShowSizeSelection] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
   const [similarDesigns, setSimilarDesigns] = useState<Design[]>([]);
+  const [isImageLightboxOpen, setIsImageLightboxOpen] = useState(false);
+  const swipeStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   
   const design = currentDesign;
   const selectedColor = design.design_colors?.[selectedColorIndex];
+  const imageCount = selectedColor?.image_urls?.length || 0;
   const selectedImage = selectedColor?.image_urls?.[selectedImageIndex];
+
+  // Calculate discounted price for quick view
+  const { price: displayPrice, isDiscounted } = design.price 
+    ? calculateDiscountedPrice(design.price, userProfile, null, isAdmin)
+    : { price: 0, isDiscounted: false };
+
+  const goToPreviousImage = () => {
+    if (imageCount <= 1) return;
+    setSelectedImageIndex((prev) => (prev === 0 ? imageCount - 1 : prev - 1));
+  };
+
+  const goToNextImage = () => {
+    if (imageCount <= 1) return;
+    setSelectedImageIndex((prev) => (prev === imageCount - 1 ? 0 : prev + 1));
+  };
+
+  const openImageLightbox = () => {
+    if (!selectedImage) return;
+    setIsImageLightboxOpen(true);
+  };
+
+  const closeImageLightbox = () => {
+    setIsImageLightboxOpen(false);
+    setZoomLevel(1);
+    setPanPosition({ x: 0, y: 0 });
+    setIsDragging(false);
+    setIsTouchZooming(false);
+    setTouchDistance(0);
+    swipeStartRef.current = null;
+  };
 
   // Generate dynamic description based on selected color, style, and fabric
   const dynamicDescription = useMemo(() => {
@@ -2101,7 +2423,7 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
   useEffect(() => {
     const loadSimilarDesigns = async () => {
       try {
-        const allDesigns = await api.getDesigns();
+        const allDesigns = sanitizeCatalogueDesigns(await api.getDesigns());
         const similar = allDesigns
           .filter(d => 
             d.id !== design.id && (
@@ -2156,6 +2478,52 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
     setTouchDistance(0);
   }, [selectedImageIndex, selectedColorIndex]);
 
+  useEffect(() => {
+    if (imageCount > 0 && selectedImageIndex >= imageCount) {
+      setSelectedImageIndex(0);
+    }
+  }, [imageCount, selectedImageIndex]);
+
+  useEffect(() => {
+    if (!selectedImage) {
+      setIsImageLightboxOpen(false);
+    }
+  }, [selectedImage]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName;
+
+      if (event.key === 'Escape' && isImageLightboxOpen) {
+        event.preventDefault();
+        closeImageLightbox();
+        return;
+      }
+
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target?.isContentEditable) {
+        return;
+      }
+
+      if (imageCount <= 1) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        setSelectedImageIndex((prev) => (prev === 0 ? imageCount - 1 : prev - 1));
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        setSelectedImageIndex((prev) => (prev === imageCount - 1 ? 0 : prev + 1));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [imageCount, isImageLightboxOpen, selectedImage]);
+
   // Calculate distance between two touch points
   const getTouchDistance = (touches: React.TouchList) => {
     if (touches.length < 2) return 0;
@@ -2166,33 +2534,50 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
 
   // Handle touch start for pinch zoom
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    e.preventDefault();
     e.stopPropagation();
-    
+
     if (e.touches.length === 2) {
+      e.preventDefault();
+      swipeStartRef.current = null;
       setIsTouchZooming(true);
       setTouchDistance(getTouchDistance(e.touches));
-    } else if (e.touches.length === 1 && zoomLevel > 1) {
-      setIsDragging(true);
-      setDragStart({ 
-        x: e.touches[0].clientX - panPosition.x, 
-        y: e.touches[0].clientY - panPosition.y 
-      });
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+
+      if (zoomLevel > 1) {
+        e.preventDefault();
+        setIsDragging(true);
+        setDragStart({ 
+          x: touch.clientX - panPosition.x, 
+          y: touch.clientY - panPosition.y 
+        });
+        return;
+      }
+
+      swipeStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now()
+      };
     }
   };
 
   // Handle touch move for pinch zoom and pan
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    e.preventDefault();
     e.stopPropagation();
     
     if (e.touches.length === 2 && isTouchZooming) {
+      e.preventDefault();
       const currentDistance = getTouchDistance(e.touches);
       const scale = currentDistance / touchDistance;
       const newZoom = Math.max(1, Math.min(3, zoomLevel * scale));
       setZoomLevel(newZoom);
       setTouchDistance(currentDistance);
     } else if (e.touches.length === 1 && isDragging && zoomLevel > 1) {
+      e.preventDefault();
       setPanPosition({
         x: e.touches[0].clientX - dragStart.x,
         y: e.touches[0].clientY - dragStart.y
@@ -2201,7 +2586,26 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
   };
 
   // Handle touch end
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isTouchZooming && zoomLevel === 1 && swipeStartRef.current && imageCount > 1) {
+      const touch = e.changedTouches[0];
+
+      if (touch) {
+        const deltaX = touch.clientX - swipeStartRef.current.x;
+        const deltaY = Math.abs(touch.clientY - swipeStartRef.current.y);
+        const deltaTime = Date.now() - swipeStartRef.current.time;
+
+        if (deltaTime < 500 && Math.abs(deltaX) > 40 && deltaY < 80) {
+          if (deltaX < 0) {
+            goToNextImage();
+          } else {
+            goToPreviousImage();
+          }
+        }
+      }
+    }
+
+    swipeStartRef.current = null;
     setIsDragging(false);
     setIsTouchZooming(false);
     setTouchDistance(0);
@@ -2462,80 +2866,65 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               {/* Left Column - Images */}
               <div className="space-y-2 sm:space-y-3">
-                {/* Main Image with Inline Zoom */}
+                {/* Main Image Preview */}
                 {selectedImage ? (
                 <div className="relative bg-secondary rounded-xl border border-gray-200">
-                  {/* Zoom Controls */}
-                  <div className="absolute top-2 right-2 flex flex-col gap-1 bg-white bg-opacity-90 p-1 rounded-lg shadow-lg z-10">
-                    <button
-                      onClick={handleZoomIn}
-                      disabled={zoomLevel >= 3}
-                      className="p-2 sm:p-3 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Zoom in (or use mouse wheel/pinch)"
-                    >
-                      <ZoomIn className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
-                    </button>
-                    <div className="text-[10px] sm:text-xs font-medium text-gray-700 text-center px-1">
-                      {Math.round(zoomLevel * 100)}%
-                    </div>
-                    <button
-                      onClick={handleZoomOut}
-                      disabled={zoomLevel <= 1}
-                      className="p-2 sm:p-3 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Zoom out (or use pinch)"
-                    >
-                      <ZoomOut className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
-                    </button>
-                    {zoomLevel > 1 && (
+                  <button
+                    onClick={openImageLightbox}
+                    className="absolute top-2 right-2 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-2 text-xs font-medium text-gray-700 shadow-lg hover:bg-white transition"
+                    title="Open full image"
+                    aria-label="Open full image"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                    <span>View</span>
+                  </button>
+
+                  {imageCount > 1 && (
+                    <>
                       <button
-                        onClick={handleResetZoom}
-                        className="p-2 sm:p-3 hover:bg-gray-100 rounded transition border-t border-gray-200"
-                        title="Reset zoom"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          goToPreviousImage();
+                        }}
+                        className="hidden sm:flex absolute left-3 top-1/2 -translate-y-1/2 z-10 h-10 w-10 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-lg hover:bg-white transition"
+                        title="Previous image"
+                        aria-label="Previous image"
                       >
-                        <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+                        <ArrowLeft className="w-5 h-5" />
                       </button>
-                    )}
-                  </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          goToNextImage();
+                        }}
+                        className="hidden sm:flex absolute right-3 top-1/2 -translate-y-1/2 z-10 h-10 w-10 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-lg hover:bg-white transition"
+                        title="Next image"
+                        aria-label="Next image"
+                      >
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    </>
+                  )}
                   
                   {/* Image Container */}
-                  <div 
-                    className="overflow-hidden rounded-xl touch-none"
-                    onWheel={handleWheel}
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    onTouchStart={handleTouchStart}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    onContextMenu={(e) => e.preventDefault()}
-                    style={{ 
-                      cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-                      touchAction: 'none',
-                      userSelect: 'none',
-                      WebkitUserSelect: 'none',
-                      MozUserSelect: 'none',
-                      msUserSelect: 'none',
-                      WebkitTouchCallout: 'none',
-                      KhtmlUserSelect: 'none'
-                    }}
+                  <button
+                    onClick={openImageLightbox}
+                    className="block w-full overflow-hidden rounded-xl"
+                    title="Open full image"
+                    aria-label="Open full image"
                   >
                     <img
                       src={selectedImage}
                       alt={selectedColor?.color_name}
-                      className="w-full object-contain transition-transform duration-200 select-none"
-                      style={{
-                        transform: `scale(${zoomLevel}) translate(${panPosition.x / zoomLevel}px, ${panPosition.y / zoomLevel}px)`,
-                        transformOrigin: 'center center'
-                      }}
+                      className="w-full object-contain select-none"
                       draggable={false}
                     />
-                  </div>
-                  
-                  {zoomLevel > 1 && (
+                  </button>
+
+                  {imageCount > 1 && (
                     <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-60 text-white text-xs px-3 py-1 rounded-full">
-                      <span className="hidden sm:inline">Scroll to zoom • Drag to pan</span>
-                      <span className="sm:hidden">Pinch to zoom • Drag to pan</span>
+                      <span className="hidden sm:inline">Use ← → keys or on-image arrows</span>
+                      <span className="sm:hidden">Swipe left or right to browse</span>
                     </div>
                   )}
                 </div>
@@ -2557,9 +2946,19 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
                 {selectedColor && isAuthenticated && design.price && (
                   <div className="mb-4">
                     <div className="flex items-baseline gap-2">
-                      <span className="font-bold text-gray-900" style={{ fontSize: '1.25rem' }}>₹{design.price.toLocaleString()}</span>
+                      <span className="font-bold text-gray-900" style={{ fontSize: '1.25rem' }}>₹{displayPrice.toLocaleString()}</span>
                       <span className="text-xs text-gray-500">per piece</span>
                     </div>
+                    {isDiscounted && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-sm text-gray-500 line-through">
+                          ₹{design.price.toLocaleString()}
+                        </span>
+                        <span className="text-sm text-green-600 font-semibold">
+                          {Math.round(((design.price - displayPrice) / design.price) * 100)}% OFF
+                        </span>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-400 mt-0.5">Exclusive of taxes</p>
                   </div>
                 )}
@@ -3023,6 +3422,137 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
             </div>
           </div>
         </div>
+        {isImageLightboxOpen && selectedImage && (
+          <div
+            className="absolute inset-0 z-[70] bg-black/90 flex items-center justify-center p-3 sm:p-6"
+            onClick={closeImageLightbox}
+          >
+            <div
+              className="relative w-full h-full max-w-6xl max-h-full flex items-center justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={closeImageLightbox}
+                className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-10 h-10 flex items-center justify-center transition"
+                title="Close image viewer"
+                aria-label="Close image viewer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 flex items-center gap-2 rounded-full bg-black/45 px-3 py-2 text-white text-xs sm:text-sm">
+                <span>{selectedColor?.color_name || design.name}</span>
+                {imageCount > 1 && <span>{selectedImageIndex + 1}/{imageCount}</span>}
+              </div>
+
+              <div className="absolute top-3 right-16 sm:top-4 sm:right-16 flex flex-col gap-1 bg-white/90 p-1 rounded-lg shadow-lg z-20">
+                <button
+                  onClick={handleZoomIn}
+                  disabled={zoomLevel >= 3}
+                  className="p-2 sm:p-3 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+                </button>
+                <div className="text-[10px] sm:text-xs font-medium text-gray-700 text-center px-1">
+                  {Math.round(zoomLevel * 100)}%
+                </div>
+                <button
+                  onClick={handleZoomOut}
+                  disabled={zoomLevel <= 1}
+                  className="p-2 sm:p-3 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Zoom out"
+                >
+                  <ZoomOut className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+                </button>
+                {zoomLevel > 1 && (
+                  <button
+                    onClick={handleResetZoom}
+                    className="p-2 sm:p-3 hover:bg-gray-100 rounded transition border-t border-gray-200"
+                    title="Reset zoom"
+                  >
+                    <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+                  </button>
+                )}
+              </div>
+
+              {imageCount > 1 && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      goToPreviousImage();
+                    }}
+                    className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 h-11 w-11 sm:h-12 sm:w-12 flex items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition"
+                    title="Previous image"
+                    aria-label="Previous image"
+                  >
+                    <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      goToNextImage();
+                    }}
+                    className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 h-11 w-11 sm:h-12 sm:w-12 flex items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition"
+                    title="Next image"
+                    aria-label="Next image"
+                  >
+                    <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </button>
+                </>
+              )}
+
+              <div
+                className="w-full h-full overflow-hidden flex items-center justify-center"
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onContextMenu={(e) => e.preventDefault()}
+                style={{
+                  cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                  touchAction: zoomLevel > 1 ? 'none' : 'pan-y',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  MozUserSelect: 'none',
+                  msUserSelect: 'none',
+                  WebkitTouchCallout: 'none',
+                  KhtmlUserSelect: 'none'
+                }}
+              >
+                <img
+                  src={selectedImage}
+                  alt={selectedColor?.color_name}
+                  className="max-w-full max-h-full object-contain transition-transform duration-200 select-none"
+                  style={{
+                    transform: `scale(${zoomLevel}) translate(${panPosition.x / zoomLevel}px, ${panPosition.y / zoomLevel}px)`,
+                    transformOrigin: 'center center'
+                  }}
+                  draggable={false}
+                />
+              </div>
+
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 bg-black/45 text-white text-xs px-3 py-2 rounded-full">
+                {zoomLevel > 1 ? (
+                  <>
+                    <span className="hidden sm:inline">Scroll to zoom • Drag to pan • Esc to close</span>
+                    <span className="sm:hidden">Pinch to zoom • Drag to pan</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="hidden sm:inline">Click photo to inspect • Use ← → keys to switch images • Esc to close</span>
+                    <span className="sm:hidden">Pinch to zoom • Swipe to change image</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
     </div>

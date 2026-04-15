@@ -1,11 +1,44 @@
 import express from 'express';
-import { supabase } from '../config.js';
+import { supabase, supabaseAdmin } from '../config.js';
 import { authenticateUser, optionalAuth } from '../middleware/auth.js';
 import { deleteFromR2 } from '../config/r2.js';
 import { convertToSignedUrls, extractR2Key } from '../utils/imageUrls.js';
 import { asyncHandler, AppError } from '../utils/index.js';
 
 const router = express.Router();
+
+const WORK_TYPE_OPTIONS = ['plain', 'printed', 'emboidered', 'chikankari', 'shaded', 'handwork'];
+const OCCASION_OPTIONS = ['festive', 'casual', 'wedding', 'office wear', 'daily wear'];
+const COLLECTION_OPTIONS = ['summer collection', 'winter collection', 'puja collection', 'eid collection'];
+
+function normalizeMonthYear(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+
+  if (typeof value !== 'string') {
+    throw new AppError('design_month_year must be in YYYY-MM format', 400);
+  }
+
+  const match = value.match(/^(\d{4})-(\d{2})$/);
+  if (!match) {
+    throw new AppError('design_month_year must be in YYYY-MM format', 400);
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    throw new AppError('design_month_year must be a valid month in YYYY-MM format', 400);
+  }
+
+  return `${match[1]}-${match[2]}-01`;
+}
+
+function validateEnumField(value, allowedValues, fieldName) {
+  if (value === undefined || value === null || value === '') return;
+  if (!allowedValues.includes(value)) {
+    throw new AppError(`Invalid ${fieldName} value`, 400);
+  }
+}
 
 // Shared select for design with all relations
 const DESIGN_WITH_COLORS_SELECT = `
@@ -19,6 +52,7 @@ const DESIGN_WITH_COLORS_SELECT = `
     stock_quantity,
     size_quantities,
     image_urls,
+    is_active,
     created_at,
     updated_at
   )
@@ -134,50 +168,51 @@ router.get('/', optionalAuth, asyncHandler(async (req, res) => {
   const { category_id, fabric_type_id, brand_id, style_id, active_only, created_month } = req.query;
   const isAuthenticated = !!req.user;
 
-    let query = supabase
-      .from('designs')
-      .select(`
-        *,
-        design_colors (
-          id,
-          color_name,
-          color_code,
-          in_stock,
-          stock_quantity,
-          size_quantities,
-          image_urls,
-          created_at,
-          updated_at
-        ),
-        category:design_categories!designs_category_id_fkey (
-          id,
-          name,
-          slug
-        ),
-        style:design_styles!designs_style_id_fkey (
-          id,
-          name,
-          description,
-          category_id
-        ),
-        fabric_type:fabric_types!designs_fabric_type_id_fkey (
-          id,
-          name,
-          description
-        ),
-        brand:brands (
-          id,
-          name,
-          description,
-          logo_url
-        ),
-        created_by:user_profiles!designs_created_by_fkey (
-          id,
-          full_name,
-          email
-        )
-      `)
-      .order('created_at', { ascending: false });
+  let query = supabase
+    .from('designs')
+    .select(`
+      *,
+      design_colors (
+        id,
+        color_name,
+        color_code,
+        in_stock,
+        stock_quantity,
+        size_quantities,
+        image_urls,
+        is_active,
+        created_at,
+        updated_at
+      ),
+      category:design_categories!designs_category_id_fkey (
+        id,
+        name,
+        slug
+      ),
+      style:design_styles!designs_style_id_fkey (
+        id,
+        name,
+        description,
+        category_id
+      ),
+      fabric_type:fabric_types!designs_fabric_type_id_fkey (
+        id,
+        name,
+        description
+      ),
+      brand:brands (
+        id,
+        name,
+        description,
+        logo_url
+      ),
+      created_by:user_profiles!designs_created_by_fkey (
+        id,
+        full_name,
+        email
+      )
+    `)
+    .order('created_at', { ascending: false });
 
     if (category_id) {
       query = query.eq('category_id', category_id);
@@ -263,6 +298,7 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
           stock_quantity,
           size_quantities,
           image_urls,
+          is_active,
           created_at,
           updated_at
         ),
@@ -305,6 +341,7 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
           size_quantities: null
         }))
       };
+
       return res.json(sanitizedDesign);
     }
 
@@ -316,11 +353,33 @@ router.post('/', authenticateUser, asyncHandler(async (req, res) => {
     throw new AppError('Admin access required', 403);
   }
 
-  const { design_no, name, description, category_id, style_id, fabric_type_id, brand_id, available_sizes, price, colors } = req.body;
+  const {
+    design_no,
+    name,
+    description,
+    department,
+    tags,
+    work_type,
+    occasion,
+    collection,
+    design_month_year,
+    category_id,
+    style_id,
+    fabric_type_id,
+    brand_id,
+    available_sizes,
+    price,
+    colors
+  } = req.body;
 
   if (!design_no || !name) {
     throw new AppError('Design number and name are required', 400);
   }
+
+  validateEnumField(work_type, WORK_TYPE_OPTIONS, 'work_type');
+  validateEnumField(occasion, OCCASION_OPTIONS, 'occasion');
+  validateEnumField(collection, COLLECTION_OPTIONS, 'collection');
+  const normalizedDesignMonthYear = normalizeMonthYear(design_month_year);
 
   const { data: design, error: designError } = await supabase
     .from('designs')
@@ -328,6 +387,12 @@ router.post('/', authenticateUser, asyncHandler(async (req, res) => {
       design_no,
       name,
       description: description || '',
+      department: department || null,
+      tags: Array.isArray(tags) ? tags : [],
+      work_type: work_type || null,
+      occasion: occasion || null,
+      collection: collection || null,
+      design_month_year: normalizedDesignMonthYear,
       category_id: category_id || null,
       style_id: style_id || null,
       fabric_type_id: fabric_type_id || null,
@@ -377,12 +442,40 @@ router.put('/:id', authenticateUser, asyncHandler(async (req, res) => {
   }
 
   const { id } = req.params;
-  const { design_no, name, description, category_id, style_id, fabric_type_id, brand_id, available_sizes, price, is_active } = req.body;
+  const {
+    design_no,
+    name,
+    description,
+    department,
+    tags,
+    work_type,
+    occasion,
+    collection,
+    design_month_year,
+    category_id,
+    style_id,
+    fabric_type_id,
+    brand_id,
+    available_sizes,
+    price,
+    is_active
+  } = req.body;
+
+  validateEnumField(work_type, WORK_TYPE_OPTIONS, 'work_type');
+  validateEnumField(occasion, OCCASION_OPTIONS, 'occasion');
+  validateEnumField(collection, COLLECTION_OPTIONS, 'collection');
+  const normalizedDesignMonthYear = normalizeMonthYear(design_month_year);
 
   const updateData = {};
   if (design_no !== undefined) updateData.design_no = design_no;
   if (name !== undefined) updateData.name = name;
   if (description !== undefined) updateData.description = description;
+  if (department !== undefined) updateData.department = department || null;
+  if (tags !== undefined) updateData.tags = Array.isArray(tags) ? tags : [];
+  if (work_type !== undefined) updateData.work_type = work_type || null;
+  if (occasion !== undefined) updateData.occasion = occasion || null;
+  if (collection !== undefined) updateData.collection = collection || null;
+  if (normalizedDesignMonthYear !== undefined) updateData.design_month_year = normalizedDesignMonthYear;
   if (category_id !== undefined) updateData.category_id = category_id;
   if (style_id !== undefined) updateData.style_id = style_id || null;
   if (fabric_type_id !== undefined) updateData.fabric_type_id = fabric_type_id || null;
@@ -390,23 +483,74 @@ router.put('/:id', authenticateUser, asyncHandler(async (req, res) => {
   if (available_sizes !== undefined) updateData.available_sizes = available_sizes;
   if (price !== undefined) updateData.price = price;
   if (is_active !== undefined) updateData.is_active = is_active;
+  const { is_archived } = req.body;
+  if (is_archived !== undefined) updateData.is_archived = is_archived;
 
-  const { data: updatedDesign, error } = await supabase
+  if (is_active !== undefined || is_archived !== undefined) {
+    console.log('[Design API] Update status request received', {
+      designId: id,
+      is_active,
+      is_archived,
+      requestedBy: req.user?.id,
+    });
+  }
+
+  const { data: updatedDesignStatus, error } = await supabaseAdmin
     .from('designs')
     .update(updateData)
     .eq('id', id)
-    .select('id')
-    .single();
+    .select('id, is_active, is_archived')
+    .maybeSingle();
 
-  if (error) throw new AppError(error.message, 400);
+  if (error) {
+    if (is_active !== undefined || is_archived !== undefined) {
+      console.error('[Design API] Failed to update design status', {
+        designId: id,
+        is_active,
+        is_archived,
+        requestedBy: req.user?.id,
+        error: error.message,
+      });
+    }
+    throw new AppError(error.message, 400);
+  }
+
+  if ((is_active !== undefined || is_archived !== undefined) && !updatedDesignStatus) {
+    console.error('[Design API] Design status update matched no rows', {
+      designId: id,
+      is_active,
+      is_archived,
+      requestedBy: req.user?.id,
+    });
+    throw new AppError('Design not found or status update was not permitted', 404);
+  }
 
   const { data: design, error: fetchError } = await supabase
     .from('designs')
     .select(DESIGN_WITH_COLORS_SELECT)
-    .eq('id', updatedDesign.id)
-    .single();
+    .eq('id', id)
+    .maybeSingle();
 
-  if (fetchError) throw new AppError(fetchError.message, 400);
+  if (fetchError) {
+    if (is_active !== undefined || is_archived !== undefined) {
+      console.error('[Design API] Failed to fetch design after status update', {
+        designId: id,
+        requestedBy: req.user?.id,
+        error: fetchError.message,
+      });
+    }
+    throw new AppError(fetchError.message, 400);
+  }
+  if (!design) throw new AppError('Design not found', 404);
+
+  if (is_active !== undefined || is_archived !== undefined) {
+    console.log('[Design API] Design status updated successfully', {
+      designId: id,
+      is_active: updatedDesignStatus?.is_active ?? design.is_active,
+      is_archived: updatedDesignStatus?.is_archived ?? design.is_archived,
+      requestedBy: req.user?.id,
+    });
+  }
   res.json(design);
 }));
 
@@ -417,13 +561,25 @@ router.delete('/:id', authenticateUser, asyncHandler(async (req, res) => {
 
   const { id } = req.params;
 
+  console.log('[Design API] Delete design request received', {
+    designId: id,
+    requestedBy: req.user?.id,
+  });
+
   const { data: design, error: fetchError } = await supabase
     .from('designs')
     .select('*, design_colors (id, image_urls)')
     .eq('id', id)
     .single();
 
-  if (fetchError) throw new AppError(fetchError.message, 400);
+  if (fetchError) {
+    console.error('[Design API] Failed to fetch design before delete', {
+      designId: id,
+      requestedBy: req.user?.id,
+      error: fetchError.message,
+    });
+    throw new AppError(fetchError.message, 400);
+  }
   if (!design) throw new AppError('Design not found', 404);
 
   // Delete all images from R2 in parallel (non-blocking per-image errors)
@@ -432,8 +588,20 @@ router.delete('/:id', authenticateUser, asyncHandler(async (req, res) => {
     await deleteImagesFromR2(allImageUrls);
   }
 
-  const { error } = await supabase.from('designs').delete().eq('id', id);
-  if (error) throw new AppError(error.message, 400);
+  const { error } = await supabaseAdmin.from('designs').delete().eq('id', id);
+  if (error) {
+    console.error('[Design API] Failed to delete design', {
+      designId: id,
+      requestedBy: req.user?.id,
+      error: error.message,
+    });
+    throw new AppError(error.message, 400);
+  }
+
+  console.log('[Design API] Design deleted successfully', {
+    designId: id,
+    requestedBy: req.user?.id,
+  });
 
   res.json({ message: 'Design and associated images deleted successfully' });
 }));
@@ -472,7 +640,7 @@ router.put('/colors/:colorId', authenticateUser, asyncHandler(async (req, res) =
   }
 
   const { colorId } = req.params;
-  const { color_name, color_code, in_stock, stock_quantity, size_quantities, image_urls } = req.body;
+  const { color_name, color_code, in_stock, stock_quantity, size_quantities, image_urls, is_active } = req.body;
 
   const updateData = {};
   if (color_name !== undefined) updateData.color_name = color_name;
@@ -481,15 +649,70 @@ router.put('/colors/:colorId', authenticateUser, asyncHandler(async (req, res) =
   if (stock_quantity !== undefined) updateData.stock_quantity = stock_quantity;
   if (size_quantities !== undefined) updateData.size_quantities = size_quantities;
   if (image_urls !== undefined) updateData.image_urls = image_urls;
+  if (is_active !== undefined) updateData.is_active = is_active;
 
-  const { data: color, error } = await supabase
+  if (is_active !== undefined) {
+    console.log('[Design API] Update color status request received', {
+      colorId,
+      is_active,
+      requestedBy: req.user?.id,
+    });
+  }
+
+  const { data: updatedColorStatus, error } = await supabaseAdmin
     .from('design_colors')
     .update(updateData)
     .eq('id', colorId)
-    .select()
-    .single();
+    .select('id, design_id, is_active')
+    .maybeSingle();
 
-  if (error) throw new AppError(error.message, 400);
+  if (error) {
+    if (is_active !== undefined) {
+      console.error('[Design API] Failed to update color status', {
+        colorId,
+        is_active,
+        requestedBy: req.user?.id,
+        error: error.message,
+      });
+    }
+    throw new AppError(error.message, 400);
+  }
+
+  if (is_active !== undefined && !updatedColorStatus) {
+    console.error('[Design API] Color status update matched no rows', {
+      colorId,
+      is_active,
+      requestedBy: req.user?.id,
+    });
+    throw new AppError('Color not found or status update was not permitted', 404);
+  }
+
+  const { data: color, error: fetchError } = await supabase
+    .from('design_colors')
+    .select('*')
+    .eq('id', colorId)
+    .maybeSingle();
+
+  if (fetchError) {
+    if (is_active !== undefined) {
+      console.error('[Design API] Failed to fetch color after status update', {
+        colorId,
+        requestedBy: req.user?.id,
+        error: fetchError.message,
+      });
+    }
+    throw new AppError(fetchError.message, 400);
+  }
+  if (!color) throw new AppError('Color not found', 404);
+
+  if (is_active !== undefined) {
+    console.log('[Design API] Color status updated successfully', {
+      colorId,
+      designId: updatedColorStatus?.design_id ?? color.design_id,
+      is_active: updatedColorStatus?.is_active ?? color.is_active,
+      requestedBy: req.user?.id,
+    });
+  }
   res.json(color);
 }));
 

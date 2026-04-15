@@ -18,32 +18,37 @@ interface SizeQuantity {
   available: number;
 }
 
+interface ColorSelection {
+  colorId: string;
+  colorIndex: number;
+  sizeQuantities: SizeQuantity[];
+  selectedSets: Map<string, number>;
+}
+
 export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedColorIndex = 0 }: AddToCartModalProps) {
   const { user, isAdmin } = useAuth();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const [sizeQuantities, setSizeQuantities] = useState<SizeQuantity[]>([]);
+  const [colorSelections, setColorSelections] = useState<Map<string, ColorSelection>>(new Map());
+  const [selectedColors, setSelectedColors] = useState<Set<string>>(new Set([design.design_colors?.[selectedColorIndex]?.id || '']));
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [sizeSets, setSizeSets] = useState<SizeSet[]>([]);
-  const [selectedSets, setSelectedSets] = useState<Map<string, number>>(new Map());
   // Admin users always have access to individual sizes, other users need can_order_individual_sizes enabled
   const canOrderIndividualSizes = isAdmin || (user?.can_order_individual_sizes ?? false);
   const [viewMode, setViewMode] = useState<'individual' | 'sets'>(canOrderIndividualSizes ? 'individual' : 'sets');
   const [partyDiscount, setPartyDiscount] = useState<string | null>(null);
-
-  const selectedColor = design.design_colors?.[selectedColorIndex];
   const displayPrice = typeof design.price === 'number' ? design.price : null;
   const discountedPrice = displayPrice !== null && partyDiscount 
     ? calculateDiscountedPrice(displayPrice, partyDiscount) 
     : displayPrice;
 
   useEffect(() => {
-    if (isOpen && selectedColor) {
+    if (isOpen) {
       loadSizeData();
       loadPartyDiscount();
     }
-  }, [isOpen, selectedColor, user]);
+  }, [isOpen, selectedColors, user]);
 
   const loadPartyDiscount = async () => {
     try {
@@ -61,35 +66,52 @@ export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedCol
 
   const loadSizeData = async () => {
     try {
-      // Parse size quantities from the selected color
-      let sizeData: Record<string, number> = {};
-      if (selectedColor?.size_quantities) {
-        if (typeof selectedColor.size_quantities === 'string') {
-          sizeData = JSON.parse(selectedColor.size_quantities);
-        } else {
-          sizeData = selectedColor.size_quantities;
+      const newColorSelections = new Map<string, ColorSelection>();
+      
+      // Create color selections for each selected color
+      for (const colorId of selectedColors) {
+        const colorIndex = design.design_colors?.findIndex(c => c.id === colorId) ?? -1;
+        const color = design.design_colors?.[colorIndex];
+        
+        if (color) {
+          // Parse size quantities from the color
+          let sizeData: Record<string, number> = {};
+          if (color.size_quantities) {
+            if (typeof color.size_quantities === 'string') {
+              sizeData = JSON.parse(color.size_quantities);
+            } else {
+              sizeData = color.size_quantities;
+            }
+          }
+
+          // Convert to array format
+          const sizes: SizeQuantity[] = Object.entries(sizeData).map(([size, available]) => ({
+            size,
+            quantity: 0,
+            available
+          })).sort((a, b) => {
+            // Sort sizes in a logical order (S, M, L, XL, etc.)
+            const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL', 'FREE'];
+            const aIndex = sizeOrder.indexOf(a.size.toUpperCase());
+            const bIndex = sizeOrder.indexOf(b.size.toUpperCase());
+            
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+            if (aIndex !== -1) return -1;
+            if (bIndex !== -1) return 1;
+            
+            return a.size.localeCompare(b.size);
+          });
+
+          newColorSelections.set(colorId, {
+            colorId,
+            colorIndex,
+            sizeQuantities: sizes,
+            selectedSets: new Map()
+          });
         }
       }
-
-      // Convert to array format
-      const sizes: SizeQuantity[] = Object.entries(sizeData).map(([size, available]) => ({
-        size,
-        quantity: 0,
-        available
-      })).sort((a, b) => {
-        // Sort sizes in a logical order (S, M, L, XL, etc.)
-        const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL', 'FREE'];
-        const aIndex = sizeOrder.indexOf(a.size.toUpperCase());
-        const bIndex = sizeOrder.indexOf(b.size.toUpperCase());
-        
-        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-        if (aIndex !== -1) return -1;
-        if (bIndex !== -1) return 1;
-        
-        return a.size.localeCompare(b.size);
-      });
-
-      setSizeQuantities(sizes);
+      
+      setColorSelections(newColorSelections);
 
       // Load size sets for authenticated users
       if (user) {
@@ -106,53 +128,122 @@ export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedCol
     }
   };
 
-  const updateQuantity = (size: string, delta: number) => {
-    setSizeQuantities(prev => prev.map(item => {
-      if (item.size === size) {
-        const newQuantity = Math.max(0, item.quantity + delta);
-        return { ...item, quantity: newQuantity };
+  const updateQuantity = (colorId: string, size: string, delta: number) => {
+    setColorSelections(prev => {
+      const newSelections = new Map(prev);
+      const colorSelection = newSelections.get(colorId);
+      if (colorSelection) {
+        const updatedSizes = colorSelection.sizeQuantities.map(item => {
+          if (item.size === size) {
+            const newQuantity = Math.max(0, item.quantity + delta);
+            return { ...item, quantity: newQuantity };
+          }
+          return item;
+        });
+        newSelections.set(colorId, { ...colorSelection, sizeQuantities: updatedSizes });
       }
-      return item;
-    }));
-  };
-
-  const updateSizeQuantity = (size: string, quantity: number) => {
-    setSizeQuantities(prev => prev.map(item => {
-      if (item.size === size) {
-        const validQuantity = Math.max(0, quantity);
-        return { ...item, quantity: validQuantity };
-      }
-      return item;
-    }));
-  };
-
-  useEffect(() => {
-    if (viewMode === 'sets') {
-      // In set mode, sum all selected set quantities
-      const total = Array.from(selectedSets.values()).reduce((sum, qty) => sum + qty, 0);
-      setTotalQuantity(total);
-    } else {
-      // In individual mode, sum all size quantities
-      const total = sizeQuantities.reduce((sum, item) => sum + item.quantity, 0);
-      setTotalQuantity(total);
-    }
-  }, [sizeQuantities, selectedSets, viewMode]);
-
-  const updateSetQuantity = (setId: string, quantity: number) => {
-    setSelectedSets(prev => {
-      const newMap = new Map(prev);
-      if (quantity > 0) {
-        newMap.set(setId, quantity);
-      } else {
-        newMap.delete(setId);
-      }
-      return newMap;
+      return newSelections;
     });
   };
 
-  const clearQuantities = () => {
-    setSizeQuantities(prev => prev.map(item => ({ ...item, quantity: 0 })));
-    setSelectedSets(new Map());
+  const updateSizeQuantity = (colorId: string, size: string, quantity: number) => {
+    setColorSelections(prev => {
+      const newSelections = new Map(prev);
+      const colorSelection = newSelections.get(colorId);
+      if (colorSelection) {
+        const updatedSizes = colorSelection.sizeQuantities.map(item => {
+          if (item.size === size) {
+            const validQuantity = Math.max(0, quantity);
+            return { ...item, quantity: validQuantity };
+          }
+          return item;
+        });
+        newSelections.set(colorId, { ...colorSelection, sizeQuantities: updatedSizes });
+      }
+      return newSelections;
+    });
+  };
+
+  useEffect(() => {
+    let total = 0;
+    
+    for (const colorSelection of colorSelections.values()) {
+      if (viewMode === 'sets') {
+        // In set mode, sum all selected set quantities for this color
+        total += Array.from(colorSelection.selectedSets.values()).reduce((sum, qty) => sum + qty, 0);
+      } else {
+        // In individual mode, sum all size quantities for this color
+        total += colorSelection.sizeQuantities.reduce((sum, item) => sum + item.quantity, 0);
+      }
+    }
+    
+    setTotalQuantity(total);
+  }, [colorSelections, viewMode]);
+
+  const updateSetQuantity = (colorId: string, setId: string, quantity: number) => {
+    setColorSelections(prev => {
+      const newSelections = new Map(prev);
+      const colorSelection = newSelections.get(colorId);
+      if (colorSelection) {
+        const newSets = new Map(colorSelection.selectedSets);
+        if (quantity > 0) {
+          newSets.set(setId, quantity);
+        } else {
+          newSets.delete(setId);
+        }
+        newSelections.set(colorId, { ...colorSelection, selectedSets: newSets });
+      }
+      return newSelections;
+    });
+  };
+
+  const clearQuantities = (colorId?: string) => {
+    setColorSelections(prev => {
+      const newSelections = new Map(prev);
+      
+      if (colorId) {
+        // Clear quantities for specific color
+        const colorSelection = newSelections.get(colorId);
+        if (colorSelection) {
+          const clearedSizes = colorSelection.sizeQuantities.map(item => ({ ...item, quantity: 0 }));
+          newSelections.set(colorId, { 
+            ...colorSelection, 
+            sizeQuantities: clearedSizes, 
+            selectedSets: new Map() 
+          });
+        }
+      } else {
+        // Clear quantities for all colors
+        for (const [id, colorSelection] of newSelections.entries()) {
+          const clearedSizes = colorSelection.sizeQuantities.map(item => ({ ...item, quantity: 0 }));
+          newSelections.set(id, { 
+            ...colorSelection, 
+            sizeQuantities: clearedSizes, 
+            selectedSets: new Map() 
+          });
+        }
+      }
+      
+      return newSelections;
+    });
+  };
+
+  const toggleColorSelection = (colorId: string) => {
+    setSelectedColors(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(colorId)) {
+        newSet.delete(colorId);
+        // Also remove from color selections
+        setColorSelections(prevSelections => {
+          const newSelections = new Map(prevSelections);
+          newSelections.delete(colorId);
+          return newSelections;
+        });
+      } else {
+        newSet.add(colorId);
+      }
+      return newSet;
+    });
   };
 
   const handleAddToCart = async () => {
@@ -170,27 +261,30 @@ export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedCol
     setError('');
 
     try {
-      if (viewMode === 'sets' && selectedSets.size > 0) {
-        // Add multiple size sets to cart
-        for (const [setId, quantity] of selectedSets.entries()) {
-          await api.addToCart({
-            design_id: design.id,
-            color_id: selectedColor?.id || '',
-            size_set_id: setId,
-            quantity: quantity
-          });
-        }
-      } else {
-        // Add individual sizes to cart
-        const itemsToAdd = sizeQuantities.filter(item => item.quantity > 0);
-        
-        for (const item of itemsToAdd) {
-          await api.addToCart({
-            design_id: design.id,
-            color_id: selectedColor?.id || '',
-            size: item.size,
-            quantity: item.quantity
-          });
+      // Process each selected color
+      for (const [colorId, colorSelection] of colorSelections.entries()) {
+        if (viewMode === 'sets' && colorSelection.selectedSets.size > 0) {
+          // Add multiple size sets to cart for this color
+          for (const [setId, quantity] of colorSelection.selectedSets.entries()) {
+            await api.addToCart({
+              design_id: design.id,
+              color_id: colorId,
+              size_set_id: setId,
+              quantity: quantity
+            });
+          }
+        } else {
+          // Add individual sizes to cart for this color
+          const itemsToAdd = colorSelection.sizeQuantities.filter(item => item.quantity > 0);
+          
+          for (const item of itemsToAdd) {
+            await api.addToCart({
+              design_id: design.id,
+              color_id: colorId,
+              size: item.size,
+              quantity: item.quantity
+            });
+          }
         }
       }
       
@@ -212,9 +306,9 @@ export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedCol
   };
 
   const handleClose = () => {
-    setSizeQuantities(prev => prev.map(item => ({ ...item, quantity: 0 })));
+    setColorSelections(new Map());
+    setSelectedColors(new Set([design.design_colors?.[selectedColorIndex]?.id || '']));
     setTotalQuantity(0);
-    setSelectedSets(new Map());
     setError('');
     setSuccess(false);
     onClose();
@@ -259,35 +353,51 @@ export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedCol
             </div>
           ) : (
             <>
-              {/* Color Info */}
-              {selectedColor && (
-                <div className="flex items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
-                  <div
-                    className="w-8 h-8 rounded-full border border-gray-300"
-                    style={{ backgroundColor: selectedColor.color_code || '#cccccc' }}
-                  />
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{selectedColor.color_name}</p>
-                    {displayPrice !== null ? (
+              {/* Color Selection */}
+              <div className="mb-4">
+                <label className="text-sm font-medium text-gray-700 mb-3 block">Select Colors</label>
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {design.design_colors?.map((color, index) => (
+                    <button
+                      key={color.id}
+                      onClick={() => toggleColorSelection(color.id)}
+                      className={`relative p-2 rounded-lg border-2 transition ${
+                        selectedColors.has(color.id)
+                          ? 'border-primary bg-primary/5'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div
+                        className="w-8 h-8 rounded-full border border-gray-300 mx-auto mb-1"
+                        style={{ backgroundColor: color.color_code || '#cccccc' }}
+                      />
+                      <p className="text-xs text-center text-gray-700 truncate">{color.color_name}</p>
+                      {selectedColors.has(color.id) && (
+                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Price Info */}
+                {displayPrice !== null && (
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    {partyDiscount ? (
                       <div className="flex items-center gap-2">
-                        {partyDiscount ? (
-                          <>
-                            <p className="text-sm text-gray-400 line-through">₹{displayPrice.toLocaleString()}</p>
-                            <p className="text-sm font-semibold text-green-600">₹{discountedPrice?.toLocaleString()}/piece</p>
-                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                              {getDiscountPercentage(partyDiscount)}% OFF
-                            </span>
-                          </>
-                        ) : (
-                          <p className="text-sm text-gray-600">₹{displayPrice.toLocaleString()}/piece</p>
-                        )}
+                        <p className="text-sm text-gray-400 line-through">₹{displayPrice.toLocaleString()}</p>
+                        <p className="text-sm font-semibold text-green-600">₹{discountedPrice?.toLocaleString()}/piece</p>
+                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                          {getDiscountPercentage(partyDiscount)}% OFF
+                        </span>
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-600">Price not available</p>
+                      <p className="text-sm text-gray-600">₹{displayPrice.toLocaleString()}/piece</p>
                     )}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* View Mode Toggle for Size Sets - Only visible for users with individual size permission */}
               {sizeSets.length > 0 && canOrderIndividualSizes && (
@@ -317,138 +427,116 @@ export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedCol
                 </div>
               )}
 
-              {/* Size Sets View */}
-              {viewMode === 'sets' && sizeSets.length > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-sm font-medium text-gray-700">Available Size Sets</label>
-                    <button
-                      onClick={clearQuantities}
-                      className="text-xs text-gray-500 hover:text-gray-700"
-                    >
-                      Clear All
-                    </button>
-                  </div>
-                  
-                  {/* Compact checkbox list */}
-                  <div className="space-y-2 mb-4 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                    {sizeSets.map((set) => {
-                      const isSelected = selectedSets.has(set.id);
-                      const currentQty = selectedSets.get(set.id) || 1;
-                      return (
-                        <div key={set.id} className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id={`set-${set.id}`}
-                            checked={isSelected}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                updateSetQuantity(set.id, 1);
-                              } else {
-                                updateSetQuantity(set.id, 0);
-                              }
-                            }}
-                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+              {/* Per-Color Size/Set Selection */}
+              {selectedColors.size > 0 && (
+                <div className="mb-4 space-y-4">
+                  {Array.from(selectedColors).map(colorId => {
+                    const colorSelection = colorSelections.get(colorId);
+                    const color = design.design_colors?.find(c => c.id === colorId);
+                    if (!color || !colorSelection) return null;
+
+                    return (
+                      <div key={colorId} className="border border-gray-200 rounded-lg p-4">
+                        {/* Color Header */}
+                        <div className="flex items-center gap-3 mb-3">
+                          <div
+                            className="w-6 h-6 rounded-full border border-gray-300"
+                            style={{ backgroundColor: color.color_code || '#cccccc' }}
                           />
-                          <label htmlFor={`set-${set.id}`} className="flex-1 text-sm cursor-pointer">
-                            <span className="font-medium text-gray-900">{set.name}</span>
-                            <span className="text-xs text-gray-500 ml-2">({set.sizes.join(', ')})</span>
-                          </label>
-                          {isSelected && (
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => updateSetQuantity(set.id, Math.max(1, currentQty - 1))}
-                                className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </button>
-                              <input
-                                type="number"
-                                value={currentQty}
-                                onChange={(e) => updateSetQuantity(set.id, Math.max(1, parseInt(e.target.value) || 1))}
-                                className="w-12 text-center border border-gray-300 rounded py-0.5 text-sm font-semibold focus:ring-1 focus:ring-primary focus:border-transparent"
-                                min="1"
-                              />
-                              <button
-                                onClick={() => updateSetQuantity(set.id, currentQty + 1)}
-                                className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition"
-                              >
-                                <Plus className="w-3 h-3" />
-                              </button>
-                            </div>
-                          )}
+                          <span className="font-medium text-gray-900">{color.color_name}</span>
+                          <button
+                            onClick={() => clearQuantities(colorId)}
+                            className="ml-auto text-xs text-gray-500 hover:text-gray-700"
+                          >
+                            Clear
+                          </button>
                         </div>
-                      );
-                    })}
-                  </div>
 
-                  {/* Selected Sets Summary */}
-                  {selectedSets.size > 0 && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <div className="text-xs font-medium text-blue-900 mb-2">Selected Sets ({selectedSets.size})</div>
-                      <div className="space-y-1">
-                        {Array.from(selectedSets.entries()).map(([setId, qty]) => {
-                          const set = sizeSets.find(s => s.id === setId);
-                          if (!set) return null;
-                          return (
-                            <div key={setId} className="flex items-center justify-between text-xs">
-                              <span className="text-gray-700">{set.name}</span>
-                              <span className="font-semibold text-blue-900">{qty} set{qty > 1 ? 's' : ''}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Individual Sizes View */}
-              {viewMode === 'individual' && (
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-sm font-medium text-gray-700">Select Sizes & Quantities</label>
-                    <button
-                      onClick={clearQuantities}
-                      className="text-xs text-gray-500 hover:text-gray-700"
-                    >
-                      Clear All
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {sizeQuantities.map((item) => (
-                      <div key={item.size} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-gray-900">{item.size}</span>
-                            <span className="text-xs text-gray-500">Available: {item.available}</span>
+                        {/* Size Sets for this color */}
+                        {viewMode === 'sets' && sizeSets.length > 0 && (
+                          <div className="space-y-2 max-h-32 overflow-y-auto">
+                            {sizeSets.map((set) => {
+                              const isSelected = colorSelection.selectedSets.has(set.id);
+                              const currentQty = colorSelection.selectedSets.get(set.id) || 1;
+                              return (
+                                <div key={set.id} className="flex items-center gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    id={`${colorId}-set-${set.id}`}
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        updateSetQuantity(colorId, set.id, 1);
+                                      } else {
+                                        updateSetQuantity(colorId, set.id, 0);
+                                      }
+                                    }}
+                                    className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                  />
+                                  <label htmlFor={`${colorId}-set-${set.id}`} className="flex-1 cursor-pointer">
+                                    <span className="font-medium">{set.name}</span>
+                                    <span className="text-xs text-gray-500 ml-2">({set.sizes.join(', ')})</span>
+                                  </label>
+                                  {isSelected && (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => updateSetQuantity(colorId, set.id, Math.max(1, currentQty - 1))}
+                                        className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
+                                      >
+                                        <Minus className="w-3 h-3" />
+                                      </button>
+                                      <span className="w-8 text-center text-sm font-semibold">{currentQty}</span>
+                                      <button
+                                        onClick={() => updateSetQuantity(colorId, set.id, currentQty + 1)}
+                                        className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => updateQuantity(item.size, -1)}
-                            className="w-8 h-8 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateSizeQuantity(item.size, parseInt(e.target.value) || 0)}
-                            className="w-16 text-center border border-gray-300 rounded-lg py-1 text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            min="0"
-                          />
-                          <button
-                            onClick={() => updateQuantity(item.size, 1)}
-                            className="w-8 h-8 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
+                        )}
+
+                        {/* Individual Sizes for this color */}
+                        {viewMode === 'individual' && (
+                          <div className="space-y-2 max-h-32 overflow-y-auto">
+                            {colorSelection.sizeQuantities.map((item) => (
+                              <div key={item.size} className="flex items-center gap-2 text-sm">
+                                <div className="flex-1">
+                                  <span className="font-medium">{item.size}</span>
+                                  <span className="text-xs text-gray-500 ml-2">({item.available} available)</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => updateQuantity(colorId, item.size, -1)}
+                                    className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    value={item.quantity}
+                                    onChange={(e) => updateSizeQuantity(colorId, item.size, parseInt(e.target.value) || 0)}
+                                    className="w-12 text-center border border-gray-300 rounded py-0.5 text-sm focus:ring-1 focus:ring-primary"
+                                    min="0"
+                                  />
+                                  <button
+                                    onClick={() => updateQuantity(colorId, item.size, 1)}
+                                    className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
               )}
 

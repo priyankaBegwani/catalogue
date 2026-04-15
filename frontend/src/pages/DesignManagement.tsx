@@ -1,14 +1,30 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { api, Design, Brand, DesignStyle, DesignCategory, FabricType } from '../lib/api';
-import { Plus, Trash2, ImageIcon, Package, MessageCircle, CheckSquare, Square, Search, X, Filter } from 'lucide-react';
-import { AddDesignModal, ViewDesignModal, ErrorAlert, Breadcrumb } from '../components';
+import { api, Design, DesignColor, Brand, DesignStyle, DesignCategory, FabricType } from '../lib/api';
+import { Plus, Trash2, ImageIcon, Package, MessageCircle, CheckSquare, Square, Search, X, Filter, Archive, Upload, Pencil } from 'lucide-react';
+import { AddDesignModal, ImportDesignsModal, ViewDesignModal, ErrorAlert, Breadcrumb } from '../components';
 import {
   DesktopFiltersSidebar,
+  DesignTag,
   FilterState,
   MobileFiltersSheet,
   getActiveFilterCount,
   getDesignTags
 } from '../components/CatalogueLikeFilters';
+
+const COMPUTED_TAG_LABELS: Record<DesignTag, string> = {
+  'new-arrival': 'New Arrival',
+  'trending': 'Trending',
+  'best-seller': 'Best Seller',
+  'fast-repeat': 'Fast Repeat',
+  'ready-to-ship': 'Ready to Ship',
+  'low-stock': 'Low Stock'
+};
+
+const getDesignInactiveRank = (design: Design) => {
+  const colorCount = design.design_colors?.length || 0;
+  const allColorsInactive = colorCount > 0 && (design.design_colors?.every(color => color.is_active === false || color.in_stock === false) ?? false);
+  return !design.is_archived && (!design.is_active || allColorsInactive) ? 1 : 0;
+};
 
 export function DesignManagement() {
   const [designs, setDesigns] = useState<Design[]>([]);
@@ -24,6 +40,7 @@ export function DesignManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingDesign, setEditingDesign] = useState<Design | null>(null);
   const [selectedDesign, setSelectedDesign] = useState<Design | null>(null);
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
@@ -52,8 +69,13 @@ export function DesignManagement() {
     colors: [],
     designNo: '',
     sortBy: 'newest',
-    tags: []
+    tags: [],
+    workTypes: [],
+    occasions: [],
+    collections: [],
+    designMonthYear: ''
   });
+  const [toast, setToast] = useState<{ message: string; show: boolean }>({ message: '', show: false });
 
   const availableCreatedMonths = useMemo(() => {
     const monthMap = new Map<string, string>();
@@ -140,6 +162,44 @@ export function DesignManagement() {
       });
     });
     setAvailableColors(Array.from(colors).sort());
+  }, [designs]);
+
+  const getCombinedDesignTags = useCallback((design: Design) => {
+    const computedTags = getDesignTags(design).map(tag => COMPUTED_TAG_LABELS[tag]);
+    const manualTags = (design.tags || []).map(tag => tag.trim()).filter(Boolean);
+    return Array.from(new Set([...computedTags, ...manualTags]));
+  }, []);
+
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    designs.forEach((design) => {
+      getCombinedDesignTags(design).forEach((tag) => tagSet.add(tag));
+    });
+    return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
+  }, [designs, getCombinedDesignTags]);
+
+  const availableWorkTypes = useMemo(() => {
+    const values = new Set<string>();
+    designs.forEach((design) => {
+      if (design.work_type) values.add(design.work_type);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [designs]);
+
+  const availableOccasions = useMemo(() => {
+    const values = new Set<string>();
+    designs.forEach((design) => {
+      if (design.occasion) values.add(design.occasion);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [designs]);
+
+  const availableCollections = useMemo(() => {
+    const values = new Set<string>();
+    designs.forEach((design) => {
+      if (design.collection) values.add(design.collection);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [designs]);
 
   // Reset pagination when filters change
@@ -336,12 +396,34 @@ export function DesignManagement() {
 
     if (filters.tags.length > 0) {
       filtered = filtered.filter(d => {
-        const designTags = getDesignTags(d);
+        const designTags = getCombinedDesignTags(d);
         return filters.tags.some(tag => designTags.includes(tag));
       });
     }
 
-    filtered = filtered.filter((design) => (activeTab === 'active' ? design.is_active : !design.is_active));
+    if (filters.workTypes.length > 0) {
+      filtered = filtered.filter((d) => !!d.work_type && filters.workTypes.includes(d.work_type));
+    }
+
+    if (filters.occasions.length > 0) {
+      filtered = filtered.filter((d) => !!d.occasion && filters.occasions.includes(d.occasion));
+    }
+
+    if (filters.collections.length > 0) {
+      filtered = filtered.filter((d) => !!d.collection && filters.collections.includes(d.collection));
+    }
+
+    if (filters.designMonthYear) {
+      filtered = filtered.filter((d) => {
+        if (!d.design_month_year) return false;
+        const raw = String(d.design_month_year);
+        const match = raw.match(/^(\d{4})-(\d{2})/);
+        if (!match) return false;
+        return `${match[1]}-${match[2]}` === filters.designMonthYear;
+      });
+    }
+
+    filtered = filtered.filter((design) => (activeTab === 'active' ? !design.is_archived : design.is_archived === true));
 
     if (selectedCreatedMonth) {
       filtered = filtered.filter((design) => {
@@ -352,6 +434,11 @@ export function DesignManagement() {
         return key === selectedCreatedMonth;
       });
     }
+
+    const applyInactiveOrdering = (items: Design[]) => {
+      if (activeTab !== 'active') return items;
+      return items.sort((a, b) => getDesignInactiveRank(a) - getDesignInactiveRank(b));
+    };
 
     // Apply sort
     switch (filters.sortBy) {
@@ -376,6 +463,8 @@ export function DesignManagement() {
         filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         break;
     }
+
+    filtered = applyInactiveOrdering(filtered);
 
     setFilteredDesigns(filtered);
   }, [designs, selectedBrand, selectedStyle, selectedFabricType, masterSearch, brands, styles, activeTab, filters, selectedCreatedMonth]);
@@ -427,14 +516,137 @@ export function DesignManagement() {
     setShowAddModal(true);
   }, []);
 
-  const handleToggleActive = useCallback(async (design: Design) => {
+  const showToast = useCallback((message: string) => {
+    setToast({ message, show: true });
+    setTimeout(() => setToast({ message: '', show: false }), 3000);
+  }, []);
+
+  const mergeDesignColorsIntoState = useCallback((
+    designId: string,
+    updatedColors: DesignColor[],
+    designUpdates?: Partial<Design>
+  ) => {
+    const applyUpdates = (design: Design) => {
+      const nextColors = design.design_colors?.map(color => {
+        const updatedColor = updatedColors.find(item => item.id === color.id);
+        return updatedColor ? { ...color, ...updatedColor } : color;
+      });
+
+      return {
+        ...design,
+        ...designUpdates,
+        design_colors: nextColors
+      };
+    };
+
+    setDesigns(prev => prev.map(design => (
+      design.id === designId ? applyUpdates(design) : design
+    )));
+    setSelectedDesign(prev => (
+      prev && prev.id === designId ? applyUpdates(prev) : prev
+    ));
+    setEditingDesign(prev => (
+      prev && prev.id === designId ? applyUpdates(prev) : prev
+    ));
+  }, []);
+
+  const handleDeactivate = useCallback(async (design: Design) => {
     try {
-      await api.updateDesign(design.id, { is_active: !design.is_active });
-      await loadDesigns();
+      const colorIds = design.design_colors?.map(c => c.id) || [];
+      const updatedDesign = await api.updateDesign(design.id, { is_active: false });
+      const updatedColors = await Promise.all(colorIds.map(id => api.updateDesignColor(id, { is_active: false })));
+      mergeDesignColorsIntoState(design.id, updatedColors, {
+        is_active: updatedDesign.is_active,
+        is_archived: updatedDesign.is_archived
+      });
+      showToast(`"${design.name}" deactivated — toggle to reactivate or archive it`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update design status');
+      setError(err instanceof Error ? err.message : 'Failed to deactivate design');
     }
-  }, [loadDesigns]);
+  }, [mergeDesignColorsIntoState, showToast]);
+
+  const handleReactivate = useCallback(async (design: Design) => {
+    try {
+      const colorIds = design.design_colors?.map(c => c.id) || [];
+      const updatedDesign = await api.updateDesign(design.id, { is_active: true });
+      const updatedColors = await Promise.all(colorIds.map(id => api.updateDesignColor(id, { is_active: true })));
+      mergeDesignColorsIntoState(design.id, updatedColors, {
+        is_active: updatedDesign.is_active,
+        is_archived: updatedDesign.is_archived
+      });
+      showToast(`"${design.name}" is now active`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reactivate design');
+    }
+  }, [mergeDesignColorsIntoState, showToast]);
+
+  const handleArchive = useCallback(async (design: Design) => {
+    try {
+      const colorIds = design.design_colors?.map(c => c.id) || [];
+      const updatedDesign = await api.updateDesign(design.id, { is_archived: true, is_active: false });
+      const updatedColors = await Promise.all(colorIds.map(id => api.updateDesignColor(id, { is_active: false })));
+      mergeDesignColorsIntoState(design.id, updatedColors, {
+        is_active: updatedDesign.is_active,
+        is_archived: updatedDesign.is_archived
+      });
+      showToast(`"${design.name}" moved to Archived`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to archive design');
+    }
+  }, [mergeDesignColorsIntoState, showToast]);
+
+  const handleUnarchive = useCallback(async (design: Design) => {
+    try {
+      const colorIds = design.design_colors?.map(c => c.id) || [];
+      const updatedDesign = await api.updateDesign(design.id, { is_archived: false, is_active: true });
+      const updatedColors = await Promise.all(colorIds.map(id => api.updateDesignColor(id, { is_active: true })));
+      mergeDesignColorsIntoState(design.id, updatedColors, {
+        is_active: updatedDesign.is_active,
+        is_archived: updatedDesign.is_archived
+      });
+      showToast(`"${design.name}" restored to All Designs`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to unarchive design');
+    }
+  }, [mergeDesignColorsIntoState, showToast]);
+
+  const handleDeactivateColors = useCallback(async (design: Design, colorIds: string[]) => {
+    try {
+      const updatedColors = await Promise.all(colorIds.map(id => api.updateDesignColor(id, { is_active: false })));
+      const remainingActiveColors =
+        design.design_colors?.some(color => !colorIds.includes(color.id) && color.is_active !== false) ?? false;
+      let designUpdates: Partial<Design> | undefined;
+      if (!remainingActiveColors) {
+        const updatedDesign = await api.updateDesign(design.id, { is_active: false });
+        designUpdates = {
+          is_active: updatedDesign.is_active,
+          is_archived: updatedDesign.is_archived
+        };
+      }
+      mergeDesignColorsIntoState(design.id, updatedColors, designUpdates);
+      showToast(`${colorIds.length} color(s) deactivated`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update colors');
+    }
+  }, [mergeDesignColorsIntoState, showToast]);
+
+  const handleReactivateColors = useCallback(async (design: Design, colorIds: string[]) => {
+    try {
+      const updatedColors = await Promise.all(colorIds.map(id => api.updateDesignColor(id, { is_active: true })));
+      let designUpdates: Partial<Design> | undefined;
+      if (colorIds.length > 0 && !design.is_archived) {
+        const updatedDesign = await api.updateDesign(design.id, { is_active: true });
+        designUpdates = {
+          is_active: updatedDesign.is_active,
+          is_archived: updatedDesign.is_archived
+        };
+      }
+      mergeDesignColorsIntoState(design.id, updatedColors, designUpdates);
+      showToast(`${colorIds.length} color(s) reactivated`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update colors');
+    }
+  }, [mergeDesignColorsIntoState, showToast]);
 
   const getMinPrice = (design: Design) => {
     return design.price || 0;
@@ -448,7 +660,11 @@ export function DesignManagement() {
       colors: [],
       designNo: '',
       sortBy: 'newest',
-      tags: []
+      tags: [],
+      workTypes: [],
+      occasions: [],
+      collections: [],
+      designMonthYear: ''
     });
     setSelectedBrand('');
     setSelectedStyle('');
@@ -456,7 +672,7 @@ export function DesignManagement() {
     setSelectedCreatedMonth('');
   }, []);
 
-  const activeFilterCount = getActiveFilterCount(filters, selectedFabricType, selectedBrand, selectedStyle);
+  const activeFilterCount = getActiveFilterCount(filters, selectedFabricType, selectedBrand, selectedStyle, selectedCreatedMonth);
 
   const toggleDesignSelection = useCallback((designId: string) => {
     setSelectedDesigns(prev => {
@@ -599,14 +815,21 @@ export function DesignManagement() {
         </div>
       </div>
 
-      {/* Mobile: Add Design button at top */}
-      <div className="sm:hidden mb-4">
+      {/* Mobile: Add Design and Import buttons at top */}
+      <div className="sm:hidden mb-4 flex gap-2">
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center justify-center space-x-2 bg-primary text-white px-4 py-2.5 text-sm rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 w-full"
+          className="flex-1 flex items-center justify-center space-x-2 bg-primary text-white px-4 py-2.5 text-sm rounded-lg font-semibold hover:bg-opacity-90 transition duration-200"
         >
           <Plus className="w-4 h-4" />
           <span>Add Design</span>
+        </button>
+        <button
+          onClick={() => setShowImportModal(true)}
+          className="flex-1 flex items-center justify-center space-x-2 bg-green-600 text-white px-4 py-2.5 text-sm rounded-lg font-semibold hover:bg-green-700 transition duration-200"
+        >
+          <Upload className="w-4 h-4" />
+          <span>Import</span>
         </button>
       </div>
 
@@ -618,6 +841,10 @@ export function DesignManagement() {
           brands={brands}
           styles={styles}
           availableColors={availableColors}
+          availableTags={availableTags}
+          availableWorkTypes={availableWorkTypes}
+          availableOccasions={availableOccasions}
+          availableCollections={availableCollections}
           filters={filters}
           setFilters={setFilters}
           selectedFabricType={selectedFabricType}
@@ -626,6 +853,9 @@ export function DesignManagement() {
           setSelectedBrand={setSelectedBrand}
           selectedStyle={selectedStyle}
           setSelectedStyle={setSelectedStyle}
+          selectedCreatedMonth={selectedCreatedMonth}
+          setSelectedCreatedMonth={setSelectedCreatedMonth}
+          availableCreatedMonths={availableCreatedMonths}
           onClearAll={clearAllFilters}
           showBrand={true}
           showStyle={true}
@@ -646,7 +876,7 @@ export function DesignManagement() {
                         : 'border-transparent text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    Active Designs
+                    All Designs
                   </button>
                   <button
                     type="button"
@@ -662,6 +892,13 @@ export function DesignManagement() {
                 </div>
 
                 <div className="hidden sm:flex items-center gap-2 mb-[7px]">
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="inline-flex items-center justify-center space-x-2 bg-green-600 text-white px-3 py-1.5 text-sm rounded-lg font-semibold hover:bg-green-700 transition duration-200"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Import</span>
+                  </button>
                   <button
                     onClick={() => setShowAddModal(true)}
                     className="inline-flex items-center justify-center space-x-2 bg-primary text-white px-3 py-1.5 text-sm rounded-lg font-semibold hover:bg-opacity-90 transition duration-200"
@@ -765,7 +1002,12 @@ export function DesignManagement() {
                       onView={(colorIndex) => handleViewDesign(design, colorIndex)}
                       onEdit={() => handleEditDesign(design)}
                       onDelete={() => handleDelete(design.id)}
-                      onToggleActive={() => handleToggleActive(design)}
+                      onDeactivate={() => handleDeactivate(design)}
+                      onReactivate={() => handleReactivate(design)}
+                      onArchive={() => handleArchive(design)}
+                      onUnarchive={() => handleUnarchive(design)}
+                      onDeactivateColors={(colorIds) => handleDeactivateColors(design, colorIds)}
+                      onReactivateColors={(colorIds) => handleReactivateColors(design, colorIds)}
                       bulkSelectionMode={bulkSelectionMode}
                       isSelected={selectedDesigns.has(design.id)}
                       onToggleSelection={() => toggleDesignSelection(design.id)}
@@ -812,6 +1054,16 @@ export function DesignManagement() {
         />
       )}
 
+      {showImportModal && (
+        <ImportDesignsModal
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => {
+            setShowImportModal(false);
+            loadDesigns();
+          }}
+        />
+      )}
+
       {showViewModal && selectedDesign && (
         <ViewDesignModal
           design={selectedDesign}
@@ -831,6 +1083,10 @@ export function DesignManagement() {
         brands={brands}
         styles={styles}
         availableColors={availableColors}
+        availableTags={availableTags}
+        availableWorkTypes={availableWorkTypes}
+        availableOccasions={availableOccasions}
+        availableCollections={availableCollections}
         filters={filters}
         setFilters={setFilters}
         selectedFabricType={selectedFabricType}
@@ -928,6 +1184,16 @@ export function DesignManagement() {
           </button>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-fade-in">
+          <div className="bg-gray-900 text-white px-6 py-3 rounded-lg shadow-2xl flex items-center gap-3">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <span className="font-medium">{toast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -937,17 +1203,29 @@ interface DesignCardProps {
   onView: (colorIndex: number) => void;
   onEdit: () => void;
   onDelete: () => void;
-  onToggleActive: () => void;
+  onDeactivate: () => void;
+  onReactivate: () => void;
+  onArchive: () => void;
+  onUnarchive: () => void;
+  onDeactivateColors: (colorIds: string[]) => void;
+  onReactivateColors: (colorIds: string[]) => void;
   bulkSelectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: () => void;
 }
 
-function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSelectionMode = false, isSelected = false, onToggleSelection }: DesignCardProps) {
+function DesignCard({ design, onView, onEdit, onDelete, onDeactivate, onReactivate, onArchive, onUnarchive, onDeactivateColors, onReactivateColors, bulkSelectionMode = false, isSelected = false, onToggleSelection }: DesignCardProps) {
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const slideshowIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [showColorManager, setShowColorManager] = useState(false);
+  const [pendingColorIds, setPendingColorIds] = useState<Set<string>>(new Set());
+
+  const isArchived = design.is_archived === true;
   const colorCount = design.design_colors?.length || 0;
+  const allColorsInactive = colorCount > 0 && (design.design_colors?.every(color => color.is_active === false || color.in_stock === false) ?? false);
+  const isInactive = !isArchived && (!design.is_active || allColorsInactive);
   const selectedColor = design.design_colors?.[selectedColorIndex];
   const imageUrls = selectedColor?.image_urls || [];
   const displayImage = imageUrls[currentImageIndex];
@@ -1052,10 +1330,17 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
   };
 
   const selectedColorStock = selectedColor ? getTotalStock(selectedColor) : 0;
+  const selectedColorInactive = selectedColor?.is_active === false || selectedColor?.in_stock === false;
+  const selectedColorOutOfStock = selectedColor?.in_stock === false;
+  const activeToggleIsGray = isArchived || isInactive || selectedColorInactive;
+  const cardIsDimmed = isArchived || isInactive || selectedColorInactive;
 
   return (
-    <div className={`bg-white rounded-lg shadow-sm border overflow-hidden hover:shadow-lg transition-all duration-200 group relative ${
-      design.is_active ? 'border-gray-200' : 'border-red-300 opacity-75'
+    <div className={`bg-white rounded-lg shadow-sm border overflow-hidden transition-all duration-200 group relative ${
+      isArchived ? 'border-orange-300 bg-orange-50/40 opacity-70' :
+      isInactive ? 'border-red-400 bg-gray-100 opacity-80 saturate-75' :
+      selectedColorInactive ? 'border-red-300 bg-gray-50/80' :
+      'border-gray-200'
     }`}>
       {/* Bulk Selection Checkbox */}
       {bulkSelectionMode && (
@@ -1081,16 +1366,20 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
       )}
       
       {/* Image Section - E-commerce Standard with Slideshow */}
-      <div 
-        className="relative bg-gray-50 overflow-hidden aspect-[4/5] cursor-pointer group"
-        onClick={() => onView(selectedColorIndex)}
+      <div
+        className={`relative bg-gray-50 overflow-hidden aspect-[4/5] group ${
+          isInactive || isArchived ? 'cursor-not-allowed' : 'cursor-pointer'
+        }`}
+        onClick={() => { if (!isInactive && !isArchived) onView(selectedColorIndex); }}
       >
         {displayImage ? (
           <>
             <img
               src={displayImage}
               alt={design.name}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className={`w-full h-full object-cover transition-transform duration-300 ${
+                cardIsDimmed ? 'grayscale-[0.7] brightness-90' : 'group-hover:scale-105'
+              }`}
             />
             {/* Slideshow Indicators */}
             {imageUrls.length > 1 && (
@@ -1099,32 +1388,12 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
                   <div
                     key={index}
                     className={`w-1.5 h-1.5 rounded-full transition-all ${
-                      index === currentImageIndex
-                        ? 'bg-white w-4'
-                        : 'bg-white/50'
+                      index === currentImageIndex ? 'bg-white w-4' : 'bg-white/50'
                     }`}
                   />
                 ))}
               </div>
             )}
-            {/* Quick View Overlay */}
-            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 flex items-center justify-center">
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <button
-                  onClick={shareOnWhatsApp}
-                  className="bg-green-500 text-white px-2 py-1.5 rounded-full text-xs font-semibold shadow-lg hover:bg-green-600 transition flex items-center gap-1"
-                >
-                  <MessageCircle className="w-3 h-3" />
-                  Share
-                </button>
-                <button
-                  onClick={() => onView(selectedColorIndex)}
-                  className="bg-white text-primary px-2 py-1.5 rounded-full text-xs font-semibold shadow-lg hover:bg-primary hover:text-white transition"
-                >
-                  Quick View
-                </button>
-              </div>
-            </div>
           </>
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
@@ -1132,9 +1401,20 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
             <span className="text-xs text-gray-500 font-medium">{design.design_no}</span>
           </div>
         )}
-        {!design.is_active && (
+        {/* Status Badge */}
+        {isArchived && (
+          <div className="absolute top-1.5 right-1.5 bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium z-10">
+            Archived
+          </div>
+        )}
+        {isInactive && (
           <div className="absolute top-1.5 right-1.5 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium z-10">
             Inactive
+          </div>
+        )}
+        {!isInactive && !isArchived && selectedColorOutOfStock && (
+          <div className="absolute top-1.5 right-1.5 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium z-10">
+            Out of Stock
           </div>
         )}
         {/* Category Badge */}
@@ -1150,10 +1430,14 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
         {/* Header */}
         <div className="mb-1.5">
           <div className="flex items-center justify-between truncate">
-            <h3 className="text-xs font-bold text-gray-900 truncate leading-tight flex-1">
+            <h3 className={`text-xs font-bold truncate leading-tight flex-1 ${
+              cardIsDimmed ? 'text-gray-500' : 'text-gray-900'
+            }`}>
               {design.name}
             </h3>
-            <span className="text-[10px] font-semibold text-primary uppercase tracking-wide ml-2">
+            <span className={`text-[10px] font-semibold uppercase tracking-wide ml-2 ${
+              cardIsDimmed ? 'text-gray-400' : 'text-primary'
+            }`}>
               {design.design_no}
             </span>
           </div>
@@ -1166,30 +1450,40 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
               {design.design_colors?.slice(0, 6).map((color, index) => (
                 <button
                   key={color.id}
+                  type="button"
+                  disabled={isInactive || isArchived}
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (isInactive || isArchived) return;
                     handleColorChange(index);
                   }}
                   className={`relative group/color rounded-full transition-all duration-200 ${
-                    selectedColorIndex === index
-                      ? 'scale-110 shadow-lg'
+                    isInactive || isArchived
+                      ? ''
+                      : selectedColorIndex === index
+                      ? ''
                       : 'hover:scale-105'
-                  }`}
+                  } ${color.is_active === false || color.in_stock === false ? 'opacity-70' : ''}`}
                   title={color.color_name}
                 >
                   <div
-                    className="w-5 h-5 rounded-full border border-white shadow-sm"
-                    style={{ backgroundColor: color.color_code || '#cccccc' }}
+                    className={`w-5 h-5 rounded-full shadow-sm ${
+                      color.is_active === false || color.in_stock === false
+                        ? selectedColorIndex === index
+                          ? 'border-2 border-red-500'
+                          : 'border border-red-300'
+                        : selectedColorIndex === index
+                          ? 'border-2 border-black'
+                          : 'border border-white'
+                    }`}
+                    style={{
+                      backgroundColor: color.is_active === false || color.in_stock === false ? '#d1d5db' : (color.color_code || '#cccccc'),
+                      filter: color.is_active === false || color.in_stock === false ? 'grayscale(100%)' : 'none'
+                    }}
                   />
-                  {/* Selection Indicator */}
-                  {selectedColorIndex === index && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-2.5 h-2.5 bg-white rounded-full shadow-sm" />
-                    </div>
-                  )}
                   {/* Tooltip */}
                   <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-1.5 py-0.5 bg-gray-900 text-white text-[9px] rounded whitespace-nowrap opacity-0 group-hover/color:opacity-100 transition-opacity pointer-events-none z-10">
-                    {color.color_name}
+                    {color.color_name}{color.in_stock === false ? ' • Out of Stock' : ''}
                   </div>
                 </button>
               ))}
@@ -1204,54 +1498,207 @@ function DesignCard({ design, onView, onEdit, onDelete, onToggleActive, bulkSele
 
         {/* Selected Color Details */}
         {selectedColor && (
-          <div className="mb-2 p-1.5 bg-gray-50 rounded border border-gray-200">
-          
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-primary">₹{design.price}</span>
-              <span className={`text-[10px] font-medium flex items-center gap-0.5 ${
-                selectedColorStock > 0 ? 'text-gray-600' : 'text-gray-400'
-              }`}>
-                <Package className="w-2.5 h-2.5" />
-                {selectedColorStock}
-              </span>
+          <div className={`mb-2 p-1.5 rounded border ${
+            selectedColorInactive
+              ? 'bg-gray-100 border-red-200'
+              : 'bg-gray-50 border-gray-200'
+          }`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className={`text-xs font-bold ${selectedColorInactive ? 'text-gray-500' : 'text-primary'}`}>₹{design.price}</span>
+              <div className="flex items-center gap-2">
+                {selectedColorOutOfStock && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                    Out of Stock
+                  </span>
+                )}
+                <span className={`text-[10px] font-medium flex items-center gap-0.5 ${
+                  selectedColorInactive ? 'text-gray-400' : selectedColorStock > 0 ? 'text-gray-600' : 'text-gray-400'
+                }`}>
+                  <Package className="w-2.5 h-2.5" />
+                  {selectedColorStock}
+                </span>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Action Buttons - Minimal */}
-        <div className="space-y-1">
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="flex-1 py-1 border border-blue-300 text-blue-600 rounded hover:bg-blue-50 transition text-[10px] font-medium"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={onToggleActive}
-              className={`shrink-0 inline-flex h-5 w-9 items-center rounded-full border transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 ${
-                design.is_active
-                  ? 'justify-end border-green-400 bg-green-500 hover:bg-green-600'
-                  : 'justify-start border-gray-300 bg-gray-300 hover:bg-gray-400'
-              }`}
-              title={design.is_active ? 'Set inactive' : 'Set active'}
-              aria-label={design.is_active ? 'Set inactive' : 'Set active'}
-            >
-              <span
-                className="mx-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200"
-              />
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="px-2 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50 transition"
-              title="Delete"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </div>
+        {/* Action Buttons */}
+        <div className="space-y-1 relative">
+
+          {/* ── ACTIVE design: Edit | Toggle (opens menu) | Delete ── */}
+          {!isInactive && !isArchived && (
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={shareOnWhatsApp}
+                className="px-2 py-1 border border-green-300 text-green-600 rounded hover:bg-green-50 transition"
+                title="Share on WhatsApp"
+              >
+                <MessageCircle className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={onEdit}
+                className="px-2 py-1 border border-blue-300 text-blue-600 rounded hover:bg-blue-50 transition"
+                title="Edit"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+               <button type="button" onClick={onDelete}
+                className="px-2 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50 transition" title="Delete">
+                <Trash2 className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowActionMenu(prev => !prev)}
+                className={`shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                  activeToggleIsGray
+                    ? 'justify-start border-gray-300 bg-gray-300 hover:bg-gray-400'
+                    : 'justify-end border-green-400 bg-green-500 hover:bg-green-600'
+                }`}
+                title="Deactivate / Archive"
+              >
+                <span className="mx-0.5 h-4 w-4 rounded-full bg-white shadow-sm" />
+              </button>
+             
+            </div>
+          )}
+
+          {/* ── INACTIVE design: Reactivate toggle | Archive button ── */}
+          {isInactive && (
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={onReactivate}
+                className="shrink-0 inline-flex h-5 w-9 items-center justify-start rounded-full border border-gray-300 bg-gray-300 hover:bg-green-500 hover:border-green-400 transition-colors focus:outline-none"
+                title="Reactivate design"
+              >
+                <span className="mx-0.5 h-4 w-4 rounded-full bg-white shadow-sm" />
+              </button>
+              <button type="button" onClick={onArchive}
+                className="flex-1 py-1 border border-orange-300 text-orange-600 rounded hover:bg-orange-50 transition text-[10px] font-medium flex items-center justify-center gap-1">
+                <Archive className="w-3 h-3" /> Archive
+              </button>
+            </div>
+          )}
+
+          {/* ── ARCHIVED design: Restore | Delete ── */}
+          {isArchived && (
+            <div className="flex gap-1">
+              <button type="button" onClick={onUnarchive}
+                className="flex-1 py-1 border border-green-300 text-green-700 rounded hover:bg-green-50 transition text-[10px] font-medium">
+                Restore
+              </button>
+              <button type="button" onClick={onDelete}
+                className="px-2 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50 transition" title="Delete">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* ── Action Menu (active design) ── */}
+          {showActionMenu && !isInactive && !isArchived && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-white rounded-lg shadow-xl border border-gray-200 z-30 overflow-hidden">
+              <button type="button"
+                onClick={() => { onDeactivate(); setShowActionMenu(false); }}
+                className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-b border-gray-100">
+                <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+                Deactivate design
+              </button>
+              <button type="button"
+                onClick={() => { onArchive(); setShowActionMenu(false); }}
+                className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-b border-gray-100">
+                <Archive className="w-3 h-3 text-orange-500 shrink-0" />
+                Archive design
+              </button>
+              <button type="button"
+                onClick={() => { setShowColorManager(true); setShowActionMenu(false); }}
+                className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                Manage colors
+              </button>
+            </div>
+          )}
+
+          {/* Click-away backdrop */}
+          {showActionMenu && (
+            <div className="fixed inset-0 z-20" onClick={() => setShowActionMenu(false)} />
+          )}
+
+          {/* ── Color Manager Panel ── */}
+          {showColorManager && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-white rounded-lg shadow-xl border border-gray-200 z-30 p-2">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-semibold text-gray-700">Manage Colors</span>
+                <button type="button" onClick={() => { setShowColorManager(false); setPendingColorIds(new Set()); }}
+                  className="text-gray-400 hover:text-gray-600">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {design.design_colors?.map(color => {
+                  const colorActive = color.is_active !== false && color.in_stock !== false;
+                  const isPending = pendingColorIds.has(color.id);
+                  return (
+                    <div key={color.id} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="w-3 h-3 rounded-full shrink-0 border border-white shadow-sm"
+                          style={{ backgroundColor: color.color_code || '#ccc' }} />
+                        <span className={`text-[10px] truncate ${colorActive ? 'text-gray-700' : 'text-gray-400 line-through'}`}>
+                          {color.color_name}{color.in_stock === false ? ' (Out of Stock)' : ''}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPendingColorIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(color.id)) next.delete(color.id);
+                          else next.add(color.id);
+                          return next;
+                        })}
+                        className={`shrink-0 inline-flex h-4 w-7 items-center rounded-full border transition-colors ${
+                          !colorActive
+                            ? 'justify-start bg-gray-300 border-gray-300'
+                            : isPending
+                              ? 'justify-start bg-gray-300 border-gray-300'
+                              : 'justify-end bg-green-500 border-green-400'
+                        }`}
+                      >
+                        <span className="mx-0.5 h-3 w-3 rounded-full bg-white shadow-sm" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              {pendingColorIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const toDeactivate = Array.from(pendingColorIds).filter(id => {
+                      const c = design.design_colors?.find(c => c.id === id);
+                      return c?.is_active !== false;
+                    });
+                    const toReactivate = Array.from(pendingColorIds).filter(id => {
+                      const c = design.design_colors?.find(c => c.id === id);
+                      return c?.is_active === false;
+                    });
+                    if (toDeactivate.length) onDeactivateColors(toDeactivate);
+                    if (toReactivate.length) onReactivateColors(toReactivate);
+                    setShowColorManager(false);
+                    setPendingColorIds(new Set());
+                  }}
+                  className="mt-2 w-full py-1 bg-primary text-white rounded text-[10px] font-semibold hover:bg-primary/90 transition"
+                >
+                  Apply ({pendingColorIds.size})
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Click-away backdrop for color manager */}
+          {showColorManager && (
+            <div className="fixed inset-0 z-20" onClick={() => { setShowColorManager(false); setPendingColorIds(new Set()); }} />
+          )}
         </div>
       </div>
     </div>
