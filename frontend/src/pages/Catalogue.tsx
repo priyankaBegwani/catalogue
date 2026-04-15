@@ -166,6 +166,37 @@ function toComputedTagLabel(tag: string) {
   return config ? config.label : tag;
 }
 
+function getCompactTagClasses(tag: string) {
+  const normalized = tag.trim().toLowerCase();
+
+  // Myntra-style ribbon colors - solid bold colors
+  if (normalized === 'new arrival') {
+    return 'bg-[#e83f6f] text-white';
+  }
+
+  if (normalized === 'best seller') {
+    return 'bg-[#ff6b6b] text-white';
+  }
+
+  if (normalized === 'trending') {
+    return 'bg-[#7c3aed] text-white';
+  }
+
+  if (normalized === 'fast repeat' || normalized === 'fast moving') {
+    return 'bg-[#059669] text-white';
+  }
+
+  if (normalized === 'ready to ship') {
+    return 'bg-[#0f766e] text-white';
+  }
+
+  if (normalized === 'low stock') {
+    return 'bg-[#dc2626] text-white';
+  }
+
+  return 'bg-[#374151] text-white';
+}
+
 // Highlight tag presets - maps to existing filter logic
 interface HighlightTag {
   id: string;
@@ -1111,7 +1142,6 @@ export function Catalogue() {
         message += `💰 *Price:* ₹${design.price.toLocaleString()}/piece\n`;
       }
       
-      message += `🎨 *Colors Available:* ${colorCount} variant${colorCount > 1 ? 's' : ''}\n`;
       message += `📦 *MOQ:* Contact for details\n`;
       
       if (design.description) {
@@ -1899,7 +1929,7 @@ interface DesignCardProps {
           const shareText = `✨ *${design.name}*\n` +
             `📋 Design No: *${design.design_no}*\n\n` +
             `${design.description || 'Discover this beautiful design from our exclusive collection!'}\n\n` +
-            `🎨 Available in ${colorCount} stunning color${colorCount > 1 ? 's' : ''}\n\n` +
+           
             `👉 Explore our complete catalogue:\n${catalogueLink}\n\n` +
             `_We'd love to help you find the perfect design for your needs!_`;
           
@@ -1916,8 +1946,7 @@ interface DesignCardProps {
       // Fallback to WhatsApp with professional message
       let message = `✨ *${design.name}*\n` +
         `📋 Design No: *${design.design_no}*\n\n` +
-        `${design.description || 'Discover this beautiful design from our exclusive collection!'}\n\n` +
-        `🎨 Available in ${colorCount} stunning color${colorCount > 1 ? 's' : ''}\n\n`;
+        `${design.description || 'Discover this beautiful design from our exclusive collection!'}\n\n` ;
       
       if (whatsappImage) {
         message += `📸 View Design:\n${whatsappImage}\n\n`;
@@ -2039,73 +2068,30 @@ interface DesignCardProps {
           </div>
         )}
 
-        {Array.isArray(design.tags) && design.tags.length > 0 && (
-          <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1">
-            {design.tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                className={`px-2 py-1 text-[10px] font-semibold rounded-md border shadow-sm ${getManualTagClasses(tag)}`}
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Design Tags - Myntra Style Badges */}
+        {/* Product Tags - Myntra Style Ribbon Tags (Top Left) */}
         {(() => {
-          const designTags = getDesignTags(design);
           const priorityOrder: DesignTag[] = ['best-seller', 'trending', 'new-arrival', 'fast-repeat', 'ready-to-ship', 'low-stock'];
 
-          // Pricing utility function
-          const calculateDiscountedPrice = (originalPrice: number, userProfile: UserProfile | null, selectedParty: Party | null, isAdmin: boolean): { price: number; isDiscounted: boolean } => {
-            // Admin sees original price unless party is selected
-            if (isAdmin && !selectedParty) {
-              return { price: originalPrice, isDiscounted: false };
-            }
+          const computedTagLabels = getDesignTags(design)
+            .sort((a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b))
+            .map((tag) => toComputedTagLabel(tag));
+          const manualTagLabels = (design.tags || []).map((tag) => tag.trim()).filter(Boolean);
+          const displayTags = Array.from(new Set([...computedTagLabels, ...manualTagLabels])).slice(0, 3);
 
-            // Determine which party to use for discount
-            const partyForDiscount = selectedParty || (userProfile?.parties ? {
-              id: userProfile.parties.id || '',
-              party_id: userProfile.parties.party_id || '',
-              name: userProfile.parties.name || '',
-              default_discount: userProfile.parties.default_discount || undefined
-            } as Party : null);
-
-            // If no party or no discount, return original price
-            if (!partyForDiscount?.default_discount) {
-              return { price: originalPrice, isDiscounted: false };
-            }
-
-            // Parse discount percentage
-            const discountPercentage = parseFloat(partyForDiscount.default_discount);
-            if (isNaN(discountPercentage) || discountPercentage <= 0) {
-              return { price: originalPrice, isDiscounted: false };
-            }
-
-            // Calculate discounted price
-            const discountAmount = (originalPrice * discountPercentage) / 100;
-            const discountedPrice = originalPrice - discountAmount;
-            
-            return { price: Math.max(0, discountedPrice), isDiscounted: true };
-          };
-
-          const sortedTags = designTags.sort((a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b));
-          const displayTags = sortedTags.slice(0, 2);
-          
           return displayTags.length > 0 ? (
-            <div className="absolute bottom-2 right-2 z-10 flex flex-wrap gap-1">
-              {displayTags.map((tag) => {
-                const config = tagConfig[tag];
-                return (
-                  <span
-                    key={tag}
-                    className="px-1.5 py-0.5 bg-white text-gray-800 text-[10px] font-semibold rounded shadow-sm border border-gray-200"
-                  >
-                    {config.label}
-                  </span>
-                );
-              })}
+            <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1">
+              {displayTags.map((tag) => (
+                <span
+                  key={tag}
+                  className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm ${getCompactTagClasses(tag)}`}
+                  style={{
+                    clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 8% 50%)',
+                    paddingLeft: '10px'
+                  }}
+                >
+                  {tag}
+                </span>
+              ))}
             </div>
           ) : null;
         })()}
@@ -2331,6 +2317,7 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
   const [similarDesigns, setSimilarDesigns] = useState<Design[]>([]);
   const [isImageLightboxOpen, setIsImageLightboxOpen] = useState(false);
   const swipeStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const quickViewSwipeRef = useRef<{ x: number; y: number; time: number } | null>(null);
   
   const design = currentDesign;
   const selectedColor = design.design_colors?.[selectedColorIndex];
@@ -2350,6 +2337,44 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
   const goToNextImage = () => {
     if (imageCount <= 1) return;
     setSelectedImageIndex((prev) => (prev === imageCount - 1 ? 0 : prev + 1));
+  };
+
+  // Handle touch start for quick view image swipe
+  const handleQuickViewTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (imageCount <= 1) return;
+    const touch = e.touches[0];
+    if (touch) {
+      quickViewSwipeRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now()
+      };
+    }
+  };
+
+  // Handle touch end for quick view image swipe
+  const handleQuickViewTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!quickViewSwipeRef.current || imageCount <= 1) return;
+    
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    
+    const deltaX = touch.clientX - quickViewSwipeRef.current.x;
+    const deltaY = Math.abs(touch.clientY - quickViewSwipeRef.current.y);
+    const deltaTime = Date.now() - quickViewSwipeRef.current.time;
+    
+    // Check if it's a swipe (fast movement, mostly horizontal)
+    if (deltaTime < 300 && Math.abs(deltaX) > 50 && deltaY < 50) {
+      if (deltaX < 0) {
+        // Swipe left - Next image
+        goToNextImage();
+      } else {
+        // Swipe right - Previous image
+        goToPreviousImage();
+      }
+    }
+    
+    quickViewSwipeRef.current = null;
   };
 
   const openImageLightbox = () => {
@@ -2460,6 +2485,7 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
   // If available_sizes is empty but we have size_quantities, extract sizes from there
   const effectiveAvailableSizes = design.available_sizes && design.available_sizes.length > 0
     ? design.available_sizes
+    
     : parsedSizeQuantities 
     ? Object.keys(parsedSizeQuantities).filter(size => parsedSizeQuantities[size as keyof typeof parsedSizeQuantities] !== undefined)
     : [];
@@ -2868,7 +2894,11 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
               <div className="space-y-2 sm:space-y-3">
                 {/* Main Image Preview */}
                 {selectedImage ? (
-                <div className="relative bg-secondary rounded-xl border border-gray-200">
+                <div
+                  className="relative bg-secondary rounded-xl border border-gray-200"
+                  onTouchStart={handleQuickViewTouchStart}
+                  onTouchEnd={handleQuickViewTouchEnd}
+                >
                   <button
                     onClick={openImageLightbox}
                     className="absolute top-2 right-2 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-2 text-xs font-medium text-gray-700 shadow-lg hover:bg-white transition"
@@ -2921,12 +2951,7 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
                     />
                   </button>
 
-                  {imageCount > 1 && (
-                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-60 text-white text-xs px-3 py-1 rounded-full">
-                      <span className="hidden sm:inline">Use ← → keys or on-image arrows</span>
-                      <span className="sm:hidden">Swipe left or right to browse</span>
-                    </div>
-                  )}
+                 
                 </div>
               ) : (
                 <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex flex-col items-center justify-center min-h-[280px] border border-gray-200 py-12">
@@ -2959,7 +2984,7 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
                         </span>
                       </div>
                     )}
-                    <p className="text-xs text-gray-400 mt-0.5">Exclusive of taxes</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Inclusive of taxes</p>
                   </div>
                 )}
                 {!isAuthenticated && (
@@ -3031,9 +3056,7 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
                             )}
                             <span className="text-xs font-semibold text-gray-900 truncate">{color.color_name}</span>
                           </div>
-                          <span className={`text-xs font-medium ${colorTotalStock > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                            {colorTotalStock > 0 ? `${colorTotalStock} pcs` : 'On order'}
-                          </span>
+                          
                         </button>
                       );
                     })}
@@ -3292,9 +3315,7 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-sm sm:text-base font-semibold text-gray-900">{size}</span>
-                                  <span className={`text-xs ${stockForSize > 0 ? 'text-green-600' : 'text-gray-500'}`}>
-                                    {stockForSize > 0 ? `${stockForSize} in stock` : 'Available on order'}
-                                  </span>
+                                  
                                 </div>
                               </div>
                             </div>

@@ -22,10 +22,21 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
 
   useEffect(() => {
     if (isOpen) {
+      setError(''); // Clear error when opening modal
       loadCart();
       loadPartyDiscount();
     }
   }, [isOpen, user]);
+
+  // Auto-dismiss error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   const loadCart = async () => {
     try {
@@ -87,28 +98,20 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
     }
   };
 
-  const handleMoveToWishlist = async (item: CartItem) => {
+  const handleMoveToWishlist = async (group: { design: any; color: any; items: CartItem[] }) => {
     try {
-      setUpdatingItems(prev => new Set(prev).add(item.id));
+      const firstItem = group.items[0];
+      if (!firstItem) return;
       
-      // Add to wishlist
-      const token = localStorage.getItem('access_token');
-      const response = await fetch('/api/wishlist', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ design_id: item.design.id }),
-      });
+      setUpdatingItems(prev => new Set(prev).add(firstItem.id));
+      
+      // Add to wishlist using the API method
+      await api.addToWishlist(group.design.id);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to add to wishlist');
+      // Remove all items of this group from cart
+      for (const item of group.items) {
+        await api.removeFromCart(item.id);
       }
-
-      // Remove from cart
-      await api.removeFromCart(item.id);
       await loadCart();
       
       // Show success message
@@ -118,7 +121,9 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
     } finally {
       setUpdatingItems(prev => {
         const next = new Set(prev);
-        next.delete(item.id);
+        if (firstItem) {
+          next.delete(firstItem.id);
+        }
         return next;
       });
     }
@@ -217,7 +222,7 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
                   onToggle={() => toggleGroup(key)}
                   onUpdateQuantity={handleUpdateQuantity}
                   onRemove={handleRemoveItem}
-                  onMoveToWishlist={handleMoveToWishlist}
+                  onMoveToWishlist={() => handleMoveToWishlist(group)}
                   updatingItems={updatingItems}
                 />
               ))}
@@ -284,7 +289,7 @@ interface GroupedCartCardProps {
   onToggle: () => void;
   onUpdateQuantity: (itemId: string, quantity: number) => void;
   onRemove: (itemId: string) => void;
-  onMoveToWishlist: (item: CartItem) => void;
+  onMoveToWishlist: () => void;
   updatingItems: Set<string>;
 }
 
@@ -318,12 +323,26 @@ function GroupedCartCard({ groupKey, group, isExpanded, onToggle, onUpdateQuanti
         </div>
 
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm sm:text-base font-bold text-gray-900 mb-1">{group.design.name}</h3>
-          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 mb-1.5">
-            {group.color.color_code && (
-              <div className="w-4 h-4 rounded-full border-2 border-gray-300 shadow-sm" style={{ backgroundColor: group.color.color_code }} />
-            )}
-            <span className="font-medium">{group.color.color_name}</span>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-gray-900 mb-1">{group.design.name}</h3>
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 mb-1.5">
+                {group.color.color_code && (
+                  <div className="w-4 h-4 rounded-full border-2 border-gray-300 shadow-sm" style={{ backgroundColor: group.color.color_code }} />
+                )}
+                <span className="font-medium">{group.color.color_name}</span>
+              </div>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveToWishlist();
+              }}
+              className="text-pink-500 hover:text-pink-600 transition p-1.5 hover:bg-pink-50 rounded-lg flex-shrink-0"
+              title="Move to Wishlist"
+            >
+              <Heart className="w-5 h-5" />
+            </button>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {group.items.map((item, idx) => (
@@ -405,17 +424,6 @@ function GroupedCartCard({ groupKey, group, isExpanded, onToggle, onUpdateQuanti
                   </div>
 
                   <div className="flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onMoveToWishlist(item);
-                      }}
-                      disabled={isUpdating}
-                      className="text-pink-500 hover:text-pink-600 transition disabled:opacity-50 p-2 hover:bg-pink-50 rounded-lg"
-                      title="Move to Wishlist"
-                    >
-                      <Heart className="w-5 h-5" />
-                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

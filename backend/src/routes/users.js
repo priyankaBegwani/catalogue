@@ -16,6 +16,8 @@ import {
 
 const router = express.Router();
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 router.get('/', 
   authenticateUser, 
   requireAdmin, 
@@ -37,12 +39,22 @@ router.post('/',
   authenticateUser, 
   requireAdmin, 
   asyncHandler(async (req, res) => {
-    const { email, password, full_name, role_id, party_id, can_order_individual_sizes } = req.body;
+    const { username, email, password, full_name, role_id, party_id, can_order_individual_sizes } = req.body;
 
     // Validate required fields
-    validateRequired(req.body, ['email', 'password', 'full_name', 'role_id']);
+    validateRequired(req.body, ['username', 'email', 'password', 'full_name', 'role_id']);
     validateEmail(email);
     validateUUID(role_id, 'Role ID');
+
+    const existingUsername = await supabaseAdmin
+      .from('user_profiles')
+      .select('id')
+      .eq('username', username)
+      .maybeSingle();
+
+    if (existingUsername.data) {
+      throw new AppError('Username already exists', 400);
+    }
 
     // Verify role exists
     const roleExists = await supabaseAdmin
@@ -71,6 +83,7 @@ router.post('/',
       password,
       email_confirm: true,
       user_metadata: {
+        username,
         full_name,
         role_id,
         party_id: party_id || null,
@@ -82,18 +95,48 @@ router.post('/',
       throw new AppError(authError.message, 400);
     }
 
-    // Get created profile
-    const profile = await getOneOrFail(
-      supabaseAdmin
+    const { error: profileUpsertError } = await supabaseAdmin
+      .from('user_profiles')
+      .upsert({
+        id: authData.user.id,
+        username,
+        email,
+        full_name,
+        role_id,
+        party_id: party_id || null,
+        can_order_individual_sizes: can_order_individual_sizes ?? false,
+        is_active: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (profileUpsertError) {
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      throw new AppError(profileUpsertError.message, 500);
+    }
+
+    let profile = null;
+    let lastProfileError = null;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const { data, error } = await supabaseAdmin
         .from('user_profiles')
         .select('*, parties!user_profiles_party_id_fkey(name), user_roles(*)')
-        .eq('id', authData.user.id),
-      'User profile not found after creation'
-    ).catch(async (error) => {
-      // Rollback: delete auth user if profile fetch fails
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      if (data) {
+        profile = data;
+        break;
+      }
+
+      lastProfileError = error;
+      await sleep(300);
+    }
+
+    if (!profile) {
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      throw error;
-    });
+      throw new AppError(lastProfileError?.message || 'User profile not found after creation', 500);
+    }
 
     // Invalidate users cache
     cache.delete('cache:/api/users');
