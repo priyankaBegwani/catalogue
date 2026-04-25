@@ -26,7 +26,7 @@ interface ColorSelection {
 }
 
 export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedColorIndex = 0 }: AddToCartModalProps) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, hasPermission } = useAuth();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -247,6 +247,11 @@ export function AddToCartModal({ isOpen, onClose, onSuccess, design, selectedCol
   };
 
   const handleAddToCart = async () => {
+    if (!hasPermission('catalogue', 'order')) {
+      setError('You do not have permission to place orders');
+      return;
+    }
+
     if (!user) {
       setError('Please login to add items to cart');
       return;

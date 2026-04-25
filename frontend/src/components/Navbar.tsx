@@ -11,7 +11,7 @@ export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname.slice(1) || 'catalogue';
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, hasPermission, roleName } = useAuth();
   const branding = useBranding();
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
@@ -95,7 +95,7 @@ export function Navbar() {
             </button>
 
             <div className="hidden md:flex items-center space-x-6">
-              {isAdmin && (
+              {hasPermission('dashboard', 'view') && (
                 <button
                   onClick={() => goTo('/dashboard')}
                   className={`px-3 py-2 font-medium transition-colors flex items-center space-x-2 ${
@@ -121,7 +121,7 @@ export function Navbar() {
                
               </button>
 
-              {isAdmin && (
+              {(hasPermission('designs', 'view') || hasPermission('users', 'view') || hasPermission('parties', 'view') || hasPermission('transport', 'view') || hasPermission('orders', 'view')) && (
                 <div className="relative">
                   <button
                     onClick={() => setEntriesDropdownOpen(!entriesDropdownOpen)}
@@ -141,7 +141,7 @@ export function Navbar() {
 
                   {entriesDropdownOpen && (
                     <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
-                      <button
+                      {hasPermission('designs', 'view') && <button
                         onMouseDown={() => goTo('/designs', { closeEntries: true })}
                         className={`w-full px-4 py-3 flex items-center space-x-3 transition-colors ${
                           currentPage === 'designs'
@@ -151,9 +151,9 @@ export function Navbar() {
                       >
                         <Palette className="w-5 h-5" />
                         <span className="font-medium">Designs</span>
-                      </button>
+                      </button>}
 
-                      <button
+                      {hasPermission('users', 'view') && <button
                         onMouseDown={() => goTo('/users', { closeEntries: true })}
                         className={`w-full px-4 py-3 flex items-center space-x-3 transition-colors ${
                           currentPage === 'users'
@@ -163,9 +163,9 @@ export function Navbar() {
                       >
                         <Users className="w-5 h-5" />
                         <span className="font-medium">Users</span>
-                      </button>
+                      </button>}
 
-                      <button
+                      {hasPermission('parties', 'view') && <button
                         onMouseDown={() => goTo('/parties', { closeEntries: true })}
                         className={`w-full px-4 py-3 flex items-center space-x-3 transition-colors ${
                           currentPage === 'parties'
@@ -175,9 +175,9 @@ export function Navbar() {
                       >
                         <UserPlus className="w-5 h-5" />
                         <span className="font-medium">Parties</span>
-                      </button>
+                      </button>}
 
-                      <button
+                      {hasPermission('transport', 'view') && <button
                         onMouseDown={() => goTo('/transport', { closeEntries: true })}
                         className={`w-full px-4 py-3 flex items-center space-x-3 transition-colors ${
                           currentPage === 'transport'
@@ -187,9 +187,9 @@ export function Navbar() {
                       >
                         <Truck className="w-5 h-5" />
                         <span className="font-medium">Transport</span>
-                      </button>
+                      </button>}
 
-                      <button
+                      {hasPermission('orders', 'view') && <button
                         onMouseDown={() => goTo('/orders', { closeEntries: true })}
                         className={`w-full px-4 py-3 flex items-center space-x-3 transition-colors ${
                           currentPage === 'orders'
@@ -199,7 +199,7 @@ export function Navbar() {
                       >
                         <Package className="w-5 h-5" />
                         <span className="font-medium">Orders</span>
-                      </button>
+                      </button>}
                     </div>
                   )}
                 </div>
@@ -249,16 +249,16 @@ export function Navbar() {
                   <div className="px-4 py-3 border-b border-gray-200">
                     <p className="text-sm text-gray-500">Welcome</p>
                     <p className="text-base font-semibold text-gray-900">{user?.full_name}</p>
-                    <p className="text-xs text-gray-500 capitalize mt-1">{user?.role}</p>
+                    <p className="text-xs text-gray-500 capitalize mt-1">{roleName}</p>
                   </div>
 
-                  <button
+                  {hasPermission('orders', 'view') && <button
                     onMouseDown={() => goTo('/orders', { closeProfile: true })}
                     className="w-full px-4 py-3 flex items-center space-x-3 text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     <Package className="w-5 h-5" />
                     <span className="font-medium">Your Orders</span>
-                  </button>
+                  </button>}
 
                   <button
                     onMouseDown={() => goTo('/profile', { closeProfile: true })}
@@ -311,7 +311,7 @@ export function Navbar() {
                 Catalogue
               </button>
 
-              {isAdmin && (
+              {hasPermission('dashboard', 'view') && (
                 <>
                   <button
                     onClick={() => goTo('/dashboard', { closeMobile: true })}
@@ -325,7 +325,7 @@ export function Navbar() {
                     <span>Dashboard</span>
                   </button>
 
-                  <button
+                  {hasPermission('designs', 'view') && <button
                     onClick={() => goTo('/designs', { closeMobile: true })}
                     className={`px-4 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                       currentPage === 'designs'
@@ -335,9 +335,9 @@ export function Navbar() {
                   >
                     <Palette className="w-4 h-4" />
                     <span>Designs</span>
-                  </button>
+                  </button>}
 
-                  <button
+                  {hasPermission('users', 'view') && <button
                     onClick={() => goTo('/users', { closeMobile: true })}
                     className={`px-4 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                       currentPage === 'users'
@@ -347,9 +347,9 @@ export function Navbar() {
                   >
                     <Users className="w-4 h-4" />
                     <span>Users</span>
-                  </button>
+                  </button>}
 
-                  <button
+                  {hasPermission('parties', 'view') && <button
                     onClick={() => goTo('/parties', { closeMobile: true })}
                     className={`px-4 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                       currentPage === 'parties'
@@ -359,9 +359,9 @@ export function Navbar() {
                   >
                     <UserPlus className="w-4 h-4" />
                     <span>Parties</span>
-                  </button>
+                  </button>}
 
-                  <button
+                  {hasPermission('transport', 'view') && <button
                     onClick={() => goTo('/transport', { closeMobile: true })}
                     className={`px-4 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                       currentPage === 'transport'
@@ -371,9 +371,9 @@ export function Navbar() {
                   >
                     <Truck className="w-4 h-4" />
                     <span>Transport</span>
-                  </button>
+                  </button>}
 
-                  <button
+                  {hasPermission('orders', 'view') && <button
                     onClick={() => goTo('/orders', { closeMobile: true })}
                     className={`px-4 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                       currentPage === 'orders'
@@ -383,7 +383,7 @@ export function Navbar() {
                   >
                     <Package className="w-4 h-4" />
                     <span>Orders</span>
-                  </button>
+                  </button>}
                 </>
               )}
 
@@ -402,7 +402,7 @@ export function Navbar() {
               <div className="sm:hidden pt-4 border-t border-gray-200 mt-2">
                 <div className="px-4 pb-3">
                   <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
-                  <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+                  <p className="text-xs text-gray-500 capitalize">{roleName}</p>
                 </div>
                 <button
                   onClick={() => {

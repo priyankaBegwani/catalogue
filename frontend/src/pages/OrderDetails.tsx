@@ -16,7 +16,7 @@ import {
   SlidersHorizontal,
   ChevronDown
 } from 'lucide-react';
-import { api, Order } from '../lib/api';
+import { api, Order, FulfillmentStatus, FulfilledQuantity } from '../lib/api';
 import { Breadcrumb } from '../components';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -26,9 +26,11 @@ export default function OrderDetails() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [markedDesigns, setMarkedDesigns] = useState<Set<string>>(new Set());
   const [designImages, setDesignImages] = useState<Record<string, string>>({});
-  const [fulfilledSizes, setFulfilledSizes] = useState<Record<string, Set<string>>>({});
+  // fulfillmentDraft: groupKey -> { status, quantities } — tracks unsaved UI changes
+  const [fulfillmentDraft, setFulfillmentDraft] = useState<Record<string, { status: FulfillmentStatus; quantities: FulfilledQuantity[] }>>({});
+  const [savingFulfillment, setSavingFulfillment] = useState<Set<string>>(new Set());
+  const [fulfillmentSaved, setFulfillmentSaved] = useState<Set<string>>(new Set());
   const [substituteModal, setSubstituteModal] = useState<{ groupKey: string; designNumber: string; color: string; pendingSizes: { size: string; quantity: number }[]; originalDesign?: any } | null>(null);
   const [substituteNotes, setSubstituteNotes] = useState<Record<string, { designs: { designNo: string; color: string; sizes: { size: string; quantity: number }[] }[]; note: string }>>({});
   const [newSubNote, setNewSubNote] = useState('');
@@ -47,8 +49,8 @@ export default function OrderDetails() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ title: string; message: string; onConfirm: () => Promise<void> } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const { user } = useAuth();
-  const canEdit = user?.role === 'admin';
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission('orders', 'edit');
 
   useEffect(() => {
     if (orderId) {
@@ -70,23 +72,21 @@ export default function OrderDetails() {
       
       // Fetch design images for all designs in the order
       await fetchDesignImages(foundOrder);
-      
-      // Load marked designs from localStorage
-      const savedMarks = localStorage.getItem(`order_marks_${orderId}`);
-      if (savedMarks) {
-        setMarkedDesigns(new Set(JSON.parse(savedMarks)));
-      }
-      // Load per-size fulfillment
-      const savedFulfillment = localStorage.getItem(`order_size_fulfillment_${orderId}`);
-      if (savedFulfillment) {
-        try {
-          const parsed: Record<string, string[]> = JSON.parse(savedFulfillment);
-          const converted: Record<string, Set<string>> = {};
-          Object.entries(parsed).forEach(([k, v]) => { converted[k] = new Set(v); });
-          setFulfilledSizes(converted);
-        } catch {}
-      }
-      // Load substitute notes
+
+      // Initialise fulfillment draft from DB data
+      const draft: Record<string, { status: FulfillmentStatus; quantities: FulfilledQuantity[] }> = {};
+      foundOrder.order_items.forEach(item => {
+        const key = `${item.design_number}_${item.color}`;
+        if (!draft[key]) {
+          draft[key] = {
+            status: item.fulfillment_status || 'pending',
+            quantities: item.fulfilled_quantities || []
+          };
+        }
+      });
+      setFulfillmentDraft(draft);
+
+      // Load substitute notes from localStorage
       const savedSubs = localStorage.getItem(`order_substitutes_${orderId}`);
       if (savedSubs) {
         try { setSubstituteNotes(JSON.parse(savedSubs)); } catch {}
@@ -186,65 +186,65 @@ export default function OrderDetails() {
     return Object.values(grouped);
   };
 
-  const saveMarks = (newSet: Set<string>) => {
-    if (orderId) localStorage.setItem(`order_marks_${orderId}`, JSON.stringify(Array.from(newSet)));
-  };
+  // FULFILLMENT_STATUS_ORDER: cycle through statuses on click
+  const FULFILLMENT_CYCLE: FulfillmentStatus[] = ['pending', 'picked', 'ironed', 'ready to dispatch', 'dispatched'];
 
-  const saveFulfillment = (next: Record<string, Set<string>>) => {
-    if (orderId) {
-      const s: Record<string, string[]> = {};
-      Object.entries(next).forEach(([k, v]) => { s[k] = Array.from(v); });
-      localStorage.setItem(`order_size_fulfillment_${orderId}`, JSON.stringify(s));
-    }
-  };
-
-  const toggleSizeFulfilled = (groupKey: string, size: string, allSizes: { size: string; quantity: number }[]) => {
-    setFulfilledSizes(prev => {
-      const groupSizes = new Set(prev[groupKey] || []);
-      if (groupSizes.has(size)) groupSizes.delete(size);
-      else groupSizes.add(size);
-      const next = { ...prev, [groupKey]: groupSizes };
-      saveFulfillment(next);
-      // Auto-mark group complete when all sizes fulfilled
-      const allFulfilled = allSizes.length > 0 && allSizes.every(sq => groupSizes.has(sq.size));
-      setMarkedDesigns(prevMarks => {
-        const newSet = new Set(prevMarks);
-        if (allFulfilled) newSet.add(groupKey);
-        else newSet.delete(groupKey);
-        saveMarks(newSet);
-        return newSet;
+  const cycleSize = (groupKey: string, size: string, allSizes: { size: string; quantity: number }[]) => {
+    setFulfillmentDraft(prev => {
+      const entry = prev[groupKey] || { status: 'pending', quantities: [] };
+      const existing = entry.quantities.find(q => q.size === size);
+      const currentStatus: FulfillmentStatus = existing?.status || 'pending';
+      const nextStatus = FULFILLMENT_CYCLE[(FULFILLMENT_CYCLE.indexOf(currentStatus) + 1) % FULFILLMENT_CYCLE.length];
+      const newQty = allSizes.find(s => s.size === size)?.quantity ?? 0;
+      const newQuantities = entry.quantities.filter(q => q.size !== size);
+      if (nextStatus !== 'pending') {
+        newQuantities.push({ size, quantity: newQty, status: nextStatus });
+      }
+      // Derive group status from all sizes
+      const allStatuses = allSizes.map(s => {
+        const q = newQuantities.find(q => q.size === s.size);
+        return q?.status || 'pending';
       });
-      return next;
+      const groupStatus: FulfillmentStatus =
+        allStatuses.every(s => s === 'dispatched') ? 'dispatched' :
+        allStatuses.some(s => s === 'dispatched') ? 'dispatched' :
+        allStatuses.every(s => s === 'ready to dispatch') ? 'ready to dispatch' :
+        allStatuses.some(s => s === 'ironed' || s === 'ready to dispatch') ? 'ironed' :
+        allStatuses.some(s => s === 'picked') ? 'picked' : 'pending';
+      // Mark draft as dirty (remove from saved set)
+      setFulfillmentSaved(ps => { const n = new Set(ps); n.delete(groupKey); return n; });
+      return { ...prev, [groupKey]: { status: groupStatus, quantities: newQuantities } };
     });
   };
 
-  const markAllSizesFulfilled = (groupKey: string, allSizes: { size: string; quantity: number }[]) => {
-    setFulfilledSizes(prev => {
-      const next = { ...prev, [groupKey]: new Set(allSizes.map(sq => sq.size)) };
-      saveFulfillment(next);
-      return next;
-    });
-    setMarkedDesigns(prev => {
-      const newSet = new Set(prev);
-      newSet.add(groupKey);
-      saveMarks(newSet);
-      return newSet;
+  const setGroupStatus = (groupKey: string, status: FulfillmentStatus, allSizes: { size: string; quantity: number }[]) => {
+    setFulfillmentDraft(prev => {
+      const newQuantities: FulfilledQuantity[] = status === 'pending' ? [] :
+        allSizes.map(s => ({ size: s.size, quantity: s.quantity, status }));
+      setFulfillmentSaved(ps => { const n = new Set(ps); n.delete(groupKey); return n; });
+      return { ...prev, [groupKey]: { status, quantities: newQuantities } };
     });
   };
 
-  const unmarkDesign = (groupKey: string) => {
-    setMarkedDesigns(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(groupKey);
-      saveMarks(newSet);
-      return newSet;
-    });
-    setFulfilledSizes(prev => {
-      const next = { ...prev };
-      delete next[groupKey];
-      saveFulfillment(next);
-      return next;
-    });
+  const saveFulfillmentToDB = async (groupKey: string, group: ReturnType<typeof groupOrderItems>[0]) => {
+    if (!orderId) return;
+    const draft = fulfillmentDraft[groupKey];
+    if (!draft) return;
+    setSavingFulfillment(prev => new Set(prev).add(groupKey));
+    try {
+      // Each item in the group gets the same fulfillment (items are grouped by design+color)
+      await Promise.all(group.items.map(item =>
+        api.updateOrderItemFulfillment(orderId, item.id, draft.status, draft.quantities)
+      ));
+      setFulfillmentSaved(prev => new Set(prev).add(groupKey));
+      // Refresh order to get updated order-level status
+      const updated = await api.getOrderById(orderId);
+      if (updated) setOrder(updated);
+    } catch (err) {
+      console.error('Failed to save fulfillment:', err);
+    } finally {
+      setSavingFulfillment(prev => { const n = new Set(prev); n.delete(groupKey); return n; });
+    }
   };
 
   const handleDeleteDesign = (group: ReturnType<typeof groupOrderItems>[0]) => {
@@ -321,10 +321,35 @@ export default function OrderDetails() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      case 'processing': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'picked': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'part picked': return 'bg-indigo-100 text-indigo-800 border-indigo-300';
+      case 'ironed': return 'bg-purple-100 text-purple-800 border-purple-300';
+      case 'ready to dispatch': return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'part dispatched': return 'bg-orange-100 text-orange-800 border-orange-300';
+      case 'dispatched': return 'bg-green-100 text-green-800 border-green-300';
       case 'completed': return 'bg-green-100 text-green-800 border-green-300';
       case 'cancelled': return 'bg-red-100 text-red-800 border-red-300';
       default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
+  const getSizeStatusColor = (status: FulfillmentStatus) => {
+    switch (status) {
+      case 'picked': return 'bg-blue-50 border-blue-400 text-blue-700';
+      case 'ironed': return 'bg-purple-50 border-purple-400 text-purple-700';
+      case 'ready to dispatch': return 'bg-amber-50 border-amber-400 text-amber-700';
+      case 'dispatched': return 'bg-green-50 border-green-500 text-green-700';
+      default: return 'bg-white border-gray-200 text-gray-700';
+    }
+  };
+
+  const getSizeStatusLabel = (status: FulfillmentStatus) => {
+    switch (status) {
+      case 'picked': return 'P';
+      case 'ironed': return 'I';
+      case 'ready to dispatch': return 'R';
+      case 'dispatched': return '✓';
+      default: return '';
     }
   };
 
@@ -550,15 +575,28 @@ export default function OrderDetails() {
 
       {/* Design Items */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Design Items</h2>
-          <div className="text-sm text-right">
-            <span className="text-gray-500">{groupOrderItems(order.order_items).length} designs</span>
-            {markedDesigns.size > 0 && (
-              <span className="ml-2 text-green-600 font-medium">{markedDesigns.size} completed</span>
-            )}
-          </div>
-        </div>
+        {(() => {
+          const groups = groupOrderItems(order.order_items);
+          const dispatched = groups.filter(g => (fulfillmentDraft[`${g.design_number}_${g.color}`]?.status || 'pending') === 'dispatched').length;
+          const partial = groups.filter(g => {
+            const s = fulfillmentDraft[`${g.design_number}_${g.color}`]?.status || 'pending';
+            return s !== 'pending' && s !== 'dispatched';
+          }).length;
+          return (
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Design Items</h2>
+              <div className="text-sm text-right space-y-0.5">
+                <div className="text-gray-500">{groups.length} design{groups.length !== 1 ? 's' : ''}</div>
+                {dispatched > 0 && (
+                  <div className="text-green-600 font-medium">{dispatched}/{groups.length} dispatched</div>
+                )}
+                {partial > 0 && (
+                  <div className="text-amber-600 font-medium">{partial} in progress</div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {order.order_items.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
@@ -569,16 +607,24 @@ export default function OrderDetails() {
             {groupOrderItems(order.order_items).map((group) => {
             const groupKey = `${group.design_number}_${group.color}`;
             const imageUrl = designImages[groupKey];
-            const isMarked = markedDesigns.has(groupKey);
+            const draft = fulfillmentDraft[groupKey] || { status: 'pending' as FulfillmentStatus, quantities: [] };
+            const isSaving = savingFulfillment.has(groupKey);
+            const isSaved = fulfillmentSaved.has(groupKey);
+            const isDirty = !isSaved;
+            const dispatchedQty = draft.quantities.filter(q => q.status === 'dispatched').reduce((s, q) => s + q.quantity, 0);
+            const dispatchedCount = draft.quantities.filter(q => q.status === 'dispatched').length;
+
+            const cardBorderClass =
+              draft.status === 'dispatched' ? 'border-green-500 bg-green-50' :
+              draft.status === 'ready to dispatch' ? 'border-amber-400 bg-amber-50' :
+              draft.status === 'ironed' ? 'border-purple-400 bg-purple-50' :
+              draft.status === 'picked' ? 'border-blue-400 bg-blue-50' :
+              'border-gray-200 hover:border-gray-300';
 
             return (
               <div
                 key={groupKey}
-                className={`border-2 rounded-lg p-4 sm:p-6 transition-all ${
-                  isMarked 
-                    ? 'border-green-500 bg-green-50' 
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
+                className={`border-2 rounded-lg p-4 sm:p-6 transition-all ${cardBorderClass}`}
               >
                 <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
                   {/* Design Image */}
@@ -608,38 +654,52 @@ export default function OrderDetails() {
                         <div className="mt-2 inline-block bg-primary bg-opacity-10 px-3 py-1 rounded-full">
                           <p className="text-sm font-semibold text-primary">Total: {group.totalQty} pieces</p>
                         </div>
+                        {dispatchedQty > 0 && (
+                          <div className="mt-1 text-xs font-medium text-green-600">
+                            {dispatchedQty} / {group.totalQty} pcs dispatched ({dispatchedCount}/{group.allSizes.length} sizes)
+                          </div>
+                        )}
                       </div>
-                      
+
                       <div className="flex flex-col items-end gap-1.5">
-                        {(() => {
-                          const fulfilled = fulfilledSizes[groupKey] || new Set();
-                          const fulfilledQty = group.allSizes.filter(sq => fulfilled.has(sq.size)).reduce((s, sq) => s + sq.quantity, 0);
-                          if (fulfilledQty === 0 || group.allSizes.length === 0) return null;
-                          const pct = Math.round((fulfilledQty / group.totalQty) * 100);
-                          return (
-                            <span className="text-xs font-medium text-green-600">{fulfilledQty}/{group.totalQty} pcs ({pct}%)</span>
-                          );
-                        })()}
+                        {/* Group status badge */}
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${getStatusColor(draft.status)}`}>
+                          {draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
+                        </span>
+
+                        {/* Quick set-all buttons */}
+                        <div className="flex gap-1 flex-wrap justify-end">
+                          <button
+                            onClick={() => setGroupStatus(groupKey, 'dispatched', group.allSizes)}
+                            className="px-2 py-1 rounded text-xs bg-green-100 text-green-700 hover:bg-green-200 font-medium transition-colors border border-green-200"
+                          >
+                            All Dispatched
+                          </button>
+                          <button
+                            onClick={() => setGroupStatus(groupKey, 'pending', group.allSizes)}
+                            className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 font-medium transition-colors border border-gray-200"
+                          >
+                            Reset
+                          </button>
+                        </div>
+
+                        {/* Save fulfillment button */}
                         <button
-                          onClick={() => {
-                            if (isMarked) {
-                              unmarkDesign(groupKey);
-                            } else {
-                              markAllSizesFulfilled(groupKey, group.allSizes);
-                            }
-                          }}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors shadow-sm ${
-                            isMarked
-                              ? 'bg-green-600 text-white hover:bg-green-700'
-                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          onClick={() => saveFulfillmentToDB(groupKey, group)}
+                          disabled={isSaving}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-sm ${
+                            isSaving ? 'bg-gray-200 text-gray-400 cursor-wait' :
+                            isSaved && !isDirty ? 'bg-green-100 text-green-700 border border-green-300' :
+                            'bg-blue-600 text-white hover:bg-blue-700'
                           }`}
                         >
-                          {isMarked ? (
-                            <><Check className="w-5 h-5" />Completed</>
+                          {isSaving ? (
+                            <><span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />Saving…</>
                           ) : (
-                            <><X className="w-5 h-5" />Mark Complete</>
+                            <><Truck className="w-3.5 h-3.5" />Save Fulfillment</>
                           )}
                         </button>
+
                         {canEdit && (
                           <button
                             onClick={() => handleDeleteDesign(group)}
@@ -655,59 +715,44 @@ export default function OrderDetails() {
 
                     {/* Sizes and Quantities */}
                     <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
-                      <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                           <Package className="w-4 h-4" />
                           Sizes & Quantities
                         </h4>
-                        {group.allSizes.length > 0 && (() => {
-                          const fulfilled = fulfilledSizes[groupKey] || new Set();
-                          const fulfilledCount = group.allSizes.filter(sq => fulfilled.has(sq.size)).length;
-                          return (
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              fulfilledCount === group.allSizes.length
-                                ? 'bg-green-100 text-green-700'
-                                : fulfilledCount > 0
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-200 text-gray-600'
-                            }`}>
-                              {fulfilledCount}/{group.allSizes.length} sizes
-                            </span>
-                          );
-                        })()}
+                        <span className="text-[10px] text-gray-400 font-medium">Tap size to cycle: pending → picked → ironed → ready → dispatched</span>
                       </div>
+
+                      {/* Status legend */}
+                      <div className="flex gap-2 flex-wrap mb-3 text-[10px] font-semibold">
+                        {(['pending', 'picked', 'ironed', 'ready to dispatch', 'dispatched'] as FulfillmentStatus[]).map(s => (
+                          <span key={s} className={`px-1.5 py-0.5 rounded border ${getSizeStatusColor(s)}`}>
+                            {s === 'pending' ? '○' : getSizeStatusLabel(s)} {s}
+                          </span>
+                        ))}
+                      </div>
+
                       {group.allSizes.length > 0 ? (
                         <>
                           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 mb-3">
                             {group.allSizes.map((sq, idx) => {
-                              const fulfilled = fulfilledSizes[groupKey] || new Set();
-                              const isFulfilled = fulfilled.has(sq.size);
+                              const sizeEntry = draft.quantities.find(q => q.size === sq.size);
+                              const sizeStatus: FulfillmentStatus = sizeEntry?.status || 'pending';
                               return (
                                 <div key={idx} className="relative group/size">
                                   <button
                                     type="button"
-                                    onClick={() => toggleSizeFulfilled(groupKey, sq.size, group.allSizes)}
-                                    title={isFulfilled ? 'Click to mark as pending' : 'Click to mark as fulfilled'}
-                                    className={`w-full relative rounded-lg p-3 text-center border-2 transition-all touch-action-manipulation ${
-                                      isFulfilled
-                                        ? 'bg-green-50 border-green-400 shadow-sm'
-                                        : 'bg-white border-gray-200 hover:border-primary hover:shadow-sm'
-                                    }`}
+                                    onClick={() => cycleSize(groupKey, sq.size, group.allSizes)}
+                                    title={`${sq.size}: ${sizeStatus} — click to cycle`}
+                                    className={`w-full relative rounded-lg p-3 text-center border-2 transition-all touch-action-manipulation ${getSizeStatusColor(sizeStatus)}`}
                                     style={{ touchAction: 'manipulation' }}
                                   >
-                                    {isFulfilled && (
-                                      <Check className="w-3 h-3 text-green-500 absolute top-1 right-1" />
+                                    {sizeStatus !== 'pending' && (
+                                      <span className="absolute top-1 right-1 text-[9px] font-bold">{getSizeStatusLabel(sizeStatus)}</span>
                                     )}
-                                    <div className={`text-xs font-semibold uppercase mb-1 ${
-                                      isFulfilled ? 'text-green-600' : 'text-gray-500'
-                                    }`}>
-                                      {sq.size}
-                                    </div>
-                                    <div className={`text-2xl font-bold ${
-                                      isFulfilled ? 'text-green-700' : 'text-gray-900'
-                                    }`}>
-                                      {sq.quantity}
-                                    </div>
+                                    <div className="text-xs font-semibold uppercase mb-1">{sq.size}</div>
+                                    <div className="text-2xl font-bold">{sq.quantity}</div>
+                                    <div className="text-[9px] font-medium mt-0.5 truncate">{sizeStatus === 'ready to dispatch' ? 'ready' : sizeStatus}</div>
                                   </button>
                                   {canEdit && (
                                     <button
@@ -726,8 +771,10 @@ export default function OrderDetails() {
 
                           {/* Pending Summary + Substitute */}
                           {(() => {
-                            const fulfilled = fulfilledSizes[groupKey] || new Set();
-                            const pending = group.allSizes.filter(sq => !fulfilled.has(sq.size));
+                            const pending = group.allSizes.filter(sq => {
+                              const e = draft.quantities.find(q => q.size === sq.size);
+                              return !e || e.status === 'pending';
+                            });
                             const sub = substituteNotes[groupKey];
                             if (pending.length === 0 && !sub) return null;
                             const pendingQty = pending.reduce((s, sq) => s + sq.quantity, 0);

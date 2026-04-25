@@ -12,28 +12,50 @@ import {
   CheckCircle,
   Printer,
   Filter,
-  Download
+  Download,
+  Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api, Order, CreateOrderData, Party, DesignColor } from '../lib/api';
 import { Breadcrumb } from '../components';
+import { useAuth } from '../contexts/AuthContext';
 
 // Pure helpers — no component state dependency, safe to hoist
 const formatDate = (dateString: string) =>
   new Date(dateString).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
 
+const ORDER_STATUS_OPTIONS = [
+  'pending',
+  'picked',
+  'ironed',
+  'ready to dispatch',
+  'dispatched',
+  'part picked',
+  'part dispatched'
+];
+
+const formatStatusLabel = (status: string) =>
+  status
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'pending': return 'bg-yellow-100 text-yellow-800';
-    case 'processing': return 'bg-blue-100 text-blue-800';
-    case 'completed': return 'bg-green-100 text-green-800';
-    case 'cancelled': return 'bg-red-100 text-red-800';
+    case 'picked': return 'bg-blue-100 text-blue-800';
+    case 'part picked': return 'bg-indigo-100 text-indigo-800';
+    case 'ironed': return 'bg-purple-100 text-purple-800';
+    case 'ready to dispatch': return 'bg-amber-100 text-amber-800';
+    case 'part dispatched': return 'bg-orange-100 text-orange-800';
+    case 'dispatched': return 'bg-green-100 text-green-800';
     default: return 'bg-gray-100 text-gray-800';
   }
 };
 
 const Orders: React.FC = () => {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -62,7 +84,10 @@ const Orders: React.FC = () => {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [activeDesignPopover, setActiveDesignPopover] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  
+  const [editingStatusOrderId, setEditingStatusOrderId] = useState<string | null>(null);
+  const [editingStatusValue, setEditingStatusValue] = useState('pending');
+  const [savingStatusOrderId, setSavingStatusOrderId] = useState<string | null>(null);
+
   // Data states
   const [parties, setParties] = useState<Party[]>([]);
   const [designs, setDesigns] = useState<any[]>([]);
@@ -280,15 +305,42 @@ const Orders: React.FC = () => {
   };
 
   const handleCompleteOrder = async (order: Order) => {
-    if (!confirm(`Mark order "${order.order_number}" as completed?`)) return;
+    if (!hasPermission('orders', 'fulfill')) return;
+    if (!confirm(`Mark order "${order.order_number}" as dispatched?`)) return;
 
     try {
-      await api.completeOrder(order);
+      await api.updateOrderStatus(order.id, 'dispatched');
       fetchOrders();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to complete order');
+      setError(err instanceof Error ? err.message : 'Failed to update order status');
     }
   };
+
+  const startStatusEdit = (order: Order) => {
+    if (!hasPermission('orders', 'edit')) return;
+    setEditingStatusOrderId(order.id);
+    setEditingStatusValue(order.status);
+  };
+
+  const cancelStatusEdit = () => {
+    setEditingStatusOrderId(null);
+    setEditingStatusValue('pending');
+  };
+
+  const saveStatusEdit = async (order: Order) => {
+    try {
+      setSavingStatusOrderId(order.id);
+      const response = await api.updateOrderStatus(order.id, editingStatusValue);
+      const updatedOrder = response.order;
+      setOrders(prev => prev.map(existing => existing.id === order.id ? updatedOrder : existing));
+      cancelStatusEdit();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update order status');
+    } finally {
+      setSavingStatusOrderId(null);
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       party_name: '',
@@ -396,7 +448,6 @@ const Orders: React.FC = () => {
       order_remarks: prev.order_remarks.filter((_, i) => i !== remarkIndex)
     }));
   };
-
 
   const getDesignTooltip = (order: Order, designNumber: string) => {
     const itemsForDesign = (order.order_items || []).filter(item => item.design_number === designNumber);
@@ -524,7 +575,7 @@ const Orders: React.FC = () => {
                 ${order.order_items.map(item => {
                   const totalQty = item.sizes_quantities?.reduce((sum, sq) => sum + sq.quantity, 0) || 0;
                   const orderType = item.is_from_size_set 
-                    ? `<span style="background: #e3f2fd; border: 1px solid #2196f3; padding: 3px 8px; border-radius: 3px; font-size: 11px;">📦 Set: ${item.size_set_name || 'Unknown'}</span>`
+                    ? `<span style="background: #e3f2fd; border: 1px solid #2196f3; padding: 3px 8px; border-radius: 3px; font-size: 11px;">📦 ${item.size_set_name || 'Set'}</span>`
                     : `<span style="background: #f3e5f5; border: 1px solid #9c27b0; padding: 3px 8px; border-radius: 3px; font-size: 11px;">🔢 Individual</span>`;
                   return `
                     <tr>
@@ -789,14 +840,16 @@ const Orders: React.FC = () => {
         
         {/* Compact Action Buttons - Icon-based */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="bg-blue-600 text-white p-2 sm:px-3 sm:py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center group relative"
-            title="New Order"
-          >
-            <Plus className="h-5 w-5" />
-            <span className="hidden lg:inline ml-2 text-sm">New</span>
-          </button>
+          {hasPermission('orders', 'create') && (
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="bg-blue-600 text-white p-2 sm:px-3 sm:py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center group relative"
+              title="New Order"
+            >
+              <Plus className="h-5 w-5" />
+              <span className="hidden lg:inline ml-2 text-sm">New</span>
+            </button>
+          )}
           
           <button 
             onClick={printAllOrders}
@@ -1010,10 +1063,9 @@ const Orders: React.FC = () => {
                       className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">All</option>
-                      <option value="pending">Pending</option>
-                      <option value="processing">Processing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
+                      {ORDER_STATUS_OPTIONS.map((statusOption) => (
+                        <option key={statusOption} value={statusOption}>{formatStatusLabel(statusOption)}</option>
+                      ))}
                     </select>
                   )}
                 </th>
@@ -1024,18 +1076,22 @@ const Orders: React.FC = () => {
               {currentOrders.map((order) => (
                 <tr 
                   key={order.id} 
-                  className="transition-colors duration-200 hover:bg-gray-50"
+                  className="transition-colors duration-200 hover:bg-gray-50 cursor-pointer"
+                  onClick={() => navigate(`/orders/${order.id}`)}
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center">
                       <Package className="mr-2 h-4 w-4 text-gray-400" />
                       <div>
-                        <button
-                          onClick={() => navigate(`/orders/${order.id}`)}
-                          className="rounded bg-gray-100 px-2 py-1 font-mono text-sm font-medium text-gray-900 hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                        <span
+                          className="rounded bg-gray-100 px-2 py-1 font-mono text-sm font-medium text-gray-900 hover:bg-primary hover:text-white transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/orders/${order.id}`);
+                          }}
                         >
                           {order.order_number}
-                        </button>
+                        </span>
                         {/* Show order remarks if they exist */}
                         {order.order_remarks && order.order_remarks.length > 0 && (
                           <div className="mt-1 text-xs text-gray-500">
@@ -1133,9 +1189,60 @@ const Orders: React.FC = () => {
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                      {order.status}
-                    </span>
+                    {hasPermission('orders', 'edit') && editingStatusOrderId === order.id ? (
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={editingStatusValue}
+                          onChange={(e) => setEditingStatusValue(e.target.value)}
+                          className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                          disabled={savingStatusOrderId === order.id}
+                        >
+                          {ORDER_STATUS_OPTIONS.map((statusOption) => (
+                            <option key={statusOption} value={statusOption}>{formatStatusLabel(statusOption)}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            saveStatusEdit(order);
+                          }}
+                          disabled={savingStatusOrderId === order.id}
+                          className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800 disabled:opacity-50"
+                          title="Save status"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (hasPermission('orders', 'edit')) {
+                              startStatusEdit(order);
+                            }
+                          }}
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)} ${hasPermission('orders', 'edit') ? 'cursor-pointer' : 'cursor-default'}`}
+                          disabled={!hasPermission('orders', 'edit')}
+                        >
+                          {formatStatusLabel(order.status)}
+                        </button>
+                        {(() => {
+                          const items = order.order_items || [];
+                          if (items.length === 0) return null;
+                          const dispatched = items.filter(i => i.fulfillment_status === 'dispatched').length;
+                          const inProgress = items.filter(i => i.fulfillment_status && i.fulfillment_status !== 'pending' && i.fulfillment_status !== 'dispatched').length;
+                          if (dispatched === 0 && inProgress === 0) return null;
+                          return (
+                            <div className="text-[10px] text-gray-500 leading-tight">
+                              {dispatched > 0 && <span className="text-green-600 font-medium">{dispatched}/{items.length} dispatched</span>}
+                              {inProgress > 0 && <span className="ml-1 text-amber-600 font-medium">{inProgress} in progress</span>}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm font-medium">
                     <div className="flex space-x-2">
@@ -1149,19 +1256,19 @@ const Orders: React.FC = () => {
                       >
                         <Printer className="h-4 w-4" />
                       </button>
-                      {order.status !== 'completed' && (
+                      {hasPermission('orders', 'fulfill') && order.status !== 'dispatched' && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleCompleteOrder(order);
                           }}
                           className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50"
-                          title="Mark as completed"
+                          title="Mark as dispatched"
                         >
                           <CheckCircle className="h-4 w-4" />
                         </button>
                       )}
-                      <button
+                      {hasPermission('orders', 'edit') && <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEdit(order);
@@ -1170,8 +1277,8 @@ const Orders: React.FC = () => {
                         title="Edit order"
                       >
                         <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
+                      </button>}
+                      {hasPermission('orders', 'delete') && <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(order.id, order.order_number);
@@ -1180,7 +1287,7 @@ const Orders: React.FC = () => {
                         title="Delete order"
                       >
                         <Trash2 className="h-4 w-4" />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>
@@ -1313,10 +1420,9 @@ const Orders: React.FC = () => {
                     className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-transparent focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">All status</option>
-                    <option value="pending">Pending</option>
-                    <option value="processing">Processing</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
+                    {ORDER_STATUS_OPTIONS.map((statusOption) => (
+                      <option key={statusOption} value={statusOption}>{formatStatusLabel(statusOption)}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1331,21 +1437,78 @@ const Orders: React.FC = () => {
           ) : (
             <div className="space-y-4 p-4">
               {currentOrders.map((order) => (
-                <div key={order.id} className="rounded-lg border bg-gray-50 p-4">
+                <div 
+                  key={order.id} 
+                  className="rounded-lg border bg-gray-50 p-4 cursor-pointer"
+                  onClick={() => navigate(`/orders/${order.id}`)}
+                >
                   {/* Order Header */}
                   <div className="mb-3 flex items-center justify-between">
                     <div className="flex items-center">
                       <Package className="mr-2 h-4 w-4 text-gray-400" />
-                      <button
-                        onClick={() => navigate(`/orders/${order.id}`)}
-                        className="rounded bg-white px-2 py-1 font-mono text-sm font-medium text-gray-900 hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                      <span
+                        className="rounded bg-white px-2 py-1 font-mono text-sm font-medium text-gray-900 hover:bg-primary hover:text-white transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/orders/${order.id}`);
+                        }}
                       >
                         {order.order_number}
-                      </button>
+                      </span>
                     </div>
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                      {order.status}
-                    </span>
+                    {hasPermission('orders', 'edit') && editingStatusOrderId === order.id ? (
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={editingStatusValue}
+                          onChange={(e) => setEditingStatusValue(e.target.value)}
+                          className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                          disabled={savingStatusOrderId === order.id}
+                        >
+                          {ORDER_STATUS_OPTIONS.map((statusOption) => (
+                            <option key={statusOption} value={statusOption}>{formatStatusLabel(statusOption)}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            saveStatusEdit(order);
+                          }}
+                          disabled={savingStatusOrderId === order.id}
+                          className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800 disabled:opacity-50"
+                          title="Save status"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-end gap-0.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (hasPermission('orders', 'edit')) {
+                              startStatusEdit(order);
+                            }
+                          }}
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)} ${hasPermission('orders', 'edit') ? 'cursor-pointer' : 'cursor-default'}`}
+                          disabled={!hasPermission('orders', 'edit')}
+                        >
+                          {formatStatusLabel(order.status)}
+                        </button>
+                        {(() => {
+                          const items = order.order_items || [];
+                          const dispatched = items.filter(i => i.fulfillment_status === 'dispatched').length;
+                          const inProgress = items.filter(i => i.fulfillment_status && i.fulfillment_status !== 'pending' && i.fulfillment_status !== 'dispatched').length;
+                          if (dispatched === 0 && inProgress === 0) return null;
+                          return (
+                            <div className="text-[10px] leading-tight text-right">
+                              {dispatched > 0 && <span className="text-green-600 font-medium">{dispatched}/{items.length} dispatched</span>}
+                              {inProgress > 0 && <span className="ml-1 text-amber-600 font-medium">{inProgress} in progress</span>}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
 
                   {/* Party Name */}
@@ -1365,6 +1528,8 @@ const Orders: React.FC = () => {
                             <span key={popoverKey} className="relative inline-flex items-center">
                               <span
                                 className="cursor-pointer font-mono text-xs text-blue-600 hover:underline"
+                                onMouseEnter={() => setActiveDesignPopover(popoverKey)}
+                                onMouseLeave={() => setActiveDesignPopover(null)}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setActiveDesignPopover(prev => (prev === popoverKey ? null : popoverKey));
@@ -1452,37 +1617,49 @@ const Orders: React.FC = () => {
                   )}
 
                   {/* Actions */}
-                  <div className="flex justify-end space-x-2 border-t pt-2">
+                  <div className="flex justify-end space-x-2 border-t pt-2" onClick={(e) => e.stopPropagation()}>
                     <button
-                      onClick={() => printOrder(order)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        printOrder(order);
+                      }}
                       className="text-purple-600 hover:text-purple-900 p-2 rounded hover:bg-purple-50"
                       title="Print order"
                     >
                       <Printer className="h-4 w-4" />
                     </button>
-                    {order.status !== 'completed' && (
+                    {hasPermission('orders', 'fulfill') && order.status !== 'dispatched' && (
                       <button
-                        onClick={() => handleCompleteOrder(order)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCompleteOrder(order);
+                        }}
                         className="text-green-600 hover:text-green-900 p-2 rounded hover:bg-green-50"
-                        title="Mark as completed"
+                        title="Mark as dispatched"
                       >
                         <CheckCircle className="h-4 w-4" />
                       </button>
                     )}
-                    <button
-                      onClick={() => handleEdit(order)}
+                    {hasPermission('orders', 'edit') && <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(order);
+                      }}
                       className="text-blue-600 hover:text-blue-900 p-2 rounded hover:bg-blue-50"
                       title="Edit order"
                     >
                       <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(order.id, order.order_number)}
+                    </button>}
+                    {hasPermission('orders', 'delete') && <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(order.id, order.order_number);
+                      }}
                       className="text-red-600 hover:text-red-900 p-2 rounded hover:bg-red-50"
                       title="Delete order"
                     >
                       <Trash2 className="h-4 w-4" />
-                    </button>
+                    </button>}
                   </div>
                 </div>
               ))}
@@ -1492,7 +1669,7 @@ const Orders: React.FC = () => {
       </div>
 
       {/* Create/Edit Order Modal */}
-      {showCreateForm && (
+      {showCreateForm && hasPermission('orders', 'create') && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-6">
             <h2 className="mb-4 text-xl font-bold text-gray-900">
@@ -1626,10 +1803,9 @@ const Orders: React.FC = () => {
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <option value="pending">Pending</option>
-                      <option value="processing">Processing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
+                      {ORDER_STATUS_OPTIONS.map((statusOption) => (
+                        <option key={statusOption} value={statusOption}>{formatStatusLabel(statusOption)}</option>
+                      ))}
                     </select>
                   </div>
                 )}

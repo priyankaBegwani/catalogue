@@ -84,7 +84,7 @@ function AppContent() {
           </div>
         }>
         <Routes>
-        <Route path="/" element={<Navigate to={isAdmin ? '/admin' : '/catalogue'} replace />} />
+        <Route path="/" element={<Navigate to={hasPermission('dashboard', 'view') ? '/dashboard' : hasPermission('catalogue', 'view') ? '/catalogue' : '/profile'} replace />} />
         <Route
           path="/dashboard"
           element={hasPermission('dashboard', 'view') ? <Dashboard /> : <Navigate to="/catalogue" replace />}
@@ -93,24 +93,24 @@ function AppContent() {
           path="/admin"
           element={isAdmin ? <AdminDashboard /> : <Navigate to="/catalogue" replace />}
         />
-        <Route path="/catalogue" element={<Catalogue />} />
-        <Route path="/designs" element={<DesignManagement />} />
-        <Route path="/analytics/cart-wishlist" element={<CartWishlistAnalytics />} />
-        <Route path="/users" element={<UserManagement />} />
-        <Route path="/parties" element={<PartyEntry />} />
-        <Route path="/transport" element={<TransportEntry />} />
-        <Route path="/orders" element={<Orders />} />
-        <Route path="/orders/:orderId" element={<OrderDetails />} />
+        <Route path="/catalogue" element={hasPermission('catalogue', 'view') ? <Catalogue /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/designs" element={hasPermission('designs', 'view') ? <DesignManagement /> : <Navigate to="/catalogue" replace />} />
+        <Route path="/analytics/cart-wishlist" element={hasPermission('analytics', 'view_carts') ? <CartWishlistAnalytics /> : <Navigate to="/catalogue" replace />} />
+        <Route path="/users" element={hasPermission('users', 'view') ? <UserManagement /> : <Navigate to="/catalogue" replace />} />
+        <Route path="/parties" element={hasPermission('parties', 'view') ? <PartyEntry /> : <Navigate to="/catalogue" replace />} />
+        <Route path="/transport" element={hasPermission('transport', 'view') ? <TransportEntry /> : <Navigate to="/catalogue" replace />} />
+        <Route path="/orders" element={hasPermission('orders', 'view') ? <Orders /> : <Navigate to="/catalogue" replace />} />
+        <Route path="/orders/:orderId" element={hasPermission('orders', 'view') ? <OrderDetails /> : <Navigate to="/catalogue" replace />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/contact" element={<ContactUs />} />
         <Route path="/about" element={<AboutUs />} />
         <Route
           path="/settings"
-          element={isAdmin ? <Settings /> : <Navigate to="/catalogue" replace />}
+          element={hasPermission('settings', 'view') ? <Settings /> : <Navigate to="/catalogue" replace />}
         />
         <Route
           path="/pricing-tiers"
-          element={isAdmin ? <PricingTiers /> : <Navigate to="/catalogue" replace />}
+          element={hasPermission('pricing', 'view') ? <PricingTiers /> : <Navigate to="/catalogue" replace />}
         />
         <Route path="*" element={<Navigate to="/catalogue" replace />} />
         </Routes>
@@ -118,7 +118,7 @@ function AppContent() {
       </main>
       
       {/* Tawk.to Chat Widget - Only for non-admin users (retailers and guests) */}
-      {!isAdmin && <TawkToChat enabled={true} />}
+      {!hasPermission('users', 'manage_roles') && <TawkToChat enabled={true} />}
     </div>
   );
 }

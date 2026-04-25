@@ -7,6 +7,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   isAdmin: boolean;
   hasPermission: (module: keyof RolePermissions, action: string) => boolean;
   permissions: RolePermissions | null;
@@ -18,6 +19,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refreshUser = useCallback(async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      setUser(null);
+      return;
+    }
+
+    const data = await api.getCurrentUser();
+    setUser(data.profile);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -91,11 +103,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading, 
     login, 
     logout, 
+    refreshUser,
     isAdmin, 
     hasPermission: checkPermission,
     permissions,
     roleName
-  }), [user, loading, login, logout, isAdmin, checkPermission, permissions, roleName]);
+  }), [user, loading, login, logout, refreshUser, isAdmin, checkPermission, permissions, roleName]);
 
   return (
     <AuthContext.Provider value={value}>

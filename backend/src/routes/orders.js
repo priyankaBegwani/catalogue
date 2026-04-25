@@ -12,6 +12,24 @@ import {
 
 const router = express.Router();
 
+const ALLOWED_ORDER_STATUSES = [
+  'pending',
+  'picked',
+  'ironed',
+  'ready to dispatch',
+  'dispatched',
+  'part picked',
+  'part dispatched'
+];
+
+const ITEM_FULFILLMENT_STATUSES = [
+  'pending',
+  'picked',
+  'ironed',
+  'ready to dispatch',
+  'dispatched'
+];
+
 // Shared select query for fetching complete orders
 const ORDER_SELECT = `
   *,
@@ -19,7 +37,9 @@ const ORDER_SELECT = `
     id,
     design_number,
     color,
-    sizes_quantities
+    sizes_quantities,
+    fulfillment_status,
+    fulfilled_quantities
   ),
   order_remarks (
     id,
@@ -27,6 +47,14 @@ const ORDER_SELECT = `
     created_at
   )
 `;
+
+function validateOrderStatus(status) {
+  if (!status || !ALLOWED_ORDER_STATUSES.includes(String(status).trim().toLowerCase())) {
+    throw new AppError(`Invalid order status. Allowed values: ${ALLOWED_ORDER_STATUSES.join(', ')}`, 400);
+  }
+
+  return String(status).trim().toLowerCase();
+}
 
 /**
  * Validate and filter order items + remarks.
@@ -424,11 +452,13 @@ router.post('/', authenticateUser, asyncHandler(async (req, res) => {
     expected_delivery_date, 
     transport, 
     remarks, 
+    status,
     order_items, 
     order_remarks 
   } = req.body;
 
   const { validItems } = validateOrderPayload({ party_name, order_items, order_remarks });
+  const normalizedStatus = status ? validateOrderStatus(status) : 'pending';
 
   // Validate party_id if provided
   if (party_id) {
@@ -444,7 +474,8 @@ router.post('/', authenticateUser, asyncHandler(async (req, res) => {
       date_of_order: date_of_order || new Date().toISOString().split('T')[0],
       expected_delivery_date: expected_delivery_date || null,
       transport: transport || '',
-      remarks: remarks || ''
+      remarks: remarks || '',
+      status: normalizedStatus
     }])
     .select()
     .single();
@@ -491,8 +522,25 @@ router.put('/:id', authenticateUser, asyncHandler(async (req, res) => {
   const { party_name, date_of_order, expected_delivery_date, transport, remarks, status, order_items, order_remarks } = req.body;
 
   const { validItems } = validateOrderPayload({ party_name, order_items, order_remarks });
+  const isAdmin = req.profile?.user_roles?.role_name === 'Admin';
+  const normalizedStatus = status ? validateOrderStatus(status) : 'pending';
 
-  const { data: order, error: orderError } = await supabase
+  let existingOrderQuery = supabase.from('orders').select('id, status').eq('id', id);
+  if (!isAdmin) {
+    existingOrderQuery = existingOrderQuery.eq('user_id', req.user.id);
+  }
+
+  const { data: existingOrder, error: existingOrderError } = await existingOrderQuery.single();
+
+  if (existingOrderError || !existingOrder) {
+    throw new AppError('Order not found or you do not have permission to update it', 404);
+  }
+
+  if (!isAdmin && status && normalizedStatus !== existingOrder.status) {
+    throw new AppError('Only admins can change order status', 403);
+  }
+
+  let updateQuery = supabase
     .from('orders')
     .update({
       party_name,
@@ -500,10 +548,16 @@ router.put('/:id', authenticateUser, asyncHandler(async (req, res) => {
       expected_delivery_date: expected_delivery_date || null,
       transport: transport || '',
       remarks: remarks || '',
-      status: status || 'pending',
+      status: status ? normalizedStatus : existingOrder.status,
       updated_at: new Date().toISOString()
     })
-    .eq('id', id)
+    .eq('id', id);
+
+  if (!isAdmin) {
+    updateQuery = updateQuery.eq('user_id', req.user.id);
+  }
+
+  const { data: order, error: orderError } = await updateQuery
     .select()
     .single();
 
@@ -684,6 +738,81 @@ router.patch('/:orderId/items/:itemId', authenticateUser, asyncHandler(async (re
   }
 
   res.json({ message: 'Order item updated', item: data });
+}));
+
+// Update fulfillment for a single order item (per-size dispatch tracking)
+router.patch('/:orderId/items/:itemId/fulfillment', authenticateUser, asyncHandler(async (req, res) => {
+  const { orderId, itemId } = req.params;
+  const { fulfillment_status, fulfilled_quantities } = req.body;
+
+  // Validate fulfillment_status
+  if (!fulfillment_status || !ITEM_FULFILLMENT_STATUSES.includes(String(fulfillment_status).trim().toLowerCase())) {
+    throw new AppError(`Invalid fulfillment status. Allowed: ${ITEM_FULFILLMENT_STATUSES.join(', ')}`, 400);
+  }
+
+  // Validate fulfilled_quantities is an array
+  if (!Array.isArray(fulfilled_quantities)) {
+    throw new AppError('fulfilled_quantities must be an array', 400);
+  }
+
+  // Verify order is accessible
+  let orderQuery = supabase.from('orders').select('id, status').eq('id', orderId);
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
+    orderQuery = orderQuery.eq('user_id', req.user.id);
+  }
+  const { data: order, error: orderError } = await orderQuery.single();
+  if (orderError || !order) {
+    throw new AppError('Order not found or access denied', 404);
+  }
+
+  // Update the item fulfillment
+  const { data: updatedItem, error: itemError } = await supabase
+    .from('order_items')
+    .update({
+      fulfillment_status: String(fulfillment_status).trim().toLowerCase(),
+      fulfilled_quantities
+    })
+    .eq('id', itemId)
+    .eq('order_id', orderId)
+    .select()
+    .single();
+
+  if (itemError || !updatedItem) {
+    throw new AppError('Failed to update item fulfillment', 500, { dbError: itemError?.message });
+  }
+
+  // Fetch all items to recalculate order-level status
+  const { data: allItems, error: allItemsError } = await supabase
+    .from('order_items')
+    .select('fulfillment_status')
+    .eq('order_id', orderId);
+
+  if (!allItemsError && allItems && allItems.length > 0) {
+    const statuses = allItems.map(i => i.fulfillment_status || 'pending');
+    const allDispatched = statuses.every(s => s === 'dispatched');
+    const someDispatched = statuses.some(s => s === 'dispatched');
+    const somePicked = statuses.some(s => s === 'picked' || s === 'ironed' || s === 'ready to dispatch');
+    const allPending = statuses.every(s => s === 'pending');
+
+    let newOrderStatus = order.status;
+    if (allDispatched) {
+      newOrderStatus = 'dispatched';
+    } else if (someDispatched) {
+      newOrderStatus = 'part dispatched';
+    } else if (somePicked && !allPending) {
+      newOrderStatus = 'part picked';
+    }
+    // Don't downgrade if admin explicitly set a higher status manually
+    const statusRank = { 'pending': 0, 'part picked': 1, 'picked': 1, 'ironed': 2, 'ready to dispatch': 3, 'part dispatched': 4, 'dispatched': 5 };
+    const currentRank = statusRank[order.status] ?? 0;
+    const computedRank = statusRank[newOrderStatus] ?? 0;
+    if (computedRank >= currentRank || allDispatched) {
+      await supabase.from('orders').update({ status: newOrderStatus, updated_at: new Date().toISOString() }).eq('id', orderId);
+    }
+  }
+
+  const completeOrder = await fetchCompleteOrder(orderId);
+  res.json({ message: 'Fulfillment updated', item: updatedItem, order: completeOrder });
 }));
 
 // Delete order (cascades to order_items)

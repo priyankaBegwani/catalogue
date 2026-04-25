@@ -54,7 +54,7 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
       setTransportOptions(transports);
 
       // If user is admin or has no party_id, fetch all parties for selection
-      if (user?.role === 'admin' || !user?.party_id) {
+      if (user?.user_roles?.role_name === 'Admin' || !user?.party_id) {
         const partiesResponse = await api.fetchParties();
         setPartyList(partiesResponse.parties || []);
       } else if (user?.party_id) {
@@ -231,7 +231,7 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
               )}
 
               {/* Party Selection Dropdown (for admin or users without party) */}
-              {(user?.role === 'admin' || !user?.party_id) && partyList.length > 0 && (
+              {(user?.user_roles?.role_name === 'Admin' || !user?.party_id) && partyList.length > 0 && (
                 <div>
                   <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
                     <Package className="w-4 h-4" />

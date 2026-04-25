@@ -291,7 +291,7 @@ function sanitizeCatalogueDesigns(designs: Design[]) {
 }
 
 export function Catalogue() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, hasPermission } = useAuth();
   const branding = useBranding();
   
   // Check if user has access to special brands (Indiecraft, Babumoshai)
@@ -1224,6 +1224,7 @@ export function Catalogue() {
   };
 
   const openAddToCartModal = (design: Design, colorIndex: number) => {
+    if (!hasPermission('catalogue', 'order')) return;
     setAddCartDesign(design);
     setAddCartColorIndex(colorIndex);
     setShowAddToCartModal(true);
@@ -1794,7 +1795,7 @@ export function Catalogue() {
       )}
 
       {/* Mobile: Bottom Fixed Filter & Sort Buttons - Two separate buttons */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-2xl">
+      <div className={`lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-2xl ${(showAddToCartModal || showShareDialog || selectedDesign) ? 'hidden' : ''}`}>
         <div className="flex gap-2 p-3">
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -1828,8 +1829,10 @@ interface DesignCardProps {
   onToggleSelection?: () => void;
   onShareClick?: (design: Design) => void;
   onAddToCart?: (design: Design, colorIndex: number) => void;
-}function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection, onShareClick, onAddToCart }: DesignCardProps) {
-  const { user, isAdmin } = useAuth();
+}
+
+function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected = false, onToggleSelection, onShareClick, onAddToCart }: DesignCardProps) {
+  const { user, isAdmin, hasPermission } = useAuth();
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -1840,6 +1843,7 @@ interface DesignCardProps {
   const selectedColorImages = selectedColor?.image_urls || [];
   const firstImage = selectedColorImages[currentImageIndex] || selectedColorImages[0];
   const isAuthenticated = !!user;
+  const canOrder = hasPermission('catalogue', 'order');
   const showPriceToCustomers = localStorage.getItem('show_price_to_customers') !== 'false';
   const shouldShowPrice = isAdmin || (isAuthenticated && showPriceToCustomers);
 
@@ -2216,7 +2220,7 @@ interface DesignCardProps {
 
       <div className="px-3 pb-3 sm:px-4 sm:pb-4">
         <div className="pt-1">
-          {isAuthenticated && onAddToCart ? (
+          {isAuthenticated && canOrder && onAddToCart ? (
             <div className="flex items-center gap-2.5">
               <div className="flex items-center gap-2.5">
                 <button
@@ -2289,11 +2293,9 @@ interface DesignQuickViewProps {
 }
 
 function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProps) {
-  const [currentDesign, setCurrentDesign] = useState(initialDesign);
-  const [designHistory, setDesignHistory] = useState<Design[]>([]);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, hasPermission } = useAuth();
   const isAuthenticated = !!user;
+  const canOrder = hasPermission('catalogue', 'order');
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [sizeQuantities, setSizeQuantities] = useState<Record<string, number>>({});
@@ -2432,8 +2434,8 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
         const profile = await api.getProfile();
         setUserProfile(profile);
         
-        // Load size sets if user is a retailer or admin
-        if (profile.role === 'retailer' || profile.role === 'admin') {
+        // Load size sets for users who can order from catalogue
+        if (hasPermission('catalogue', 'order')) {
           const sets = await api.getSizeSets();
           setSizeSets(sets);
         }
@@ -2442,7 +2444,7 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
       }
     };
     loadUserData();
-  }, []);
+  }, [hasPermission]);
 
   // Load similar designs based on category and style
   useEffect(() => {
@@ -3356,7 +3358,7 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
               {/* Action Buttons */}
               {selectedColor && (
                 <div className="space-y-3">
-                  {isAuthenticated ? (
+                  {isAuthenticated && canOrder ? (
                     <>
                       <button
                         onClick={handleAddToCart}
@@ -3386,16 +3388,18 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
                       <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2 sm:mb-3">
                         <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                       </div>
-                      <p className="text-sm sm:text-base font-bold text-gray-900 mb-1 sm:mb-2">Login to Place Order</p>
+                      <p className="text-sm sm:text-base font-bold text-gray-900 mb-1 sm:mb-2">{isAuthenticated ? 'Ordering Not Allowed' : 'Login to Place Order'}</p>
                       <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4">
-                        Access pricing, add to cart, and manage your wishlist
+                        {isAuthenticated ? 'Your role does not currently have permission to place orders.' : 'Access pricing, add to cart, and manage your wishlist'}
                       </p>
-                      <a
-                        href="/login"
-                        className="inline-block bg-primary text-white px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary/90 hover:shadow-lg transition-all"
-                      >
-                        Login / Sign Up
-                      </a>
+                      {!isAuthenticated && (
+                        <a
+                          href="/login"
+                          className="inline-block bg-primary text-white px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary/90 hover:shadow-lg transition-all"
+                        >
+                          Login / Sign Up
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>

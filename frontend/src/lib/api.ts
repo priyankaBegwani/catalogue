@@ -352,6 +352,14 @@ export interface TransportListResponse {
   transportOptions: Transport[];
 }
 
+export type FulfillmentStatus = 'pending' | 'picked' | 'ironed' | 'ready to dispatch' | 'dispatched';
+
+export interface FulfilledQuantity {
+  size: string;
+  quantity: number;
+  status: FulfillmentStatus;
+}
+
 export interface OrderItem {
   id: string;
   design_number: string;
@@ -359,6 +367,8 @@ export interface OrderItem {
   sizes_quantities: { size: string; quantity: number }[];
   is_from_size_set?: boolean;
   size_set_name?: string | null;
+  fulfillment_status: FulfillmentStatus;
+  fulfilled_quantities: FulfilledQuantity[];
 }
 
 export interface OrderRemark {
@@ -953,6 +963,10 @@ class ApiClient {
     return this.request(`/api/orders/${id}`, { method: 'PUT', body: orderData, errorMsg: 'Failed to update order' });
   }
 
+  async updateOrderStatus(id: string, status: string): Promise<{ message: string; order: Order }> {
+    return this.request(`/api/orders/${id}/status`, { method: 'PATCH', body: { status }, errorMsg: 'Failed to update order status' });
+  }
+
   async deleteOrder(id: string): Promise<void> {
     return this.request(`/api/orders/${id}`, { method: 'DELETE', errorMsg: 'Failed to delete order' });
   }
@@ -967,6 +981,19 @@ class ApiClient {
 
   async addItemsToOrder(orderId: string, items: { design_number: string; color: string; sizes_quantities: { size: string; quantity: number }[] }[]): Promise<{ items: OrderItem[] }> {
     return this.request(`/api/orders/${orderId}/items`, { method: 'POST', body: { items }, errorMsg: 'Failed to add items to order' });
+  }
+
+  async updateOrderItemFulfillment(
+    orderId: string,
+    itemId: string,
+    fulfillment_status: FulfillmentStatus,
+    fulfilled_quantities: FulfilledQuantity[]
+  ): Promise<{ message: string; item: OrderItem; order: Order }> {
+    return this.request(`/api/orders/${orderId}/items/${itemId}/fulfillment`, {
+      method: 'PATCH',
+      body: { fulfillment_status, fulfilled_quantities },
+      errorMsg: 'Failed to update item fulfillment'
+    });
   }
 
   async completeOrder(order: Order): Promise<Order> {

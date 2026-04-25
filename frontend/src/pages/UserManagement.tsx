@@ -6,10 +6,12 @@ import { ErrorAlert, Breadcrumb } from '../components';
 import { RolesTab } from '../components/roles/RolesTab';
 import { RoleFormModal } from '../components/roles/RoleFormModal';
 import { PartyAssociationsModal } from '../components/users/PartyAssociationsModal';
+import { useAuth } from '../contexts/AuthContext';
 
 type TabType = 'users' | 'login-history' | 'inactive-users' | 'roles';
 
 export function UserManagement() {
+  const { hasPermission, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('users');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loginHistory, setLoginHistory] = useState<LoginHistory[]>([]);
@@ -133,18 +135,19 @@ export function UserManagement() {
         await api.createRole(roleData);
       }
       await loadRoles();
+      await refreshUser();
       setShowRoleModal(false);
       setEditingRole(null);
     } catch (err) {
       throw err;
     }
-  }, [editingRole, loadRoles]);
+  }, [editingRole, loadRoles, refreshUser]);
 
   const tabs = [
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'login-history', label: 'Login History', icon: Clock },
-    { id: 'inactive-users', label: 'Inactive Users', icon: UserX },
-    { id: 'roles', label: 'User Roles', icon: Shield },
+    ...(hasPermission('users', 'view') ? [{ id: 'users', label: 'Users', icon: Users }] : []),
+    ...(hasPermission('users', 'view') ? [{ id: 'login-history', label: 'Login History', icon: Clock }] : []),
+    ...(hasPermission('users', 'view') ? [{ id: 'inactive-users', label: 'Inactive Users', icon: UserX }] : []),
+    ...(hasPermission('users', 'manage_roles') ? [{ id: 'roles', label: 'User Roles', icon: Shield }] : []),
   ];
 
   if (loading && (users.length === 0 && loginHistory.length === 0 && inactiveUsers.length === 0)) {
@@ -165,7 +168,7 @@ export function UserManagement() {
           <p className="text-sm sm:text-base text-gray-600 mt-1">Manage users and monitor activity</p>
         </div>
 
-        {activeTab === 'users' && (
+        {activeTab === 'users' && hasPermission('users', 'create') && (
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center space-x-2 bg-primary text-white px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base rounded-lg font-semibold hover:bg-opacity-90 transition duration-200 w-full sm:w-auto justify-center"
@@ -202,7 +205,7 @@ export function UserManagement() {
       <ErrorAlert message={error} onDismiss={() => setError('')} className="mb-6" />
 
       {/* Tab Content */}
-      {activeTab === 'users' && (
+      {activeTab === 'users' && hasPermission('users', 'view') && (
         <UsersTab
           users={users}
           loading={loading}
@@ -212,7 +215,7 @@ export function UserManagement() {
         />
       )}
 
-      {activeTab === 'login-history' && (
+      {activeTab === 'login-history' && hasPermission('users', 'view') && (
         <LoginHistoryTab
           loginHistory={loginHistory}
           loading={loading}
@@ -221,7 +224,7 @@ export function UserManagement() {
         />
       )}
 
-      {activeTab === 'inactive-users' && (
+      {activeTab === 'inactive-users' && hasPermission('users', 'view') && (
         <InactiveUsersTab
           inactiveUsers={inactiveUsers}
           loading={loading}
@@ -231,7 +234,7 @@ export function UserManagement() {
         />
       )}
 
-      {activeTab === 'roles' && (
+      {activeTab === 'roles' && hasPermission('users', 'manage_roles') && (
         <RolesTab
           roles={roles}
           loading={loading}
@@ -243,7 +246,7 @@ export function UserManagement() {
         />
       )}
 
-      {showCreateModal && (
+      {showCreateModal && hasPermission('users', 'create') && (
         <CreateUserModal
           onClose={() => setShowCreateModal(false)}
           onSuccess={() => {
@@ -253,7 +256,7 @@ export function UserManagement() {
         />
       )}
 
-      {editingUser && (
+      {editingUser && hasPermission('users', 'edit') && (
         <EditUserModal
           user={editingUser}
           onClose={() => setEditingUser(null)}
@@ -264,7 +267,7 @@ export function UserManagement() {
         />
       )}
 
-      {showRoleModal && (
+      {showRoleModal && hasPermission('users', 'manage_roles') && (
         <RoleFormModal
           role={editingRole}
           onClose={() => {
@@ -462,13 +465,13 @@ function LoginHistoryTab({ loginHistory, loading, formatDate, getRelativeTime }:
                     <div className="text-xs text-gray-500">{login.user.email}</div>
                     <div className="text-xs text-gray-400 mt-1">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        login.user.role === 'admin'
+                        login.user.role?.toLowerCase() === 'admin'
                           ? 'bg-blue-100 text-blue-800'
-                          : login.user.role === 'retailer'
+                          : login.user.role?.toLowerCase() === 'retailer'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {login.user.role}
+                        {login.user.role || 'Unknown'}
                       </span>
                     </div>
                   </div>
@@ -575,14 +578,14 @@ function InactiveUsersTab({ inactiveUsers, loading, formatDate, getRelativeTime,
                 <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
                   <span
                     className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${
-                      user.role === 'admin'
+                      user.user_roles?.role_name === 'Admin'
                         ? 'bg-blue-100 text-blue-800'
-                        : user.role === 'retailer'
+                        : user.user_roles?.role_name === 'Retailer'
                         ? 'bg-green-100 text-green-800'
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    {user.role}
+                    {user.user_roles?.role_name || 'Unknown'}
                   </span>
                 </td>
                 <td className="hidden md:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">

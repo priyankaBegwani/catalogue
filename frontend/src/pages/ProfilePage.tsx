@@ -180,7 +180,7 @@ export function ProfilePage() {
                   </div>
                   <div>
                     <p className="text-gray-500 text-xs">Role</p>
-                    <p className="font-semibold text-gray-900 capitalize">{user.role}</p>
+                    <p className="font-semibold text-gray-900 capitalize">{user.user_roles?.role_name || 'Unknown'}</p>
                   </div>
                 </div>
 

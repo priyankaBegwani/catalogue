@@ -28,7 +28,7 @@ export function TawkToChat({ enabled = true }: TawkToChatProps) {
         TawkToAPI.setAttributes({
           name: user.full_name,
           email: user.email,
-          role: user.role,
+          role: user.user_roles?.role_name || 'Unknown',
           userId: user.id,
         });
       };

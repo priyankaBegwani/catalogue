@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Upload, Download, FileDown, ChevronDown, Users } from 'lucide-react';
 import { Party } from '../lib/api';
 import { Breadcrumb } from '../components';
+import { useAuth } from '../contexts/AuthContext';
 
 // Hooks
 import { usePartyData } from '../hooks/usePartyData';
@@ -28,6 +29,7 @@ import {
 } from '../utils/party/exportHelpers';
 
 const PartyEntry: React.FC = () => {
+  const { hasPermission } = useAuth();
   // Data management
   const {
     filteredParties,
@@ -153,6 +155,16 @@ const PartyEntry: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (editingParty && !hasPermission('parties', 'edit')) {
+      setError('You do not have permission to edit parties');
+      return;
+    }
+
+    if (!editingParty && !hasPermission('parties', 'create')) {
+      setError('You do not have permission to create parties');
+      return;
+    }
     
     if (!validateForm()) {
       return;
@@ -178,11 +190,13 @@ const PartyEntry: React.FC = () => {
   };
 
   const handleEdit = async (party: Party) => {
+    if (!hasPermission('parties', 'edit')) return;
     await loadPartyForEdit(party, setDistricts, setCities, setSelectedDistrict);
     setShowCreateForm(true);
   };
 
   const handleDelete = async (id: string, partyName: string) => {
+    if (!hasPermission('parties', 'delete')) return;
     if (!confirm(`Are you sure you want to delete party "${partyName}"?`)) return;
     
     try {
@@ -266,6 +280,10 @@ const PartyEntry: React.FC = () => {
   };
 
   const handleImportData = async () => {
+    if (!hasPermission('parties', 'import')) {
+      setError('You do not have permission to import parties');
+      return;
+    }
     if (!importPreview.length) return;
     
     const validation = validateImportData(importPreview);
@@ -296,6 +314,10 @@ const PartyEntry: React.FC = () => {
   };
 
   const handleExportExcel = () => {
+    if (!hasPermission('parties', 'export')) {
+      setError('You do not have permission to export parties');
+      return;
+    }
     try {
       setExportLoading(true);
       exportToExcel(filteredParties);
@@ -308,6 +330,10 @@ const PartyEntry: React.FC = () => {
   };
 
   const handleExportPdf = () => {
+    if (!hasPermission('parties', 'export')) {
+      setError('You do not have permission to export parties');
+      return;
+    }
     try {
       setExportLoading(true);
       exportToPDF(filteredParties);
@@ -338,7 +364,7 @@ const PartyEntry: React.FC = () => {
             <p className="mt-1 text-gray-600">Manage party information and contacts</p>
           </div>
           <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0">
-            <button
+            {hasPermission('parties', 'create') && <button
               onClick={() => {
                 resetForm();
                 setShowCreateForm(true);
@@ -347,9 +373,9 @@ const PartyEntry: React.FC = () => {
             >
               <Plus className="mr-2 h-5 w-5" />
               New Party
-            </button>
+            </button>}
             
-            <div className="relative export-menu-container">
+            {hasPermission('parties', 'export') && <div className="relative export-menu-container">
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
                 className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -379,15 +405,15 @@ const PartyEntry: React.FC = () => {
                   </button>
                 </div>
               )}
-            </div>
+            </div>}
 
-            <button
+            {hasPermission('parties', 'import') && <button
               onClick={() => setShowImportModal(true)}
               className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center justify-center"
             >
               <Upload className="mr-2 h-5 w-5" />
               Import
-            </button>
+            </button>}
           </div>
         </div>
 

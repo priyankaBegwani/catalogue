@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Upload, Download, FileDown, ChevronDown, Truck } from 'lucide-react';
 import { api, Transport } from '../lib/api';
 import { Breadcrumb } from '../components';
+import { useAuth } from '../contexts/AuthContext';
 
 // Hooks
 import { useTransportForm } from '../hooks/useTransportForm';
@@ -28,6 +29,7 @@ import {
 } from '../utils/transport/exportHelpers';
 
 const TransportEntry: React.FC = () => {
+  const { hasPermission } = useAuth();
   // Data management
   const {
     filteredTransports,
@@ -100,6 +102,16 @@ const TransportEntry: React.FC = () => {
   // Handlers
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (editingTransport && !hasPermission('transport', 'edit')) {
+      setError('You do not have permission to edit transport options');
+      return;
+    }
+
+    if (!editingTransport && !hasPermission('transport', 'create')) {
+      setError('You do not have permission to create transport options');
+      return;
+    }
     
     if (!validateForm()) {
       return;
@@ -120,6 +132,7 @@ const TransportEntry: React.FC = () => {
   };
 
   const handleEdit = async (transport: Transport) => {
+    if (!hasPermission('transport', 'edit')) return;
     await loadTransportForEdit(transport);
     
     if (transport.state) {
@@ -132,6 +145,17 @@ const TransportEntry: React.FC = () => {
   const handleView = (transport: Transport) => {
     setSelectedTransport(transport);
     setShowViewModal(true);
+  };
+
+  const handleDelete = async (id: string, transportName: string) => {
+    if (!hasPermission('transport', 'delete')) return;
+    if (!confirm(`Are you sure you want to delete transport "${transportName}"?`)) return;
+
+    try {
+      await deleteTransport(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete transport option');
+    }
   };
 
   const handlePincodeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,6 +207,10 @@ const TransportEntry: React.FC = () => {
   };
 
   const handleExportExcel = async () => {
+    if (!hasPermission('transport', 'export')) {
+      setError('You do not have permission to export transport options');
+      return;
+    }
     try {
       setExportLoading(true);
       const token = localStorage.getItem('access_token');
@@ -196,6 +224,10 @@ const TransportEntry: React.FC = () => {
   };
 
   const handleExportPdf = () => {
+    if (!hasPermission('transport', 'export')) {
+      setError('You do not have permission to export transport options');
+      return;
+    }
     try {
       setExportLoading(true);
       exportToPDF(filteredTransports);
@@ -223,6 +255,10 @@ const TransportEntry: React.FC = () => {
   };
 
   const handleImport = async () => {
+    if (!hasPermission('transport', 'import')) {
+      setError('You do not have permission to import transport options');
+      return;
+    }
     if (!importPreview.length) return;
 
     const validation = validateImportData(importPreview);
@@ -266,7 +302,7 @@ const TransportEntry: React.FC = () => {
           <p className="mt-1 text-sm text-gray-600">Manage your transport options</p>
         </div>
         <div className="flex gap-2">
-          <button
+          {hasPermission('transport', 'create') && <button
             onClick={() => {
               resetForm();
               setShowCreateForm(true);
@@ -275,9 +311,9 @@ const TransportEntry: React.FC = () => {
           >
             <Plus className="h-4 w-4" />
             Add Transport
-          </button>
+          </button>}
           
-          <div className="relative export-menu-container">
+          {hasPermission('transport', 'export') && <div className="relative export-menu-container">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -307,15 +343,15 @@ const TransportEntry: React.FC = () => {
                 </button>
               </div>
             )}
-          </div>
+          </div>}
 
-          <button
+          {hasPermission('transport', 'import') && <button
             onClick={() => setShowImportModal(true)}
             className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             <Upload className="h-4 w-4" />
             Import
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -354,7 +390,7 @@ const TransportEntry: React.FC = () => {
             transports={filteredTransports}
             onView={handleView}
             onEdit={handleEdit}
-            onDelete={deleteTransport}
+            onDelete={handleDelete}
           />
 
           {filteredTransports.length === 0 && (
@@ -381,7 +417,7 @@ const TransportEntry: React.FC = () => {
               transports={filteredTransports}
               onView={handleView}
               onEdit={handleEdit}
-              onDelete={deleteTransport}
+              onDelete={handleDelete}
             />
           )}
         </div>

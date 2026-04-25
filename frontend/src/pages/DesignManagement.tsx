@@ -1155,7 +1155,7 @@ export function DesignManagement() {
       )}
 
       {/* Mobile: Bottom Fixed Buttons - Select, Filter & Sort */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-2xl">
+      <div className={`lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-2xl ${(showAddModal || showImportModal || showViewModal) ? 'hidden' : ''}`}>
         <div className="flex gap-2 p-3">
           <button
             onClick={() => setBulkSelectionMode(!bulkSelectionMode)}
