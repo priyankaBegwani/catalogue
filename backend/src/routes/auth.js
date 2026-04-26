@@ -11,7 +11,7 @@ function recordLoginAttempt(req, userId, success) {
     .from('login_history')
     .insert({
       user_id: userId,
-      login_at: new Date().toISOString(),
+      login_time: new Date().toISOString(),
       ip_address: req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress,
       user_agent: req.headers['user-agent'],
       success: success === 'success'
@@ -175,10 +175,10 @@ router.post('/logout', authenticateUser, async (req, res) => {
     // Update the most recent login record with logout time
     await supabase
       .from('login_history')
-      .update({ logout_at: new Date().toISOString() })
+      .update({ logout_time: new Date().toISOString() })
       .eq('user_id', req.user.id)
-      .is('logout_at', null)
-      .order('login_at', { ascending: false })
+      .is('logout_time', null)
+      .order('login_time', { ascending: false })
       .limit(1);
 
     await supabase.auth.admin.signOut(token);

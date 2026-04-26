@@ -167,34 +167,64 @@ function toComputedTagLabel(tag: string) {
 }
 
 function getCompactTagClasses(tag: string) {
-  const normalized = tag.trim().toLowerCase();
+ const normalized = tag.trim().toLowerCase();
 
-  // Myntra-style ribbon colors - solid bold colors
-  if (normalized === 'new arrival') {
-    return 'bg-[#e83f6f] text-white';
-  }
+ if (normalized === 'new arrival') {
+   return `
+   bg-[#ff3f6c] 
+   text-white 
+   border-[#ff5b83]
+   `;
+ }
 
-  if (normalized === 'best seller') {
-    return 'bg-[#ff6b6b] text-white';
-  }
+ if (normalized === 'best seller') {
+   return `
+   bg-[#ff6d38]
+   text-white
+   border-[#ff8458]
+   `;
+ }
 
-  if (normalized === 'trending') {
-    return 'bg-[#7c3aed] text-white';
-  }
+ if (normalized === 'trending') {
+   return `
+   bg-[#6d28d9]
+   text-white
+   border-[#7c3aed]
+   `;
+ }
 
-  if (normalized === 'fast repeat' || normalized === 'fast moving') {
-    return 'bg-[#059669] text-white';
-  }
+ if (
+   normalized === 'fast repeat' ||
+   normalized === 'fast moving'
+ ) {
+   return `
+   bg-[#059669]
+   text-white
+   border-[#10b981]
+   `;
+ }
 
-  if (normalized === 'ready to ship') {
-    return 'bg-[#0f766e] text-white';
-  }
+ if (normalized === 'ready to ship') {
+   return `
+   bg-[#0f766e]
+   text-white
+   border-[#14b8a6]
+   `;
+ }
 
-  if (normalized === 'low stock') {
-    return 'bg-[#dc2626] text-white';
-  }
+ if (normalized === 'low stock') {
+   return `
+   bg-[#dc2626]
+   text-white
+   border-[#ef4444]
+   `;
+ }
 
-  return 'bg-[#374151] text-white';
+ return `
+ bg-slate-700 
+ text-white 
+ border-slate-600
+ `;
 }
 
 // Highlight tag presets - maps to existing filter logic
@@ -1112,106 +1142,120 @@ export function Catalogue() {
     setShareType(null);
   };
 
-  // Execute design share with optional user message
+  // Execute design share with optional user message (simplified format)
   const executeDesignShare = async () => {
     if (!pendingShareDesign) return;
-    
+
     const design = pendingShareDesign;
-    const selectedColor = design.design_colors?.[0];
     const colorCount = design.design_colors?.length || 0;
-    // Use WhatsApp image if available, otherwise fall back to color images
     const whatsappImage = design.whatsapp_image_url;
-    const selectedColorImages = selectedColor?.image_urls || [];
-    const shareImage = whatsappImage || selectedColorImages[0];
-    
+
+    // Collect images: WhatsApp image first, or up to 2 images per color
+    let imagesToShare: string[] = [];
+    if (whatsappImage) {
+      imagesToShare = [whatsappImage];
+    } else {
+      // Get up to 2 images from each color
+      design.design_colors?.forEach(color => {
+        const colorImages = color.image_urls?.slice(0, 2) || [];
+        imagesToShare.push(...colorImages);
+      });
+      // Limit total images to avoid message being too large
+      imagesToShare = imagesToShare.slice(0, 6);
+    }
+
     try {
       const productLink = `${window.location.origin}/catalogue?design=${design.id}`;
-      
-      let message = `✨ *${design.name}*\n\n`;
+
+      // Build simplified message
+      let message = '';
+
+      // User message first (if any)
+      if (shareUserMessage.trim()) {
+        message += `${shareUserMessage.trim()}\n\n`;
+      }
+
       message += `📋 *Design Code:* ${design.design_no}\n`;
-      
+
+      // Colors available
+      if (colorCount > 0) {
+        const colorNames = design.design_colors?.map(c => c.color).join(', ') || '';
+        message += `🎨 *Colors:* ${colorNames}\n`;
+      }
+
+      // Fabric
       if (design.fabric_type) {
         message += `🧵 *Fabric:* ${design.fabric_type.name}\n`;
       }
-      
-      if (design.category) {
-        message += `📁 *Category:* ${design.category.name}\n`;
+
+      message += `\n🔗 *Catalogue:* ${productLink}\n`;
+
+      // Add image URLs if no Web Share API
+      if (imagesToShare.length > 0 && !navigator.share) {
+        message += `\n📸 *Images:*\n${imagesToShare.join('\n')}`;
       }
-      
-      if (selectedColor) {
-        message += `💰 *Price:* ₹${design.price.toLocaleString()}/piece\n`;
-      }
-      
-      message += `📦 *MOQ:* Contact for details\n`;
-      
-      if (design.description) {
-        message += `\n📝 ${design.description}\n`;
-      }
-      
-      message += `\n🔗 *View Product:*\n${productLink}\n`;
-      
-      // Add user's optional message/query
-      if (shareUserMessage.trim()) {
-        message += `\n💬 *My Query:*\n${shareUserMessage.trim()}\n`;
-      }
-      
-      message += `\n📱 *Interested? Contact us for more details!*`;
-      
-      // Try Web Share API with image
-      if (navigator.share && shareImage) {
+
+      // Try Web Share API with images
+      if (navigator.share && imagesToShare.length > 0) {
         try {
-          const imageUrl = shareImage;
-          const response = await fetch(imageUrl);
-          const blob = await response.blob();
-          const file = new File([blob], `${design.design_no}.jpg`, { type: 'image/jpeg' });
-          
-          await navigator.share({
-            title: `${design.name} - ${design.design_no}`,
-            text: message,
-            files: [file]
-          });
-          
-          // Close dialog and reset
-          setShowShareDialog(false);
-          setShareUserMessage('');
-          setShareType(null);
-          setPendingShareDesign(null);
-          return;
+          const imageFiles: File[] = [];
+          for (const url of imagesToShare.slice(0, 3)) { // Limit to 3 images for Web Share
+            try {
+              const response = await fetch(url);
+              const blob = await response.blob();
+              const file = new File([blob], `${design.design_no}-${imageFiles.length + 1}.jpg`, { type: 'image/jpeg' });
+              imageFiles.push(file);
+            } catch (err) {
+              console.warn('Failed to load image:', url);
+            }
+          }
+
+          if (imageFiles.length > 0) {
+            await navigator.share({
+              title: `${design.design_no}`,
+              text: message,
+              files: imageFiles
+            });
+
+            // Close dialog and reset
+            setShowShareDialog(false);
+            setShareUserMessage('');
+            setShareType(null);
+            setPendingShareDesign(null);
+            return;
+          }
         } catch (shareError) {
           console.warn('Web Share API failed, falling back to WhatsApp URL:', shareError);
         }
       }
-      
+
       // Fallback to WhatsApp URL
-      if (selectedColorImages.length > 0) {
-        message += `\n\n📸 *Product Image:*\n${selectedColorImages[0]}`;
-      }
-      
       const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
-      
+
     } catch (error) {
       console.error('Error sharing:', error);
-      
+
+      // Simple fallback message
       const productLink = `${window.location.origin}/catalogue?design=${design.id}`;
-      let fallbackMessage = `✨ *${design.name}*\n\n`;
+      let fallbackMessage = '';
+      if (shareUserMessage.trim()) {
+        fallbackMessage += `${shareUserMessage.trim()}\n\n`;
+      }
       fallbackMessage += `📋 Design Code: ${design.design_no}\n`;
+      if (colorCount > 0) {
+        const colorNames = design.design_colors?.map(c => c.color).join(', ') || '';
+        fallbackMessage += `🎨 Colors: ${colorNames}\n`;
+      }
       if (design.fabric_type) {
         fallbackMessage += `🧵 Fabric: ${design.fabric_type.name}\n`;
       }
-      if (selectedColor) {
-        fallbackMessage += `💰 Price: ₹${design.price.toLocaleString()}/piece\n`;
-      }
-      if (shareUserMessage.trim()) {
-        fallbackMessage += `\n💬 My Query:\n${shareUserMessage.trim()}\n`;
-      }
-      fallbackMessage += `\n🔗 View: ${productLink}\n`;
-      fallbackMessage += `\n💬 Contact us for more details!`;
-      
+      fallbackMessage += `\n🔗 Catalogue: ${productLink}\n`;
+
       const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(fallbackMessage)}`;
       window.open(whatsappUrl, '_blank');
     }
-    
+
     // Close dialog and reset
     setShowShareDialog(false);
     setShareUserMessage('');
@@ -1794,27 +1838,58 @@ export function Catalogue() {
         </div>
       )}
 
-      {/* Mobile: Bottom Fixed Filter & Sort Buttons - Two separate buttons */}
+      {/* Mobile: Bottom Fixed Filter, Sort & Select Buttons */}
       <div className={`lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-2xl ${(showAddToCartModal || showShareDialog || selectedDesign) ? 'hidden' : ''}`}>
         <div className="flex gap-2 p-3">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex-1 bg-gray-900 text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-gray-800 transition-all"
-          >
-            <Filter className="w-5 h-5" />
-            <span>Filter</span>
-            {activeFilterCount > 0 && (
-              <span className="bg-white text-gray-900 text-xs px-2 py-0.5 rounded-full font-bold">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setShowSortSheet(!showSortSheet)}
-            className="flex-1 bg-primary text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-primary-dark transition-all"
-          >
-            <span>Sort</span>
-          </button>
+          {bulkSelectionMode ? (
+            // Bulk selection mode: Show selection controls and share button
+            <>
+              <button
+                onClick={() => setBulkSelectionMode(false)}
+                className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-gray-600 transition-all"
+              >
+                <X className="w-5 h-5" />
+                <span>Cancel</span>
+              </button>
+              <button
+                onClick={shareBulkOnWhatsApp}
+                disabled={selectedDesigns.size === 0}
+                className="flex-[2] bg-green-500 text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <MessageSquare className="w-5 h-5" />
+                <span>Share ({selectedDesigns.size})</span>
+              </button>
+            </>
+          ) : (
+            // Normal mode: Filter, Sort, and Select buttons
+            <>
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex-1 bg-gray-900 text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-gray-800 transition-all"
+              >
+                <Filter className="w-5 h-5" />
+                <span>Filter</span>
+                {activeFilterCount > 0 && (
+                  <span className="bg-white text-gray-900 text-xs px-2 py-0.5 rounded-full font-bold">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowSortSheet(!showSortSheet)}
+                className="flex-1 bg-primary text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-primary-dark transition-all"
+              >
+                <span>Sort</span>
+              </button>
+              <button
+                onClick={() => setBulkSelectionMode(true)}
+                className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"
+              >
+                <CheckSquare className="w-5 h-5" />
+                <span>Select</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </>
@@ -1899,68 +1974,79 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
     }
   };
 
-  // WhatsApp share function - direct share like design management page
+  // WhatsApp share function - simplified format
   const shareOnWhatsApp = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     try {
-      // Use WhatsApp image if available, otherwise use color images
+      const colorCount = design.design_colors?.length || 0;
       const whatsappImage = design.whatsapp_image_url;
-      const imagesToShare = whatsappImage ? [whatsappImage] : selectedColorImages.slice(0, 1);
-      
+
+      // Collect images: WhatsApp image first, or up to 2 images per color
+      let imagesToShare: string[] = [];
+      if (whatsappImage) {
+        imagesToShare = [whatsappImage];
+      } else {
+        // Get up to 2 images from each color
+        design.design_colors?.forEach(color => {
+          const colorImages = color.image_urls?.slice(0, 2) || [];
+          imagesToShare.push(...colorImages);
+        });
+        // Limit total images
+        imagesToShare = imagesToShare.slice(0, 6);
+      }
+
       // Generate catalogue link
       const catalogueLink = `${window.location.origin}/catalogue`;
-      
+
+      // Build simplified message
+      let message = `📋 *Design Code:* ${design.design_no}\n`;
+
+      // Colors available
+      if (colorCount > 0) {
+        const colorNames = design.design_colors?.map(c => c.color).join(', ') || '';
+        message += `🎨 *Colors:* ${colorNames}\n`;
+      }
+
+      // Fabric
+      if (design.fabric_type) {
+        message += `🧵 *Fabric:* ${design.fabric_type.name}\n`;
+      }
+
+      message += `\n🔗 *Catalogue:* ${catalogueLink}\n`;
+
+      // Add image URLs if no Web Share API
+      if (imagesToShare.length > 0 && !navigator.share) {
+        message += `\n📸 *Images:*\n${imagesToShare.join('\n')}`;
+      }
+
       // Check if Web Share API is available and we have images
       if (navigator.share && imagesToShare.length > 0) {
         // Try to load and share actual images
-        const imagePromises = imagesToShare.map(async (url) => {
+        const imageFiles: File[] = [];
+        for (const url of imagesToShare.slice(0, 3)) { // Limit to 3 images
           try {
             const response = await fetch(url);
             const blob = await response.blob();
-            const file = new File([blob], `design-${design.design_no}.jpg`, { type: 'image/jpeg' });
-            return file;
+            const file = new File([blob], `${design.design_no}-${imageFiles.length + 1}.jpg`, { type: 'image/jpeg' });
+            imageFiles.push(file);
           } catch (error) {
             console.warn('Failed to load image:', url);
-            return null;
           }
-        });
-        
-        const imageFiles = (await Promise.all(imagePromises)).filter(file => file !== null);
-        
+        }
+
         if (imageFiles.length > 0) {
-          // Professional message with design number and catalogue link
-          const shareText = `✨ *${design.name}*\n` +
-            `📋 Design No: *${design.design_no}*\n\n` +
-            `${design.description || 'Discover this beautiful design from our exclusive collection!'}\n\n` +
-           
-            `👉 Explore our complete catalogue:\n${catalogueLink}\n\n` +
-            `_We'd love to help you find the perfect design for your needs!_`;
-          
-          // Use Web Share API with actual images
+          // Use Web Share API with simplified message
           await navigator.share({
-            title: `${design.name} - ${design.design_no}`,
-            text: shareText,
+            title: `${design.design_no}`,
+            text: message,
             files: imageFiles
           });
           return;
         }
       }
-      
-      // Fallback to WhatsApp with professional message
-      let message = `✨ *${design.name}*\n` +
-        `📋 Design No: *${design.design_no}*\n\n` +
-        `${design.description || 'Discover this beautiful design from our exclusive collection!'}\n\n` ;
-      
-      if (whatsappImage) {
-        message += `📸 View Design:\n${whatsappImage}\n\n`;
-      } else if (selectedColorImages.length > 0) {
-        message += `📸 View Design:\n${selectedColorImages[0]}\n\n`;
-      }
-      
-      message += `👉 Explore our complete catalogue:\n${catalogueLink}\n\n` +
-        `_We'd love to help you find the perfect design for your needs!_`;
-      
+
+      // Fallback to WhatsApp URL
       const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
     } catch (error) {
@@ -2080,21 +2166,29 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
             .sort((a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b))
             .map((tag) => toComputedTagLabel(tag));
           const manualTagLabels = (design.tags || []).map((tag) => tag.trim()).filter(Boolean);
-          const displayTags = Array.from(new Set([...computedTagLabels, ...manualTagLabels])).slice(0, 3);
+          const displayTags = Array.from(new Set([...computedTagLabels, ...manualTagLabels])).slice(0, 2);
 
           return displayTags.length > 0 ? (
-            <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1">
+            <div className="absolute top-2 left-0 z-10 flex flex-col items-start gap-1">
               {displayTags.map((tag) => (
-                <span
-                  key={tag}
-                  className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm ${getCompactTagClasses(tag)}`}
-                  style={{
-                    clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 8% 50%)',
-                    paddingLeft: '10px'
-                  }}
-                >
-                  {tag}
-                </span>
+                
+ <span
+  className={`
+    inline-flex items-center
+    px-2 py-[3px]
+    text-[9px]
+    font-semibold
+    tracking-[0.06em]
+    shadow-sm
+    ${getCompactTagClasses(tag)}
+  `}
+  style={{
+    clipPath:'polygon(0 0,90% 0,100% 50%,90% 100%,0 100%)',
+    paddingRight:'10px'
+  }}
+>
+ {tag}
+</span>
               ))}
             </div>
           ) : null;
@@ -2318,9 +2412,12 @@ function DesignQuickView({ design: initialDesign, onClose }: DesignQuickViewProp
   const [showDescription, setShowDescription] = useState(false);
   const [similarDesigns, setSimilarDesigns] = useState<Design[]>([]);
   const [isImageLightboxOpen, setIsImageLightboxOpen] = useState(false);
+  const [currentDesign, setCurrentDesign] = useState<Design>(initialDesign);
+  const [designHistory, setDesignHistory] = useState<Design[]>([]);
   const swipeStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const quickViewSwipeRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   const design = currentDesign;
   const selectedColor = design.design_colors?.[selectedColorIndex];
   const imageCount = selectedColor?.image_urls?.length || 0;

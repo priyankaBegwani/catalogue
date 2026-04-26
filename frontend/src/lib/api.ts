@@ -31,13 +31,13 @@ export interface LoginHistory {
   logout_time?: string | null;
   ip_address?: string;
   user_agent?: string;
-  status: 'success' | 'failed';
+  success: boolean;
   user: {
     id: string;
     email: string;
     full_name: string;
-    role: 'admin' | 'retailer' | 'guest';
-  };
+    role_name?: string | null;
+  } | null;
 }
 
 export interface RolePermissions {
@@ -450,24 +450,45 @@ class ApiClient {
     if (auth) Object.assign(headers, this.getAuthHeader());
     if (body !== undefined) headers['Content-Type'] = 'application/json';
 
-    const response = await fetch(`${API_URL}${path}`, {
+    const url = `${API_URL}${path}`;
+    console.log(`[API] ${method} ${url}`);
+
+    const response = await fetch(url, {
       method,
       headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
+
+    console.log(`[API] ${method} ${path} - Status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
       let serverError: string | undefined;
       try {
         const errData = await response.json();
         serverError = errData.error;
-      } catch { /* non-JSON error body */ }
+        console.error('[API] Server error response:', errData);
+      } catch {
+        console.error('[API] Non-JSON error response');
+      }
       throw new Error(serverError || errorMsg);
     }
 
     // Some DELETE endpoints return no body (204)
     const text = await response.text();
-    return text ? JSON.parse(text) : (undefined as unknown as T);
+    if (!text) {
+      console.log('[API] Empty response body (204)');
+      return undefined as unknown as T;
+    }
+
+    try {
+      const data = JSON.parse(text);
+      console.log('[API] Response data:', data);
+      return data;
+    } catch (parseError) {
+      console.error('[API] JSON parse error:', parseError);
+      console.error('[API] Raw response:', text.substring(0, 200));
+      throw new Error('Invalid JSON response from server');
+    }
   }
 
   /*   User Related Functions */

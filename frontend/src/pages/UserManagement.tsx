@@ -62,8 +62,15 @@ export function UserManagement() {
   }, []);
 
   const loadLoginHistory = useCallback(async () => {
-    const data = await api.getLoginHistory(50);
-    setLoginHistory(data);
+    try {
+      console.log('[Frontend] Fetching login history...');
+      const data = await api.getLoginHistory(50);
+      console.log('[Frontend] Login history response:', data);
+      setLoginHistory(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('[Frontend] Login history fetch failed:', err);
+      throw err;
+    }
   }, []);
 
   const loadInactiveUsers = useCallback(async () => {
@@ -465,13 +472,13 @@ function LoginHistoryTab({ loginHistory, loading, formatDate, getRelativeTime }:
                     <div className="text-xs text-gray-500">{login.user.email}</div>
                     <div className="text-xs text-gray-400 mt-1">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        login.user.role?.toLowerCase() === 'admin'
+                        login.user.role_name?.toLowerCase() === 'admin'
                           ? 'bg-blue-100 text-blue-800'
-                          : login.user.role?.toLowerCase() === 'retailer'
+                          : login.user.role_name?.toLowerCase() === 'retailer'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {login.user.role || 'Unknown'}
+                        {login.user.role_name || 'Unknown'}
                       </span>
                     </div>
                   </div>
@@ -495,7 +502,7 @@ function LoginHistoryTab({ loginHistory, loading, formatDate, getRelativeTime }:
                 </td>
                 <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
                   <div className="flex items-center">
-                    {login.status === 'success' ? (
+                    {login.success ? (
                       <>
                         <LogIn className="w-4 h-4 text-green-500 mr-2" />
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">

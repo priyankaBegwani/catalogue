@@ -41,6 +41,9 @@ export const globalErrorHandler = (err, req, res, next) => {
   err.statusCode = err.statusCode || 500;
   err.message = err.message || 'Internal Server Error';
 
+  console.error(`[GlobalError] ${req.method} ${req.path} - ${err.statusCode}: ${err.message}`);
+  if (err.details) console.error('[GlobalError] Details:', err.details);
+
   if (process.env.NODE_ENV === 'development') {
     console.error('Error Stack:', err.stack);
   }

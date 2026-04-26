@@ -10,11 +10,12 @@ import { AppError } from './errorHandler.js';
  */
 export const executeQuery = async (queryBuilder, errorMessage = 'Database query failed') => {
   const { data, error } = await queryBuilder;
-  
+
   if (error) {
+    console.error('[executeQuery] Supabase error:', error.message, { errorMessage });
     throw new AppError(errorMessage, 500, { dbError: error.message });
   }
-  
+
   return data;
 };
 

@@ -265,56 +265,63 @@ router.delete('/:id',
 );
 
 // GET /api/users/login-history - Get recent login history
-router.get('/login-history', 
-  authenticateUser, 
-  requireAdmin, 
+router.get('/login-history',
+  authenticateUser,
+  requireAdmin,
   cacheMiddleware(60), // Cache for 1 minute
   asyncHandler(async (req, res) => {
+    console.log('[Login History API] Request received from:', req.user?.id);
     const limit = Math.min(parseInt(req.query.limit) || 50, 100); // Max 100
 
+    // Fetch login history without embeds to avoid schema cache issues
     const loginHistory = await executeQuery(
       supabase
         .from('login_history')
-        .select(`
-          id,
-          user_id,
-          login_at,
-          logout_at,
-          ip_address,
-          user_agent,
-          success,
-          user_profiles!login_history_user_id_fkey (
-            id,
-            email,
-            full_name,
-            role_id,
-            user_roles!user_profiles_role_id_fkey (
-              role_name
-            )
-          )
-        `)
-        .order('login_at', { ascending: false })
+        .select('id, user_id, login_time, logout_time, ip_address, user_agent, success')
+        .order('login_time', { ascending: false })
         .limit(limit),
       'Failed to fetch login history'
     );
 
-    // Format the response
-    const formattedHistory = loginHistory.map(record => ({
-      id: record.id,
-      user_id: record.user_id,
-      login_at: record.login_at,
-      logout_at: record.logout_at,
-      ip_address: record.ip_address,
-      user_agent: record.user_agent,
-      success: record.success,
-      user: record.user_profiles ? {
-        id: record.user_profiles.id,
-        email: record.user_profiles.email,
-        full_name: record.user_profiles.full_name,
-        role_name: record.user_profiles.user_roles?.role_name || null
-      } : null
-    }));
+    // Collect unique user IDs for profile lookup
+    const userIds = [...new Set(loginHistory.map(r => r.user_id).filter(Boolean))];
 
+    // Fetch user profiles with roles separately
+    let userProfilesMap = new Map();
+    if (userIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('id, email, full_name, role_id, user_roles!user_profiles_role_id_fkey(role_name)')
+        .in('id', userIds);
+
+      if (profilesError) {
+        console.error('[Login History] Failed to fetch user profiles:', profilesError.message);
+      } else if (profiles) {
+        profiles.forEach(p => userProfilesMap.set(p.id, p));
+      }
+    }
+
+    // Format the response by stitching data together
+    const formattedHistory = loginHistory.map(record => {
+      const profile = userProfilesMap.get(record.user_id);
+      return {
+        id: record.id,
+        user_id: record.user_id,
+        login_time: record.login_time,
+        logout_time: record.logout_time,
+        ip_address: record.ip_address,
+        user_agent: record.user_agent,
+        success: record.success,
+        user: profile ? {
+          id: profile.id,
+          email: profile.email,
+          full_name: profile.full_name,
+          role_name: profile.user_roles?.role_name || null
+        } : null
+      };
+    });
+
+    console.log('[Login History API] Success - returning', formattedHistory.length, 'records');
     res.json(formattedHistory);
   })
 );
