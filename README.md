@@ -1,45 +1,173 @@
-# Ethnic Wear E-commerce Platform
+# Ethnic Wear Business Management Platform
 
-A full-stack e-commerce application for ethnic men's wear with separate frontend (React) and backend (Node.js) using Supabase for database and authentication.
+Modern full-stack platform for ethnic wear manufacturers, wholesalers, distributors, retailers, and sales teams.
 
-## Project Structure
+Built to streamline:
+- catalog management
+- order fulfillment
+- party/customer management
+- transporter coordination
+- retailer operations
+- WhatsApp catalog sharing
+- analytics and reporting
 
+---
+
+# Overview
+
+The platform helps ethnic wear businesses manage products, customers, orders, and operational workflows through a scalable, mobile-first system optimized for real-world wholesale and retail usage.
+
+---
+
+# Core Features
+
+## Catalog Management
+
+- Create and manage product catalogs
+- Add/edit designs with multiple images
+- Product categories and variants
+- Mobile-optimized catalog browsing
+- Cloud-based media handling
+
+---
+
+## WhatsApp Sharing
+
+- Share catalogs directly on WhatsApp
+- Share product images and details instantly
+- Optimized for mobile retailer workflows
+
+---
+
+## Customer & Party Management
+
+Manage:
+- retailers
+- wholesalers
+- distributors
+- sales customers
+- business parties
+
+---
+
+## Transporter Management
+
+- Manage transporter records
+- Associate transporters with orders
+- Streamline dispatch workflows
+
+---
+
+## Order Management
+
+- Cart and wishlist support
+- Order creation and tracking
+- Order fulfillment workflows
+- Sales-assisted ordering
+
+---
+
+## Dashboard & Analytics
+
+- Business analytics
+- Order insights
+- User activity tracking
+- Operational dashboards
+
+---
+
+## Authentication & Permissions
+
+Features include:
+- secure authentication
+- login history tracking
+- role-based access control
+- protected routes
+
+### User Roles
+
+| Role | Access |
+|---|---|
+| Admin | Full system access |
+| Staff | Order fulfillment and operations |
+| Wholesaler | Wholesale ordering access |
+| Distributor | Order management for customers |
+| Sales | Customer and order management |
+| Retailer | Standard ordering access |
+| Guest | Limited view-only access |
+
+---
+
+# Cloud & AI Infrastructure
+
+- Cloudflare-based media workflows
+- Scalable image hosting
+- OpenAI integration ready
+- AI-assisted catalog workflows support
+
+---
+
+# Tech Stack
+
+## Frontend
+
+- React 18
+- TypeScript
+- Vite
+- TailwindCSS
+- React Router
+- Supabase Client
+
+## Backend
+
+- Node.js
+- Express.js
+- Supabase
+- AWS SDK
+- OpenAI SDK
+
+---
+
+# Architecture Highlights
+
+- Modular frontend architecture
+- Service-based backend structure
+- Role-based authorization
+- Mobile-first responsive UI
+- Scalable catalog workflows
+
+---
+
+# Performance & Security
+
+Optimized for:
+- large product catalogs
+- mobile bandwidth efficiency
+- fast image handling
+- scalable rendering
+
+Security includes:
+- Helmet protection
+- rate limiting
+- upload validation
+- protected APIs
+- secure environment variables
+
+---
+
+# Project Structure
+
+```txt
+frontend/
+backend/
+docs/
 ```
-project/
-├── frontend/          # React + TypeScript + Vite frontend
-├── backend/           # Node.js + Express backend
-└── README.md
-```
 
-## Features
+---
 
-- **Two User Types**: Admin and Retailer
-- **Authentication**: Secure login system using Supabase Auth
-- **Admin Dashboard**: Create and manage retailer users
-- **Product Catalogue**: Browse ethnic wear by categories
-- **Product Variants**: Multiple sizes and colors for each product
-- **Responsive Design**: Beautiful UI with Tailwind CSS
+# Local Development
 
-## Default Admin Credentials
-
-```
-Email: admin@ethnicwear.com
-Password: Admin@123
-```
-
-## Setup Instructions
-
-### 1. Backend Setup
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-The backend server will run on `http://localhost:3001`
-
-### 2. Frontend Setup
+## Frontend
 
 ```bash
 cd frontend
@@ -47,53 +175,49 @@ npm install
 npm run dev
 ```
 
-The frontend will run on `http://localhost:5173`
+## Backend
 
-## Database Schema
+```bash
+cd backend
+npm install
+npm run dev
+```
 
-The application uses the following tables:
-- **user_profiles**: Extended user information with roles
-- **categories**: Product categories (Kurta, Sherwani, etc.)
-- **products**: Main product information
-- **product_variants**: Size and color variations
+---
 
-## API Endpoints
+# Environment Variables
 
-### Authentication
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
-- `GET /api/auth/me` - Get current user
+```env
+PORT=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+OPENAI_API_KEY=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=
+S3_BUCKET_NAME=
+```
 
-### User Management (Admin only)
-- `GET /api/users` - List all users
-- `POST /api/users` - Create new user
-- `PATCH /api/users/:id` - Update user
+---
 
-### Products
-- `GET /api/products/categories` - List categories
-- `GET /api/products` - List all products
-- `GET /api/products/:id` - Get product details
+# Product Vision
 
-## Technologies Used
+Building a scalable operational platform for ethnic wear businesses combining:
+- catalog management
+- retailer workflows
+- logistics coordination
+- analytics
+- WhatsApp commerce
+- AI-assisted automation
 
-### Frontend
-- React 18
-- TypeScript
-- Vite
-- Tailwind CSS
-- Lucide React (icons)
-- Supabase Client
+---
 
-### Backend
-- Node.js
-- Express
-- Supabase (Database & Auth)
-- CORS
+# Status
 
-## Sample Data
+Active development.
 
-The database is pre-seeded with:
-- 1 Admin user
-- 5 Product categories
-- 10 Products across different categories
-- 38 Product variants with different sizes and colors
+---
+
+# Author
+
+Developed by Priyanka Begwani.
