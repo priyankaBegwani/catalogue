@@ -743,4 +743,144 @@ router.delete('/colors/:colorId', authenticateUser, asyncHandler(async (req, res
   res.json({ message: 'Color and associated images deleted successfully' });
 }));
 
+// POST /api/designs/bulk - Bulk insert/update designs
+router.post('/bulk', authenticateUser, asyncHandler(async (req, res) => {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
+    throw new AppError('Admin access required', 403);
+  }
+
+  const { designs } = req.body;
+  if (!Array.isArray(designs) || designs.length === 0) {
+    throw new AppError('Designs array is required', 400);
+  }
+
+  const MAX_BULK_SIZE = 500;
+  if (designs.length > MAX_BULK_SIZE) {
+    throw new AppError(`Maximum ${MAX_BULK_SIZE} designs allowed per batch. Split into multiple requests.`, 400);
+  }
+
+  const results = { inserted: 0, updated: 0, skipped: 0, errors: [] };
+  const BATCH_SIZE = 100; // Process in smaller chunks for upsert logic
+
+  // Get all existing design numbers for quick lookup
+  const { data: existingDesigns } = await supabase
+    .from('designs')
+    .select('id, design_no');
+
+  const existingByDesignNo = new Map();
+  existingDesigns?.forEach(d => {
+    if (d.design_no) {
+      existingByDesignNo.set(d.design_no.toLowerCase(), d.id);
+    }
+  });
+
+  // Process in batches
+  for (let i = 0; i < designs.length; i += BATCH_SIZE) {
+    const batch = designs.slice(i, i + BATCH_SIZE);
+
+    const designsToInsert = [];
+    const designsToUpdate = [];
+
+    for (const designData of batch) {
+      try {
+        // Validate required fields
+        if (!designData.design_no || !designData.name) {
+          results.errors.push(`Design missing design_no or name: ${JSON.stringify(designData)}`);
+          results.skipped++;
+          continue;
+        }
+
+        // Normalize data
+        const normalized = {
+          design_no: String(designData.design_no).trim(),
+          name: String(designData.name).trim(),
+          description: designData.description ? String(designData.description) : '',
+          department: designData.department || null,
+          tags: Array.isArray(designData.tags) ? designData.tags : 
+                (designData.tags ? String(designData.tags).split(',').map(s => s.trim()) : []),
+          work_type: designData.work_type || null,
+          occasion: designData.occasion || null,
+          collection: designData.collection || null,
+          design_month_year: designData.design_month_year || null,
+          category_id: designData.category_id || null,
+          style_id: designData.style_id || null,
+          fabric_type_id: designData.fabric_type_id || null,
+          brand_id: designData.brand_id || null,
+          available_sizes: Array.isArray(designData.available_sizes) ? designData.available_sizes :
+                          (designData.available_sizes ? String(designData.available_sizes).split(',').map(s => s.trim()) : []),
+          price: Number(designData.price) || 0,
+          created_by: req.user.id,
+          updated_by: req.user.id,
+        };
+
+        const existingId = existingByDesignNo.get(normalized.design_no.toLowerCase());
+        if (existingId) {
+          designsToUpdate.push({ ...normalized, id: existingId });
+        } else {
+          designsToInsert.push(normalized);
+        }
+      } catch (err) {
+        results.errors.push(`Error processing design ${designData.design_no || 'unknown'}: ${err.message}`);
+        results.skipped++;
+      }
+    }
+
+    // Bulk insert new designs
+    if (designsToInsert.length > 0) {
+      const { data: inserted, error: insertError } = await supabase
+        .from('designs')
+        .insert(designsToInsert)
+        .select('id, design_no');
+
+      if (insertError) {
+        results.errors.push(`Bulk insert failed: ${insertError.message}`);
+        results.skipped += designsToInsert.length;
+      } else {
+        results.inserted += inserted.length;
+        // Update lookup map with newly inserted
+        inserted.forEach(d => {
+          existingByDesignNo.set(d.design_no.toLowerCase(), d.id);
+        });
+      }
+    }
+
+    // Bulk update existing designs (one by one for updates, or use a batch approach)
+    for (const design of designsToUpdate) {
+      const { error: updateError } = await supabase
+        .from('designs')
+        .update({
+          name: design.name,
+          description: design.description,
+          department: design.department,
+          tags: design.tags,
+          work_type: design.work_type,
+          occasion: design.occasion,
+          collection: design.collection,
+          design_month_year: design.design_month_year,
+          category_id: design.category_id,
+          style_id: design.style_id,
+          fabric_type_id: design.fabric_type_id,
+          brand_id: design.brand_id,
+          available_sizes: design.available_sizes,
+          price: design.price,
+          updated_by: req.user.id,
+        })
+        .eq('id', design.id);
+
+      if (updateError) {
+        results.errors.push(`Failed to update ${design.design_no}: ${updateError.message}`);
+        results.skipped++;
+      } else {
+        results.updated++;
+      }
+    }
+  }
+
+  res.json({
+    success: results.errors.length === 0,
+    ...results,
+    total: designs.length,
+  });
+}));
+
 export default router;

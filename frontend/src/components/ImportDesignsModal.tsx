@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Upload, Download, AlertCircle, CheckCircle, FileSpreadsheet } from 'lucide-react';
+import { X, Upload, Download, AlertCircle, CheckCircle, FileSpreadsheet, FileUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api, DesignCategory, DesignStyle, FabricType, Brand } from '../lib/api';
+import { TransformDataModal } from './TransformDataModal';
 
 interface ImportDesignsModalProps {
   onClose: () => void;
@@ -46,6 +47,7 @@ export function ImportDesignsModal({ onClose, onSuccess }: ImportDesignsModalPro
   const [styles, setStyles] = useState<DesignStyle[]>([]);
   const [fabricTypes, setFabricTypes] = useState<FabricType[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [showTransformModal, setShowTransformModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -678,6 +680,13 @@ export function ImportDesignsModal({ onClose, onSuccess }: ImportDesignsModalPro
             Cancel
           </button>
           <button
+            onClick={() => setShowTransformModal(true)}
+            className="px-4 py-2 bg-purple-100 text-purple-700 border border-purple-300 rounded-lg font-semibold hover:bg-purple-200 transition flex items-center gap-2"
+          >
+            <FileUp className="w-4 h-4" />
+            Transform Data
+          </button>
+          <button
             onClick={handleImport}
             disabled={!file || loading}
             className="px-4 py-2 bg-primary text-white rounded-lg font-semibold hover:bg-opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
@@ -686,6 +695,16 @@ export function ImportDesignsModal({ onClose, onSuccess }: ImportDesignsModalPro
           </button>
         </div>
       </div>
+
+      {showTransformModal && (
+        <TransformDataModal
+          onClose={() => setShowTransformModal(false)}
+          onSuccess={() => {
+            setShowTransformModal(false);
+            onSuccess();
+          }}
+        />
+      )}
     </div>
   );
 }

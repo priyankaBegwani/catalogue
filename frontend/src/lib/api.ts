@@ -671,8 +671,26 @@ class ApiClient {
     return this.request('/api/designs', { method: 'POST', body: designData, errorMsg: 'Failed to create design' });
   }
 
+  async bulkDesigns(designs: Array<{
+    design_no: string;
+    name: string;
+    description?: string;
+    department?: 'mens' | 'boys';
+    tags?: string[];
+    work_type?: 'plain' | 'printed' | 'emboidered' | 'chikankari' | 'shaded' | 'handwork';
+    occasion?: 'festive' | 'casual' | 'wedding' | 'office wear' | 'daily wear';
+    collection?: 'summer collection' | 'winter collection' | 'puja collection' | 'eid collection';
+    design_month_year?: string;
+    category_id?: string;
+    style_id?: string;
+    fabric_type_id?: string;
+    brand_id?: string;
+    available_sizes?: string[];
+    price?: number;
+  }>): Promise<{ inserted: number; updated: number; skipped: number; errors: string[]; total: number; success: boolean }> {
+    return this.request('/api/designs/bulk', { method: 'POST', body: { designs }, errorMsg: 'Failed to bulk save designs' });
+  }
 
-  
   async updateDesign(
     id: string,
     updates: {

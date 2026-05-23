@@ -1,0 +1,59 @@
+{
+  "column_mappings": {
+    "Design No": "design_no",
+    "Design Number": "design_no",
+    "Item No": "design_no",
+    "Name": "name",
+    "Design Name": "name",
+    "Description": "description",
+    "Desc": "description",
+    "Price": "price",
+    "MRP": "price",
+    "Cost": "price",
+    "Category": "category",
+    "Type": "category",
+    "Brand": "brand",
+    "Manufacturer": "brand",
+    "Fabric": "fabric_type",
+    "Material": "fabric_type",
+    "Style": "style",
+    "Design Style": "style",
+    "Work Type": "work_type",
+    "Embroidery": "work_type",
+    "Occasion": "occasion",
+    "Event": "occasion",
+    "Collection": "collection",
+    "Season": "collection",
+    "Colors": "colors",
+    "Variants": "colors",
+    "Active": "is_active",
+    "Status": "is_active"
+  },
+  "value_transformations": {
+    "design_no": {
+      "type": "uppercase"
+    },
+    "name": {
+      "type": "titlecase"
+    },
+    "price": {
+      "type": "number"
+    },
+    "description": {
+      "type": "strip"
+    },
+    "is_active": {
+      "type": "boolean"
+    }
+  },
+  "default_values": {
+    "is_active": true,
+    "is_archived": false,
+    "created_at": ""
+  },
+  "required_columns": [
+    "design_no",
+    "name"
+  ],
+  "skip_rows": 0
+}

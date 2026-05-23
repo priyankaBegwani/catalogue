@@ -50,8 +50,8 @@ app.use(cors({
   credentials: true
 }));
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Rate limiting for auth endpoints (prevent brute-force)
 const authLimiter = rateLimit({
@@ -109,6 +109,7 @@ const server = app.listen(config.port, () => {
   console.log(`🚀 Backend server running on port ${config.port}`);
   console.log(`📦 Storage type: ${config.storageType}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`📊 Bulk API available: POST /api/designs/bulk (max 500 designs/batch)`);
 });
 
 // Graceful shutdown

@@ -1,0 +1,928 @@
+{
+  "item_master": {
+    "ALIGARH WITH E/P": {
+      "short_name": "AWEP",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "ALIGARH WITH E/P/C": {
+      "short_name": "AWEPC",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "ALIGARH WITH P/E/C": {
+      "short_name": "P1EAPC",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "BOUTIQUE MENS KURTA": {
+      "short_name": "BMK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "BOYS DHOTI": {
+      "short_name": "D B HOTI",
+      "brand": "INDIE CRAFT",
+      "product": "BOYS DHOTI",
+      "department": "BOYS",
+      "size": [
+        "Kids 0-36"
+      ]
+    },
+    "BOYS KURTA": {
+      "short_name": "BK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "BOYS",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "BOYS PANT": {
+      "short_name": "BP",
+      "brand": "INDIE CRAFT",
+      "product": "BOYS PANT",
+      "department": "BOYS",
+      "size": [
+        "Kids 0-36"
+      ]
+    },
+    "CHICKEN KURTA": {
+      "short_name": "CK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "CHICKENKARI KURTA": {
+      "short_name": "CKK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "CHIKANKARI KURTA SET": {
+      "short_name": "CKKS",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "CHIKEN KURTA": {
+      "short_name": "CHIK",
+      "brand": "BABUMOSAI",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "CHURIDAR E/P": {
+      "short_name": "C E P",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "CHURIDAR GOLD": {
+      "short_name": "CG",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "CHURIDAR WITH E/P": {
+      "short_name": "P1ECP",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "CHURIDAR WITH E/P/C": {
+      "short_name": "P1ECPC",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH": {
+      "short_name": "KF CLOTH",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 520732": {
+      "short_name": "C-520732",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 5208": {
+      "short_name": "C 5208 K",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 520821": {
+      "short_name": "520821 CLOTH",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 520832": {
+      "short_name": "C 520832",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 520833": {
+      "short_name": "C 520833",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 520843": {
+      "short_name": "C-520843",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 540710": {
+      "short_name": "C 540710",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 540752": {
+      "short_name": "CLOTH 540752",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 540822": {
+      "short_name": "C540822",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "MENSWEAR",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 551219": {
+      "short_name": "C-551219",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH 551421": {
+      "short_name": "551421",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-520811": {
+      "short_name": "C-520811",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-520812": {
+      "short_name": "C-520812",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-520831": {
+      "short_name": "C-520831",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-520839": {
+      "short_name": "C 520839",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-520852": {
+      "short_name": "C-520852",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-521011": {
+      "short_name": "C-521011",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-521031": {
+      "short_name": "C-521031",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-521039": {
+      "short_name": "C-521039",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-54022": {
+      "short_name": "C-54022",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-54074129": {
+      "short_name": "C-54074129",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-540751": {
+      "short_name": "C-540751",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-540753": {
+      "short_name": "KF",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-551311": {
+      "short_name": "C-551311",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-551511": {
+      "short_name": "C-551511",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-551512": {
+      "short_name": "C-551512",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-551521": {
+      "short_name": "C-551251",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "CLOTH-551611": {
+      "short_name": "C-551611",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "DIGITAL MENS KURTA": {
+      "short_name": "DMK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "DIGITAL MENS KURTA SET": {
+      "short_name": "DMKS",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "EMB KURTA (ALL OVER)": {
+      "short_name": "EK ALL",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "EMB LOCKET K": {
+      "short_name": "ELK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "EMB OMBRE KURTA": {
+      "short_name": "EOK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "FANCY KURTA SET": {
+      "short_name": "LONG MFKS",
+      "brand": "INDIE CRAFT",
+      "product": "MENS F KURTA SET",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "HALF KURTA": {
+      "short_name": "HF K",
+      "brand": "INDIE CRAFT",
+      "product": "SHORT KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "HAND WORK KURTA": {
+      "short_name": "HW K",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "IC E/P PAJAMA": {
+      "short_name": "CEP PAJAMA",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "INDIE CRAFT CLOTH": {
+      "short_name": "CLOTH",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "INDIE CRAFT KURTA": {
+      "short_name": "K",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "INDIE CRAFT PAJAMA": {
+      "short_name": "PAJAMA",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "INDIE CRAFT PANT PAJAMA": {
+      "short_name": "PANT PAJAMA",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "INDIE CRAFT PATYALI": {
+      "short_name": "PATYALI",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "JACKET KURTA SET": {
+      "short_name": "JKS",
+      "brand": "INDIE CRAFT",
+      "product": "JACKET KURTA SET",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "KIDS DIGITAL KURTA": {
+      "short_name": "KDK",
+      "brand": "INDIE CRAFT",
+      "product": "BOYS K SET",
+      "department": "BOYS",
+      "size": [
+        "Kids 0-36"
+      ]
+    },
+    "KIDS KURTA SET": {
+      "short_name": "KS BKS",
+      "brand": "INDIE CRAFT",
+      "product": "BOYS K SET",
+      "department": "BOYS",
+      "size": [
+        "Kids 0-36"
+      ]
+    },
+    "KURTA EMD DAMAN": {
+      "short_name": "KED",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "KURTA SET-801": {
+      "short_name": "KS",
+      "brand": "INDIE CRAFT",
+      "product": "MENS KURTA SET",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "KURTA SET-802": {
+      "short_name": "KS-802",
+      "brand": "INDIE CRAFT",
+      "product": "MENS KURTA SET",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "KURTA SET-803": {
+      "short_name": "KS-803",
+      "brand": "INDIE CRAFT",
+      "product": "MENS KURTA SET",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "KURTA WITH POCKET": {
+      "short_name": "KWP",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MEN'S FANCY KURTA": {
+      "short_name": "MFKS",
+      "brand": "BABUMOSAI",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS ALIGARH": {
+      "short_name": "AP PAJAMA",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS CHURIDAR": {
+      "short_name": "CH PAJAMA",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS DHOTI": {
+      "short_name": "MD",
+      "brand": "INDIE CRAFT",
+      "product": "MENS DHOTI",
+      "department": "MENSWEAR",
+      "size": [
+        "FREE",
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS FANCY KURTA": {
+      "short_name": "MFK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS JACKET": {
+      "short_name": "JA JAC",
+      "brand": "INDIE CRAFT",
+      "product": "JACKET",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS KURTA": {
+      "short_name": "ICK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS KURTA SET": {
+      "short_name": "KS MKS",
+      "brand": "INDIE CRAFT",
+      "product": "MENS KURTA SET",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS LONG  KURTA SET": {
+      "short_name": "MLKS",
+      "brand": "BABUMOSAI",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS LONG KURTA": {
+      "short_name": "BLK",
+      "brand": "BABUMOSAI",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS MID L KURTA": {
+      "short_name": "ML K",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS PREMIUM KURTA (A)": {
+      "short_name": "MPKA",
+      "brand": "INDIE CRAFT",
+      "product": "MENS ASSOR KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS PRINT KURTA SET": {
+      "short_name": "MPKS",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS PRINTED KURTA": {
+      "short_name": "MPK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS PURE LINEN KURTA": {
+      "short_name": "LINEN KURTA",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS PURE LINEN KURTA SET": {
+      "short_name": "MPLKS",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS W KURTA SET": {
+      "short_name": "KS MWKS",
+      "brand": "INDIE CRAFT",
+      "product": "MENS W KURTA SET",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MENS W POCKET KURTA": {
+      "short_name": "MLKP",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "MID LENGTH KURTA": {
+      "short_name": "ML MLK",
+      "brand": "INDIE CRAFT",
+      "product": "MID LENGTH KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "PAJAMA 5208": {
+      "short_name": "P 5208",
+      "brand": "INDIE CRAFT",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "PANNA KURTA FABRIC": {
+      "short_name": "PANNA KF CLOTH",
+      "brand": "PANNA",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "PANT PAJAMA": {
+      "short_name": "PNT",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "PARAKH TEXTILE PAJAMA FABRIC": {
+      "short_name": "PT PF CLOTH",
+      "brand": "PARAKH TEXTILE",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "PATHANI SET": {
+      "short_name": "KS PAT",
+      "brand": "INDIE CRAFT",
+      "product": "PATHANI",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "POCKET KURTA": {
+      "short_name": "PK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "PS CHURIDAR": {
+      "short_name": "PSC",
+      "brand": "INDIE CRAFT",
+      "product": "PAJAMA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "PT KURTA FAB": {
+      "short_name": "PT KF CLOTH",
+      "brand": "PARAKH TEXTILE",
+      "product": "CLOTH",
+      "department": "FABRIC",
+      "size": [
+        "Fabric",
+        "Fabric New",
+        "S/36-5Xl/50"
+      ]
+    },
+    "SHORT KURTA": {
+      "short_name": "SHK",
+      "brand": "INDIE CRAFT",
+      "product": "SHORT KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    },
+    "SUPERFINE MENS KURTA": {
+      "short_name": "SMK",
+      "brand": "INDIE CRAFT",
+      "product": "KURTA",
+      "department": "MENSWEAR",
+      "size": [
+        "S/36-5Xl/50"
+      ]
+    }
+  }
+}

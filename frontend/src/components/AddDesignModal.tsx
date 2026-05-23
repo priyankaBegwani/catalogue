@@ -306,7 +306,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
         design_no: formData.design_no,
         name: formData.name,
         description: formData.description,
-        department: (formData.department || undefined) as 'mens' | 'boys' | undefined,
+        department: (formData.department || undefined) as 'mens' | 'boys' | 'fabric' | undefined,
         tags: formData.tags,
         work_type: (formData.work_type || undefined) as 'plain' | 'printed' | 'emboidered' | 'chikankari' | 'shaded' | 'handwork' | undefined,
         occasion: (formData.occasion || undefined) as 'festive' | 'casual' | 'wedding' | 'office wear' | 'daily wear' | undefined,
@@ -476,10 +476,11 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
               >
                 <option value="">Select department</option>
-                <option value="mens">Mens</option>
+                <option value="menswear">Menswear</option>
                 <option value="boys">Boys</option>
+                <option value="fabric">Fabric</option>
               </select>
-            </div>
+            </div>BNV78 BVU8U8U88UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUM7YMMMMMHMMMMMMMMMMMMMMMHMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMOL NMV78TOVBOBO8B8OTOVLVRFBVLKFORBVFOBVVFROVBFO8R7VBFR86NVBRIJO97NVFB6U8N9
 
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
