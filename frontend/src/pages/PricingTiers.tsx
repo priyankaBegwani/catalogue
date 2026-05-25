@@ -10,13 +10,13 @@ export function PricingTiers() {
   const [editingVolumeTier, setEditingVolumeTier] = useState<string | null>(null);
   const [editingRelationshipTier, setEditingRelationshipTier] = useState<string | null>(null);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaveStatus('saving');
     try {
-      savePricingConfig(config);
+      await savePricingConfig(config);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch (error) {
+    } catch {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }

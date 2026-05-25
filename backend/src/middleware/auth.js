@@ -42,6 +42,16 @@ export const authenticateUser = async (req, res, next) => {
 
     const profile = await getUserProfile(user.id, token);
 
+    // Tenant isolation check — skip for superadmins (cross-tenant), unset tenantId,
+    // or dev default-tenant fallback.
+    const DEFAULT_TENANT = '00000000-0000-0000-0000-000000000001';
+    const isDevDefaultFallback =
+      process.env.NODE_ENV === 'development' && req.tenantId === DEFAULT_TENANT;
+
+    if (req.tenantId && !isDevDefaultFallback && !profile.is_superadmin && profile.tenant_id !== req.tenantId) {
+      return res.status(403).json({ error: 'User does not belong to this tenant' });
+    }
+
     req.user = user;
     req.profile = profile;
     next();
@@ -57,9 +67,20 @@ export const authenticateUser = async (req, res, next) => {
 export const requireAdmin = (req, res, next) => {
   // Check new role system only (old role field has been removed)
   const isAdmin = req.profile?.user_roles?.role_name === 'Admin';
-  
+
   if (!isAdmin) {
     return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+
+/**
+ * Superadmin guard — cross-tenant internal tools only.
+ * Must be used after authenticateUser. Does NOT require a tenant context.
+ */
+export const requireSuperAdmin = (req, res, next) => {
+  if (!req.profile?.is_superadmin) {
+    return res.status(403).json({ error: 'Superadmin access required' });
   }
   next();
 };

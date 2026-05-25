@@ -20,7 +20,8 @@ import {
   ChevronDown,
   ChevronRight,
   Briefcase,
-  Cog
+  Cog,
+  CreditCard,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -159,6 +160,12 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
         icon: SettingsIcon,
         path: '/settings',
       });
+      systemItems.push({
+        id: 'subscription',
+        label: 'Subscription',
+        icon: CreditCard,
+        path: '/subscription',
+      });
     }
 
     // Only show System section if there are items
@@ -240,14 +247,14 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
         {/* Sidebar Header */}
         <div className="h-20 flex items-center justify-between px-6 border-b border-slate-700/50 bg-slate-900/50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center shadow-lg">
               <ShoppingBag className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h2 className="font-bold text-lg bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              <h2 className="font-bold text-lg text-white truncate max-w-[140px]">
                 {branding.brandName}
               </h2>
-              <p className="text-xs text-slate-400">Catalogue System</p>
+              <p className="text-xs text-slate-400">{branding.tagline ?? 'Catalogue System'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -257,7 +264,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
               className="hidden lg:block p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
               aria-label={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
             >
-              {isPinned ? <Pin size={20} className="text-blue-400" /> : <PinOff size={20} />}
+              {isPinned ? <Pin size={20} className="text-accent" /> : <PinOff size={20} />}
             </button>
             {/* Close button - always visible on mobile, on desktop only when not pinned */}
             <button
@@ -286,7 +293,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
                     onClick={() => handleNavigate(item.path)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                       isActive
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30'
+                        ? 'bg-primary text-white shadow-lg shadow-black/20'
                         : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
                     }`}
                   >
@@ -323,7 +330,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
                       <SectionIcon
                         size={20}
                         className={`transition-transform group-hover:scale-110 ${
-                          hasActiveChild ? 'text-blue-400' : 'text-slate-400'
+                          hasActiveChild ? 'text-accent' : 'text-slate-400'
                         }`}
                       />
                       <span className="font-medium flex-1 text-left">{item.label}</span>
@@ -347,7 +354,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
                               onClick={() => handleNavigate(subItem.path)}
                               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${
                                 isActive
-                                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                                  ? 'bg-primary text-white shadow-md'
                                   : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
                               }`}
                             >
@@ -378,8 +385,8 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-slate-700/50 bg-slate-900/50">
           <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/50 rounded-xl">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold">
-              IC
+            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-white">
+              {branding.brandName.slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">{branding.brandName}</p>

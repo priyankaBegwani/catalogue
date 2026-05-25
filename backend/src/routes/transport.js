@@ -299,4 +299,98 @@ router.delete('/:id',
   })
 );
 
+// POST /api/transport/bulk — import up to 200 transporters at once
+router.post('/bulk',
+  authenticateUser,
+  asyncHandler(async (req, res) => {
+    const { transporters } = req.body;
+    if (!Array.isArray(transporters) || transporters.length === 0) {
+      throw new AppError('transporters array is required', 400);
+    }
+    if (transporters.length > 200) {
+      throw new AppError('Maximum 200 transporters per batch', 400);
+    }
+
+    const names = transporters
+      .map(t => (t.transport_name || t.name || '').trim().toLowerCase())
+      .filter(Boolean);
+
+    const { data: existing } = await supabaseAdmin
+      .from('transport')
+      .select('id, transport_name')
+      .in('transport_name', names);
+
+    const existingMap = new Map(
+      (existing ?? []).map(t => [t.transport_name.toLowerCase(), t.id])
+    );
+
+    const toInsert = [];
+    const toUpdate = [];
+    const errors   = [];
+
+    for (let i = 0; i < transporters.length; i++) {
+      const t = transporters[i];
+      const transport_name = (t.transport_name || t.name || '').trim();
+      if (!transport_name) {
+        errors.push({ row: i + 1, error: 'name is required', data: t });
+        continue;
+      }
+      const row = {
+        transport_name,
+        description:    t.description    || '',
+        address:        t.address        || '',
+        phone_number:   t.phone_number   || t.phone || '',
+        email_id:       t.email_id       || t.email || '',
+        gst_number:     t.gst_number     || '',
+        state:          t.state          || '',
+        district:       t.district       || '',
+        city:           t.city           || '',
+        pincode:        t.pincode        || '',
+      };
+      const existingId = existingMap.get(transport_name.toLowerCase());
+      if (existingId) {
+        toUpdate.push({ id: existingId, ...row });
+      } else {
+        toInsert.push(row);
+      }
+    }
+
+    const inserted = [];
+    const updated  = [];
+
+    if (toInsert.length > 0) {
+      const { data, error } = await supabaseAdmin
+        .from('transport')
+        .insert(toInsert)
+        .select('id');
+      if (error) {
+        toInsert.forEach((r, idx) => errors.push({ row: idx + 1, error: error.message, data: r }));
+      } else {
+        inserted.push(...(data ?? []));
+      }
+    }
+
+    for (const row of toUpdate) {
+      const { id, ...fields } = row;
+      const { error } = await supabaseAdmin.from('transport').update(fields).eq('id', id);
+      if (error) {
+        errors.push({ row: -1, error: error.message, data: row });
+      } else {
+        updated.push({ id });
+      }
+    }
+
+    cache.delete('cache:/api/transport');
+    cache.delete('cache:/api/orders/transport');
+
+    res.json({
+      success: true,
+      inserted: inserted.length,
+      updated:  updated.length,
+      failed:   errors.length,
+      errors,
+    });
+  })
+);
+
 export default router;

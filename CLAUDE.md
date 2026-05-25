@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is a full-stack ethnic wear catalog and retailer management platform.
+This is a full-stack ethnic wear catalog, retailer management and order management platform.
 
 Tech stack:
 
@@ -17,13 +17,21 @@ Backend:
 - Node.js
 - Express.js
 - Supabase
-- AWS S3
 - OpenAI SDK
+
+Storage
+Cloudflare R2
+
+CDN
+Cloudflare
 
 Primary users:
 - Admins
 - Retailers
 - Wholesale catalog managers
+- staff
+- sales
+- guests
 
 ---
 

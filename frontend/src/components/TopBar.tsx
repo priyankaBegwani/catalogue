@@ -165,7 +165,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                   {/* User Info */}
                   <div className="px-4 py-3 border-b border-gray-200">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg">
+                      <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-semibold shadow-lg">
                         {user?.full_name?.charAt(0).toUpperCase() || 'U'}
                       </div>
                       <div>
@@ -184,10 +184,10 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                     }}
                     className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <Heart className="w-5 h-5 text-pink-500" />
+                    <Heart className="w-5 h-5 text-accent" />
                     <span className="font-medium">Wishlist</span>
                     {wishlistCount > 0 && (
-                      <span className="ml-auto bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                      <span className="ml-auto bg-accent text-white text-xs font-bold rounded-full px-2 py-0.5">
                         {wishlistCount}
                       </span>
                     )}
@@ -202,10 +202,10 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                     }}
                     className="w-full px-4 py-3 flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <ShoppingCart className="w-5 h-5 text-blue-500" />
+                    <ShoppingCart className="w-5 h-5 text-primary" />
                     <span className="font-medium">Shopping Cart</span>
                     {cartCount > 0 && (
-                      <span className="ml-auto bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                      <span className="ml-auto bg-primary text-white text-xs font-bold rounded-full px-2 py-0.5">
                         {cartCount}
                       </span>
                     )}
@@ -288,7 +288,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               >
                 <Heart className="w-6 h-6" />
                 {wishlistCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg">
+                  <span className="absolute -top-1 -right-1 bg-accent text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg">
                     {wishlistCount}
                   </span>
                 )}
@@ -302,7 +302,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
               >
                 <ShoppingCart className="w-6 h-6" />
                 {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg">
+                  <span className="absolute -top-1 -right-1 bg-primary text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg">
                     {cartCount}
                   </span>
                 )}
@@ -316,7 +316,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                   aria-label="Profile menu"
                   aria-expanded={profileDropdownOpen}
                 >
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg">
+                  <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white font-semibold shadow-lg">
                     {user?.full_name?.charAt(0).toUpperCase() || 'U'}
                   </div>
                   <div className="hidden md:block text-left">
@@ -402,7 +402,7 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
           >
             <div className="sticky top-0 bg-white z-10 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <div className="flex items-center space-x-2 sm:space-x-3">
-                <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-pink-500" />
+                <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-accent" />
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-900">My Wishlist</h2>
               </div>
               <button

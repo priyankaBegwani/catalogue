@@ -18,6 +18,7 @@ export interface UserProfile {
     name: string | null;
   } | null;
   is_active: boolean;
+  is_superadmin?: boolean;
   can_order_individual_sizes?: boolean;
   created_at: string;
   updated_at: string;
@@ -422,6 +423,25 @@ export interface CreateOrderData {
 }
 
 
+export type TenantSettings = {
+  whatsapp_number: string | null;
+  tawk_property_id: string | null;
+  tawk_widget_id: string | null;
+  show_price_to_customers: boolean;
+  pricing_active_model: 'volume' | 'relationship' | 'hybrid';
+  pricing_volume_tiers: unknown | null;
+  pricing_relationship_tiers: unknown | null;
+};
+
+export type TenantDomain = {
+  id: string;
+  tenant_id: string;
+  domain: string;
+  is_verified: boolean;
+  verified_at: string | null;
+  created_at: string;
+};
+
 class ApiClient {
   private getAuthHeader(): Record<string, string> {
     const token = localStorage.getItem('access_token');
@@ -449,6 +469,8 @@ class ApiClient {
     const headers: Record<string, string> = {};
     if (auth) Object.assign(headers, this.getAuthHeader());
     if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const tenantId = sessionStorage.getItem('tenant_id');
+    if (tenantId) headers['X-Tenant-ID'] = tenantId;
 
     const url = `${API_URL}${path}`;
     console.log(`[API] ${method} ${url}`);
@@ -1140,10 +1162,54 @@ class ApiClient {
   }
 
   async deleteUserPartyAssociation(userId: string, partyId: string): Promise<{ message: string }> {
-    return this.request(`/api/user-party-associations/user/${userId}/party/${partyId}`, { 
-      method: 'DELETE', 
-      errorMsg: 'Failed to delete party association' 
+    return this.request(`/api/user-party-associations/user/${userId}/party/${partyId}`, {
+      method: 'DELETE',
+      errorMsg: 'Failed to delete party association'
     });
+  }
+
+  // ── Tenant / Branding / Domains ──────────────────────────────────────────
+
+  async updateTenantBranding(data: {
+    business_name?: string;
+    tagline?: string;
+    logo_url?: string;
+    favicon_url?: string;
+    primary_color?: string;
+    secondary_color?: string;
+    accent_color?: string;
+  }): Promise<{ success: boolean; message: string }> {
+    return this.request('/api/tenant/branding', { method: 'PUT', body: data, errorMsg: 'Failed to update branding' });
+  }
+
+  async getTenantDomains(): Promise<TenantDomain[]> {
+    const res: { success: boolean; data: TenantDomain[] } = await this.request('/api/tenant/domains', { errorMsg: 'Failed to fetch domains' });
+    return res.data ?? [];
+  }
+
+  async addTenantDomain(domain: string): Promise<{ success: boolean; data: TenantDomain; message: string }> {
+    return this.request('/api/tenant/domains', { method: 'POST', body: { domain }, errorMsg: 'Failed to add domain' });
+  }
+
+  async verifyTenantDomain(domainId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/tenant/domains/${domainId}/verify`, { method: 'POST', errorMsg: 'Failed to verify domain' });
+  }
+
+  async deleteTenantDomain(domainId: string): Promise<void> {
+    return this.request(`/api/tenant/domains/${domainId}`, { method: 'DELETE', errorMsg: 'Failed to remove domain' });
+  }
+
+  async updateTenantSubdomain(slug: string): Promise<{ success: boolean; data: { new_url: string }; message: string }> {
+    return this.request('/api/tenant/subdomain', { method: 'PUT', body: { slug }, errorMsg: 'Failed to update subdomain' });
+  }
+
+  async getTenantSettings(): Promise<TenantSettings> {
+    const res: { success: boolean; data: TenantSettings } = await this.request('/api/tenant/settings', { errorMsg: 'Failed to fetch settings' });
+    return res.data;
+  }
+
+  async updateTenantSettings(updates: Partial<TenantSettings>): Promise<{ success: boolean; message: string }> {
+    return this.request('/api/tenant/settings', { method: 'PUT', body: updates, errorMsg: 'Failed to save settings' });
   }
 }
 

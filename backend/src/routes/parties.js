@@ -294,4 +294,108 @@ router.delete('/:id',
   })
 );
 
+// POST /api/parties/bulk — import up to 500 parties at once
+router.post('/bulk',
+  authenticateUser,
+  asyncHandler(async (req, res) => {
+    const { parties } = req.body;
+    if (!Array.isArray(parties) || parties.length === 0) {
+      throw new AppError('parties array is required', 400);
+    }
+    if (parties.length > 500) {
+      throw new AppError('Maximum 500 parties per batch', 400);
+    }
+
+    const inserted = [];
+    const updated  = [];
+    const errors   = [];
+
+    // Fetch existing names for duplicate detection (case-insensitive)
+    const names = parties.map(p => (p.name || '').trim().toLowerCase()).filter(Boolean);
+    const { data: existing } = await supabaseAdmin
+      .from('parties')
+      .select('id, name')
+      .in('name', names);
+
+    const existingMap = new Map(
+      (existing ?? []).map(p => [p.name.toLowerCase(), p.id])
+    );
+
+    const toInsert = [];
+    const toUpdate = [];
+
+    for (let i = 0; i < parties.length; i++) {
+      const p = parties[i];
+      const name = (p.name || '').trim();
+      if (!name) {
+        errors.push({ row: i + 1, error: 'name is required', data: p });
+        continue;
+      }
+      const row = {
+        name,
+        description:  p.description  || '',
+        address:      p.address       || '',
+        city:         p.city          || '',
+        district:     p.district      || '',
+        state:        p.state         || '',
+        pincode:      p.pincode        || '',
+        phone_number: p.phone_number  || p.phone || '',
+        email_id:     p.email_id      || p.email || '',
+        gst_number:   p.gst_number    || p.gst_no || '',
+        grade:        p.grade         || '',
+        place_of_supply: p.place_of_supply || '',
+        created_by:   req.user.id,
+      };
+      const existingId = existingMap.get(name.toLowerCase());
+      if (existingId) {
+        toUpdate.push({ id: existingId, ...row });
+      } else {
+        toInsert.push(row);
+      }
+    }
+
+    // Batch insert
+    if (toInsert.length > 0) {
+      const CHUNK = 100;
+      for (let i = 0; i < toInsert.length; i += CHUNK) {
+        const chunk = toInsert.slice(i, i + CHUNK);
+        const { data, error } = await supabaseAdmin
+          .from('parties')
+          .insert(chunk)
+          .select('id');
+        if (error) {
+          chunk.forEach((r, idx) => errors.push({ row: i + idx + 1, error: error.message, data: r }));
+        } else {
+          inserted.push(...(data ?? []));
+        }
+      }
+    }
+
+    // Batch update
+    for (const row of toUpdate) {
+      const { id, ...fields } = row;
+      const { error } = await supabaseAdmin
+        .from('parties')
+        .update(fields)
+        .eq('id', id);
+      if (error) {
+        errors.push({ row: -1, error: error.message, data: row });
+      } else {
+        updated.push({ id });
+      }
+    }
+
+    cache.delete('cache:/api/parties');
+    cache.delete('cache:/api/orders/parties');
+
+    res.json({
+      success: true,
+      inserted: inserted.length,
+      updated:  updated.length,
+      failed:   errors.length,
+      errors,
+    });
+  })
+);
+
 export default router;

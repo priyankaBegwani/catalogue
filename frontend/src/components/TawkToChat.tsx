@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useTawkTo, TawkToAPI } from '../hooks/useTawkTo';
 import { useAuth } from '../contexts/AuthContext';
+import { useTenant } from '../contexts/TenantContext';
 
 interface TawkToChatProps {
   enabled?: boolean;
@@ -8,22 +9,19 @@ interface TawkToChatProps {
 
 export function TawkToChat({ enabled = true }: TawkToChatProps) {
   const { user } = useAuth();
+  const { settings } = useTenant();
 
-  // Get Tawk.to configuration from localStorage (admin settings) or environment variables
-  const propertyId = localStorage.getItem('tawk_property_id') || import.meta.env.VITE_TAWKTO_PROPERTY_ID || '';
-  const widgetId = localStorage.getItem('tawk_widget_id') || import.meta.env.VITE_TAWKTO_WIDGET_ID || '';
+  const propertyId = settings?.tawk_property_id || import.meta.env.VITE_TAWKTO_PROPERTY_ID || '';
+  const widgetId = settings?.tawk_widget_id || import.meta.env.VITE_TAWKTO_WIDGET_ID || '';
 
-  // Initialize Tawk.to
   useTawkTo({
     propertyId,
     widgetId,
     enabled: enabled && !!propertyId && !!widgetId,
   });
 
-  // Set user attributes when user is available
   useEffect(() => {
     if (user && window.Tawk_API) {
-      // Wait for Tawk.to to be fully loaded
       const setUserInfo = () => {
         TawkToAPI.setAttributes({
           name: user.full_name,
@@ -33,7 +31,6 @@ export function TawkToChat({ enabled = true }: TawkToChatProps) {
         });
       };
 
-      // If Tawk_API is ready, set immediately
       if (window.Tawk_API.onLoad) {
         window.Tawk_API.onLoad = setUserInfo;
       } else {
@@ -42,6 +39,5 @@ export function TawkToChat({ enabled = true }: TawkToChatProps) {
     }
   }, [user]);
 
-  // Component doesn't render anything - it just loads the script
   return null;
 }

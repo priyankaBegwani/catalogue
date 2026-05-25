@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { TenantProvider } from './contexts/TenantContext';
 import {
   Login,
   Setup,
@@ -19,12 +20,24 @@ import {
   PricingTiers,
   AboutUs,
   ResetPassword,
+  BrandRegister,
+  SubscriptionExpired,
+  Subscription,
+  Onboarding,
+  InviteAccept,
 } from './pages';
 import CartWishlistAnalytics from './pages/CartWishlistAnalytics';
+import { ImageRestructure } from './pages/internal/ImageRestructure';
+import { DesignCompletion } from './pages/internal/DesignCompletion';
+import { AssistanceRequests } from './pages/internal/AssistanceRequests';
+import { PreviewCatalogue } from './pages/PreviewCatalogue';
 import { Sidebar, TopBar, TawkToChat } from './components';
+import { SubscriptionBanner } from './components/SubscriptionBanner';
+import { useTenant } from './contexts/TenantContext';
 
 function AppContent() {
-  const { user, loading, isAdmin, hasPermission } = useAuth();
+  const { user, loading, isAdmin, isSuperAdmin, hasPermission } = useAuth();
+  const { isExpired, inGracePeriod, onboardingComplete, isLoading: tenantLoading } = useTenant();
   const [showSetup, setShowSetup] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPinned, setSidebarPinned] = useState<boolean>(() => {
@@ -56,7 +69,32 @@ function AppContent() {
     return (
       <Routes>
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/register" element={<BrandRegister />} />
+        <Route path="/invite/:token" element={<InviteAccept />} />
+        {/* Public preview page — no login required */}
+        <Route path="/preview/:token" element={<PreviewCatalogue />} />
         <Route path="*" element={<Login onShowSetup={() => setShowSetup(true)} />} />
+      </Routes>
+    );
+  }
+
+  // Redirect admin to onboarding if not yet completed (superadmins skip — they have no tenant to onboard)
+  if (isAdmin && !isSuperAdmin && !tenantLoading && !onboardingComplete) {
+    return (
+      <Routes>
+        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="*" element={<Onboarding />} />
+      </Routes>
+    );
+  }
+
+  // Show frozen page if subscription fully expired (not in grace period)
+  // Still allow /subscription route so they can pay
+  if (user && isExpired && !inGracePeriod) {
+    return (
+      <Routes>
+        <Route path="/subscription" element={<Subscription />} />
+        <Route path="*" element={<SubscriptionExpired />} />
       </Routes>
     );
   }
@@ -102,6 +140,8 @@ function AppContent() {
         <Route path="/orders" element={hasPermission('orders', 'view') ? <Orders /> : <Navigate to="/catalogue" replace />} />
         <Route path="/orders/:orderId" element={hasPermission('orders', 'view') ? <OrderDetails /> : <Navigate to="/catalogue" replace />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/subscription" element={<Subscription />} />
+        <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/contact" element={<ContactUs />} />
         <Route path="/about" element={<AboutUs />} />
         <Route
@@ -112,6 +152,12 @@ function AppContent() {
           path="/pricing-tiers"
           element={hasPermission('pricing', 'view') ? <PricingTiers /> : <Navigate to="/catalogue" replace />}
         />
+        {/* Internal superadmin tools — no sidebar chrome needed (InternalLayout handles it) */}
+        <Route path="/internal/assistance"         element={isSuperAdmin ? <AssistanceRequests /> : <Navigate to="/catalogue" replace />} />
+        <Route path="/internal/image-restructure"  element={isSuperAdmin ? <ImageRestructure />   : <Navigate to="/catalogue" replace />} />
+        <Route path="/internal/design-completion"  element={isSuperAdmin ? <DesignCompletion />   : <Navigate to="/catalogue" replace />} />
+        {/* Preview accessible when logged in too */}
+        <Route path="/preview/:token" element={<PreviewCatalogue />} />
         <Route path="*" element={<Navigate to="/catalogue" replace />} />
         </Routes>
         </Suspense>
@@ -119,6 +165,7 @@ function AppContent() {
       
       {/* Tawk.to Chat Widget - Only for non-admin users (retailers and guests) */}
       {!hasPermission('users', 'manage_roles') && <TawkToChat enabled={true} />}
+      <SubscriptionBanner />
     </div>
   );
 }
@@ -126,9 +173,11 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
+    <TenantProvider>
       <AuthProvider>
         <AppContent />
       </AuthProvider>
+      </TenantProvider>
     </BrowserRouter>
   );
 }

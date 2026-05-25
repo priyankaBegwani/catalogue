@@ -19,19 +19,18 @@ Structure:
 src/
 ├── components/
 ├── pages/
-├── features/
-├── services/
+├── config/
+├── icons/
 ├── hooks/
 ├── contexts/
 ├── utils/
 ├── types/
-└── routes/
+└── lib/
 ```
 
 Rules:
 - feature-first organization preferred
-- shared UI inside components/ui
-- business logic belongs in services/hooks
+- shared UI inside components
 - avoid massive pages/components
 
 ---
@@ -49,14 +48,10 @@ Recommended structure:
 ```txt
 src/
 ├── routes/
-├── controllers/
-├── services/
-├── middleware/
-├── validators/
+├── config/
 ├── utils/
-├── ai/
-├── storage/
-└── config/
+├── middleware/
+
 ```
 
 ---
@@ -77,7 +72,7 @@ Rules:
 # Storage
 
 Primary asset storage:
-- AWS S3
+- cloudflare r2
 
 Rules:
 - prefer presigned URLs

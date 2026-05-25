@@ -480,8 +480,7 @@ export function AddDesignModal({ onClose, onSuccess, editingDesign }: AddDesignM
                 <option value="boys">Boys</option>
                 <option value="fabric">Fabric</option>
               </select>
-            </div>BNV78 BVU8U8U88UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUM7YMMMMMHMMMMMMMMMMMMMMMHMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMOL NMV78TOVBOBO8B8OTOVLVRFBVLKFORBVFOBVVFROVBFO8R7VBFR86NVBRIJO97NVFB6U8N9
-
+            </div>
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Product *

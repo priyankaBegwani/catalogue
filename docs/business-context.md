@@ -9,7 +9,12 @@ This platform helps ethnic wear businesses:
 - manage retailers
 - generate shareable catalogs
 - streamline wholesale operations
-
+- order placement via cart
+- order fulfillment
+- order tracking and history
+- dashboard analytics
+- user management, their login history
+- roles and permission based features
 ---
 
 # User Types

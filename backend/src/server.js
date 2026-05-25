@@ -22,6 +22,18 @@ import whatsappRoutes from './routes/whatsappWebhook.js';
 import rolesRoutes from './routes/roles.js';
 import userPartyAssociationsRoutes from './routes/user-party-associations.js';
 import analyticsRoutes from './routes/analytics.js';
+import { resolveTenant } from './middleware/resolveTenant.js';
+import { checkSubscription } from './middleware/checkSubscription.js';
+import platformRoutes from './routes/platform.js';
+import tenantRoutes from './routes/tenant.js';
+import exportRoutes from './routes/export.js';
+import subscriptionBillingRoutes, { razorpayWebhookHandler } from './routes/subscriptionBilling.js';
+import onboardingRoutes from './routes/onboarding.js';
+import invitationsRoutes from './routes/invitations.js';
+import imageRestructureRoutes from './routes/internal/imageRestructure.js';
+import designCompletionRoutes from './routes/internal/designCompletion.js';
+import assistanceRequestsRoutes from './routes/internal/assistanceRequests.js';
+import exportDataRoutes from './routes/internal/exportData.js';
 
 const app = express();
 
@@ -39,11 +51,11 @@ app.use(cors({
     }
 
     // Support comma-separated list of allowed origins
-    const allowedOrigins = frontendUrl.split(',').map(u => u.trim().replace(/\/+$/, ''));
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+    const allowed = (frontendUrl || '').split(',').map(u => u.trim().replace(/\/+$/, ''));
+    const marketingUrl = (process.env.MARKETING_URL || '').trim().replace(/\/+$/, '');
+    if (marketingUrl) allowed.push(marketingUrl);
+    
+    if (allowed.includes(origin)) return callback(null, true);
 
     callback(new Error('Not allowed by CORS'));
   },
@@ -79,6 +91,38 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
+const platformLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10 }); // 10 registrations/hour per IP
+
+// Tenant middleware
+app.use('/api', (req, res, next) => {
+  // Skip platform/global/superadmin-internal routes
+  if (
+    req.path.startsWith('/auth') ||
+    req.path.startsWith('/platform') ||
+    req.path.startsWith('/invitations/accept') ||
+    req.path.startsWith('/internal') ||
+    req.path.startsWith('/onboarding/preview')
+  ) {
+    return next();
+  }
+
+  return resolveTenant(req, res, next);
+});
+
+app.use('/api', (req, res, next) => {
+  if (
+    req.path.startsWith('/auth') ||
+    req.path.startsWith('/platform') ||
+    req.path.startsWith('/invitations/accept') ||
+    req.path.startsWith('/internal') ||
+    req.path.startsWith('/onboarding/preview')
+  ) {
+    return next();
+  }
+  return checkSubscription(req, res, next);
+});
+
+app.use('/api/platform', platformLimiter, platformRoutes);
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/designs', designsRoutes);
@@ -96,6 +140,20 @@ app.use('/api/roles', rolesRoutes);
 app.use('/api/user-party-associations', userPartyAssociationsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/webhook/whatsapp', whatsappRoutes);
+app.use('/api/tenant', tenantRoutes);
+app.use('/api/export', exportRoutes);
+app.use('/api/subscription', subscriptionBillingRoutes);
+app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/invitations', invitationsRoutes);
+// Internal superadmin tools — bypass tenant + subscription middleware (enforced per-route via requireSuperAdmin)
+app.use('/api/internal/image-restructure', imageRestructureRoutes);
+app.use('/api/internal/design-completion', designCompletionRoutes);
+app.use('/api/internal/assistance',        assistanceRequestsRoutes);
+app.use('/api/internal/export',            exportDataRoutes);
+
+// Public onboarding preview (token-based, no auth) — must bypass resolveTenant + checkSubscription
+// These are already handled inside the onboarding router via the /preview/* paths
+app.post('/webhook/razorpay', express.raw({ type: 'application/json' }), razorpayWebhookHandler);
 
 // 404 handler
 app.use((req, res) => {

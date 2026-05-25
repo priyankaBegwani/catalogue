@@ -4,6 +4,8 @@ import { lazy } from 'react';
 // Critical pages - loaded immediately
 export { Login } from './Login';
 export { ResetPassword } from './ResetPassword';
+export { BrandRegister } from './BrandRegister';
+export { SubscriptionExpired } from './SubscriptionExpired';
 
 // Non-critical pages - lazy loaded
 export const Dashboard = lazy(() => import('./Dashboard'));
@@ -21,3 +23,6 @@ export const AboutUs = lazy(() => import('./AboutUs').then(m => ({ default: m.Ab
 export const Settings = lazy(() => import('./Settings').then(m => ({ default: m.Settings })));
 export const PricingTiers = lazy(() => import('./PricingTiers').then(m => ({ default: m.PricingTiers })));
 export const Setup = lazy(() => import('./Setup').then(m => ({ default: m.Setup })));
+export const Subscription = lazy(() => import('./Subscription').then(m => ({ default: m.Subscription })));
+export const Onboarding = lazy(() => import('./Onboarding').then(m => ({ default: m.Onboarding })));
+export const InviteAccept = lazy(() => import('./InviteAccept').then(m => ({ default: m.InviteAccept })));

@@ -3,6 +3,7 @@ import { api, Design, DesignCategory, FabricType, SizeSet, UserProfile, Brand, D
 import { COLOR_GROUPS, ALL_COLORS } from '../lib/colorConstants';
 import { Package, Heart, ShoppingCart, ImageIcon, Filter, X, ZoomIn, ZoomOut, Maximize2, ToggleLeft, ToggleRight, MessageCircle, CheckSquare, Square, MessageSquare, Sparkles, TrendingUp, Award, Zap, Truck, Plus, Search, ArrowLeft, ArrowRight, ChevronDown, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTenant } from '../contexts/TenantContext';
 import { getWhatsAppUrl, useBranding } from '../hooks/useBranding';
 import { AddToCartModal } from '../components/AddToCartModal';
 import { Breadcrumb } from '../components';
@@ -323,6 +324,7 @@ function sanitizeCatalogueDesigns(designs: Design[]) {
 export function Catalogue() {
   const { user, isAdmin, hasPermission } = useAuth();
   const branding = useBranding();
+  const { settings: tenantSettings } = useTenant();
   
   // Check if user has access to special brands (Indiecraft, Babumoshai)
   const hasSpecialBrandAccess = useMemo(() => {
@@ -365,7 +367,6 @@ export function Catalogue() {
   const [showFilters, setShowFilters] = useState(false);
   const [showSortSheet, setShowSortSheet] = useState(false);
   const [availableColors, setAvailableColors] = useState<string[]>([]);
-  const [showPriceToCustomers, setShowPriceToCustomers] = useState(true);
   const [filters, setFilters] = useState<FilterState>({
     categories: [],
     brands: [],
@@ -461,9 +462,6 @@ export function Catalogue() {
     loadBrands();
     loadFiltersFromUrl();
     loadAllDesigns(); // Load all designs for autocomplete
-    // Load price visibility setting
-    const savedShowPrice = localStorage.getItem('show_price_to_customers') !== 'false';
-    setShowPriceToCustomers(savedShowPrice);
   }, []);
 
   // Load filters from URL parameters (for shared links)
@@ -1919,7 +1917,7 @@ function DesignCard({ design, onQuickView, bulkSelectionMode = false, isSelected
   const firstImage = selectedColorImages[currentImageIndex] || selectedColorImages[0];
   const isAuthenticated = !!user;
   const canOrder = hasPermission('catalogue', 'order');
-  const showPriceToCustomers = localStorage.getItem('show_price_to_customers') !== 'false';
+  const showPriceToCustomers = tenantSettings?.show_price_to_customers ?? true;
   const shouldShowPrice = isAdmin || (isAuthenticated && showPriceToCustomers);
 
   // Load user profile for party discount information

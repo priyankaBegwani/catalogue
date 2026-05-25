@@ -22,6 +22,8 @@ import {
 import { api, Order } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 import { Breadcrumb } from '../components';
+import { OnboardingProgressBanner } from '../components/OnboardingProgressBanner';
+import { useAuth } from '../contexts/AuthContext';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -52,6 +54,7 @@ interface TopDesign {
 }
 
 const Dashboard: React.FC = () => {
+  const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const [layouts, setLayouts] = useState<{ [key: string]: Layout[] }>({});
   const [widgets, setWidgets] = useState<WidgetConfig[]>([
@@ -290,6 +293,7 @@ const Dashboard: React.FC = () => {
   return (
     <div className="px-4 sm:px-6 pb-4 sm:pb-6 max-w-7xl mx-auto">
       <Breadcrumb />
+      {isAdmin && <OnboardingProgressBanner />}
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/30 p-2 sm:p-4 md:p-8">
         {/* Header */}
         <div className="mb-8">

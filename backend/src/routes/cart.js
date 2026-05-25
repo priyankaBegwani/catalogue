@@ -47,8 +47,7 @@ router.get('/',
             available_sizes,
             category:design_categories!designs_category_id_fkey (
               id,
-              name,
-              slug
+              name
             )
           ),
           color:design_colors!cart_items_color_id_fkey (

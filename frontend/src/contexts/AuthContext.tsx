@@ -9,6 +9,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
   hasPermission: (module: keyof RolePermissions, action: string) => boolean;
   permissions: RolePermissions | null;
   roleName: string;
@@ -91,24 +92,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const isAdmin = checkIsAdmin(user);
+  const isSuperAdmin = user?.is_superadmin === true;
   const permissions = user?.user_roles?.permissions || null;
   const roleName = user?.user_roles?.role_name || 'Unknown';
 
   const checkPermission = useCallback((module: keyof RolePermissions, action: string) => {
+    // Superadmins have all permissions
+    if (user?.is_superadmin) return true;
     return hasPermission(user, module, action);
   }, [user]);
 
-  const value = useMemo(() => ({ 
-    user, 
-    loading, 
-    login, 
-    logout, 
+  const value = useMemo(() => ({
+    user,
+    loading,
+    login,
+    logout,
     refreshUser,
-    isAdmin, 
+    isAdmin: isAdmin || isSuperAdmin,
+    isSuperAdmin,
     hasPermission: checkPermission,
     permissions,
     roleName
-  }), [user, loading, login, logout, refreshUser, isAdmin, checkPermission, permissions, roleName]);
+  }), [user, loading, login, logout, refreshUser, isAdmin, isSuperAdmin, checkPermission, permissions, roleName]);
 
   return (
     <AuthContext.Provider value={value}>

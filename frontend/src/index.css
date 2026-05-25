@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Default brand CSS variables — overridden at runtime by TenantContext.applyBranding() */
+:root {
+  --color-primary: #1e3473;
+  --color-secondary: #6366f1;
+  --color-accent: #f59e0b;
+}
+
 /* Prevent cursor on non-editable elements */
 * {
   caret-color: auto;
