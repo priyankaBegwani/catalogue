@@ -54,8 +54,11 @@ app.use(cors({
     const allowed = (frontendUrl || '').split(',').map(u => u.trim().replace(/\/+$/, ''));
     const marketingUrl = (process.env.MARKETING_URL || '').trim().replace(/\/+$/, '');
     if (marketingUrl) allowed.push(marketingUrl);
-    
+
     if (allowed.includes(origin)) return callback(null, true);
+
+    // Allow any subdomain of whollio.com (marketing site)
+    if (/^https?:\/\/([a-z0-9-]+\.)*whollio\.com$/.test(origin)) return callback(null, true);
 
     callback(new Error('Not allowed by CORS'));
   },
