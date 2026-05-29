@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '../config.js';
+import { supabase, supabaseAdmin } from '../config.js';
 import { cache } from '../utils/cache.js';
 import { AppError } from '../utils/errorHandler.js';
 
@@ -121,7 +121,10 @@ export async function registerTenant({ businessName, slug, ownerName, email, pas
   // 9. Build the app URL for redirect
   const appUrl = `https://${slug}.${process.env.APP_DOMAIN}`;
 
-  return { tenantId, slug, appUrl };
+  // 10. Sign in as the new owner to get session tokens for auto-login redirect
+  const { data: signInData } = await supabase.auth.signInWithPassword({ email, password });
+
+  return { tenantId, slug, appUrl, session: signInData?.session ?? null };
 }
 
 /**

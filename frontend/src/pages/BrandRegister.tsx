@@ -88,7 +88,7 @@ export function BrandRegister() {
 
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitError, setSubmitError] = useState('');
-  const [result, setResult] = useState<{ slug: string; app_url: string } | null>(null);
+  const [result, setResult] = useState<{ slug: string; app_url: string; access_token: string | null; refresh_token: string | null } | null>(null);
 
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
@@ -228,8 +228,28 @@ export function BrandRegister() {
         return;
       }
 
-      setResult({ slug: body.data.slug, app_url: body.data.app_url });
+      const registrationResult = {
+        slug: body.data.slug,
+        app_url: body.data.app_url,
+        access_token: body.data.access_token ?? null,
+        refresh_token: body.data.refresh_token ?? null,
+      };
+      setResult(registrationResult);
       setSubmitStatus('success');
+
+      // Auto-redirect with session tokens in hash so tenant app can log in without prompting
+      if (registrationResult.access_token) {
+        const isDev = import.meta.env.DEV;
+        const params = new URLSearchParams({
+          access_token: registrationResult.access_token,
+          ...(registrationResult.refresh_token ? { refresh_token: registrationResult.refresh_token } : {}),
+          type: 'register',
+        });
+        const base = isDev
+          ? `${window.location.origin}?tenant=${registrationResult.slug}`
+          : registrationResult.app_url;
+        window.location.href = `${base}#${params.toString()}`;
+      }
     } catch {
       setSubmitError('Could not reach the server. Check that the backend is running.');
       setSubmitStatus('error');
@@ -271,11 +291,18 @@ export function BrandRegister() {
     </div>
   );
 
-  // ── Success screen ────────────────────────────────────────────────────────
+  // ── Success screen (fallback — shown only if auto-redirect failed) ──────────
   if (submitStatus === 'success' && result) {
-    // Dev: add ?tenant=slug so resolveTenant picks up the correct tenant
-    const devAppUrl = `${window.location.origin}?tenant=${result.slug}`;
     const isDev = import.meta.env.DEV;
+    const tokenParams = result.access_token
+      ? new URLSearchParams({
+          access_token: result.access_token,
+          ...(result.refresh_token ? { refresh_token: result.refresh_token } : {}),
+          type: 'register',
+        }).toString()
+      : '';
+    const base = isDev ? `${window.location.origin}?tenant=${result.slug}` : result.app_url;
+    const openUrl = tokenParams ? `${base}#${tokenParams}` : base;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
@@ -303,18 +330,8 @@ export function BrandRegister() {
             </div>
           </div>
 
-          {isDev && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-left">
-              <p className="text-xs font-semibold text-amber-800 mb-1">Dev mode — no subdomain DNS</p>
-              <p className="text-xs text-amber-700 mb-2">
-                Use the link below to test with the correct tenant context in localhost:
-              </p>
-              <code className="text-xs text-amber-900 break-all">{devAppUrl}</code>
-            </div>
-          )}
-
           <a
-            href={isDev ? devAppUrl : result.app_url}
+            href={openUrl}
             className="block w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold text-sm hover:shadow-lg transition-all hover:scale-[1.01] mb-3"
           >
             Open Your App →

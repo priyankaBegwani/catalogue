@@ -8,19 +8,23 @@ export type BrandingSettings = {
   accentColor: string;
   tagline: string | null;
   whatsappNumber: string;
+  hasCustomBranding: boolean;
 };
 
 export function useBranding(): BrandingSettings {
   const { branding, settings } = useTenant();
 
+  const hasCustomBranding = !!(branding?.logo_url || branding?.business_name);
+
   return {
-    brandName: branding?.business_name ?? 'Your Brand',
-    logoUrl: branding?.logo_url ?? '/Logo indie.png',
-    primaryColor: branding?.primary_color ?? '#1e3473',
-    secondaryColor: branding?.secondary_color ?? '#6366f1',
+    brandName: branding?.business_name ?? 'Whollio',
+    logoUrl: branding?.logo_url ?? '/whollio-logo.png',
+    primaryColor: branding?.primary_color ?? '#2563eb',
+    secondaryColor: branding?.secondary_color ?? '#1e40af',
     accentColor: branding?.accent_color ?? '#f59e0b',
     tagline: branding?.tagline ?? null,
     whatsappNumber: settings?.whatsapp_number ?? '',
+    hasCustomBranding,
   };
 }
 

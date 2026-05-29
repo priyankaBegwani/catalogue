@@ -36,6 +36,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     const checkAuth = async () => {
+      // Auto-login after registration: marketing site passes tokens in URL hash
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      const hashAccessToken = hash.get('access_token');
+      const hashRefreshToken = hash.get('refresh_token');
+      if (hashAccessToken && hash.get('type') === 'register') {
+        localStorage.setItem('access_token', hashAccessToken);
+        if (hashRefreshToken) localStorage.setItem('refresh_token', hashRefreshToken);
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        // Fall through to normal checkAuth — tokens are now in localStorage
+      }
+
       const tokenAtStart = localStorage.getItem('access_token');
 
       try {
