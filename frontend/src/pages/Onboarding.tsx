@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { OnboardingProvider, useOnboarding } from '../onboarding/OnboardingContext';
 import { Step3StartMethod }  from '../onboarding/steps/Step3StartMethod';
 import { Step4DesignImport } from '../onboarding/steps/Step4DesignImport';
@@ -10,13 +9,13 @@ import { AssistedStatus }    from '../onboarding/steps/AssistedStatus';
 
 function OnboardingRouter() {
   const { currentStep, startMethod, isComplete, isLoading } = useOnboarding();
-  const navigate = useNavigate();
 
   useEffect(() => {
     if (isComplete) {
-      navigate('/', { replace: true });
+      // Full reload so TenantContext re-fetches onboarding_complete = true from the DB
+      window.location.replace('/');
     }
-  }, [isComplete, navigate]);
+  }, [isComplete]);
 
   if (isLoading) {
     return (

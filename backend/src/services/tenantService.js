@@ -1,4 +1,5 @@
-import { supabase, supabaseAdmin } from '../config.js';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin, config } from '../config.js';
 import { cache } from '../utils/cache.js';
 import { AppError } from '../utils/errorHandler.js';
 
@@ -121,10 +122,24 @@ export async function registerTenant({ businessName, slug, ownerName, email, pas
   // 9. Build the app URL for redirect
   const appUrl = `https://${slug}.${process.env.APP_DOMAIN}`;
 
-  // 10. Sign in as the new owner to get session tokens for auto-login redirect
-  const { data: signInData } = await supabase.auth.signInWithPassword({ email, password });
+  // 10. Sign in as the new owner to obtain session tokens for the auto-login redirect.
+  //     Use an ephemeral client so we don't disturb the shared singleton's session state.
+  let session = null;
+  try {
+    const anonClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: signInData, error: signInError } = await anonClient.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      console.error('[registerTenant] auto sign-in failed:', signInError.message);
+    } else {
+      session = signInData?.session ?? null;
+    }
+  } catch (err) {
+    console.error('[registerTenant] unexpected sign-in error:', err.message);
+  }
 
-  return { tenantId, slug, appUrl, session: signInData?.session ?? null };
+  return { tenantId, slug, appUrl, session };
 }
 
 /**

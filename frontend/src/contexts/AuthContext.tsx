@@ -36,14 +36,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     const checkAuth = async () => {
-      // Auto-login after registration: marketing site passes tokens in URL hash
+      // Auto-login after registration: accept tokens from URL hash OR query params.
+      // Hash is used by the in-app BrandRegister redirect; query params cover
+      // external marketing site redirects that can't set hash fragments server-side.
       const hash = new URLSearchParams(window.location.hash.slice(1));
-      const hashAccessToken = hash.get('access_token');
-      const hashRefreshToken = hash.get('refresh_token');
-      if (hashAccessToken && hash.get('type') === 'register') {
-        localStorage.setItem('access_token', hashAccessToken);
-        if (hashRefreshToken) localStorage.setItem('refresh_token', hashRefreshToken);
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      const query = new URLSearchParams(window.location.search);
+
+      const autoToken = hash.get('access_token') || query.get('access_token');
+      const autoRefresh = hash.get('refresh_token') || query.get('refresh_token');
+      const autoType = hash.get('type') || query.get('type');
+
+      if (autoToken && autoType === 'register') {
+        localStorage.setItem('access_token', autoToken);
+        if (autoRefresh) localStorage.setItem('refresh_token', autoRefresh);
+
+        if (hash.get('access_token')) {
+          // Tokens were in hash — clear the hash, keep the query string intact
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        } else {
+          // Tokens were in query params — strip only the auth params, preserve others (e.g. ?tenant=)
+          query.delete('access_token');
+          query.delete('refresh_token');
+          query.delete('type');
+          const remaining = query.toString();
+          window.history.replaceState(null, '', window.location.pathname + (remaining ? `?${remaining}` : ''));
+        }
         // Fall through to normal checkAuth — tokens are now in localStorage
       }
 

@@ -116,6 +116,22 @@ export function Login(_props: LoginProps) {
           )}
         </div>
 
+        {/* ── Mobile logo — shown above the card on small screens ─────────── */}
+        <div className="lg:hidden flex flex-col items-center gap-2 text-center">
+          {isWhollio ? (
+            <WholllioWordmark />
+          ) : (
+            <img
+              src={branding.logoUrl}
+              alt={branding.brandName}
+              className="h-14 w-auto object-contain"
+            />
+          )}
+          <p className="text-sm text-blue-200/80">
+            {isWhollio ? 'Sign in to your workspace' : `Welcome back to ${branding.brandName}`}
+          </p>
+        </div>
+
         {/* ── Login card ──────────────────────────────────────────────────── */}
         <div className="w-full max-w-sm">
           <div
@@ -127,8 +143,8 @@ export function Login(_props: LoginProps) {
               border: '1px solid rgba(255,255,255,0.3)',
             }}
           >
-            {/* Card header */}
-            <div className="mb-6 text-center">
+            {/* Card header — logo only shown on desktop; mobile sees it above the card */}
+            <div className="hidden lg:block mb-6 text-center">
               {isWhollio ? (
                 <div className="flex justify-center mb-3">
                   <WholllioWordmark />

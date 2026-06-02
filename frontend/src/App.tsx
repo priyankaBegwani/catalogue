@@ -78,8 +78,16 @@ function AppContent() {
     );
   }
 
-  // Redirect admin to onboarding if not yet completed (superadmins skip — they have no tenant to onboard)
-  if (isAdmin && !isSuperAdmin && !tenantLoading && !onboardingComplete) {
+  // On first-time registration login, force the admin straight into the onboarding wizard.
+  // We track this with a per-tenant localStorage flag so that subsequent logins (with
+  // onboarding still incomplete) land on the normal app — where the sidebar shows the
+  // "Complete Setup" link instead of blocking access entirely.
+  const tenantId = sessionStorage.getItem('tenant_id');
+  const onboardingForcedKey = tenantId ? `onboarding_forced_${tenantId}` : null;
+  const onboardingAlreadyForced = onboardingForcedKey ? !!localStorage.getItem(onboardingForcedKey) : false;
+
+  if (isAdmin && !isSuperAdmin && !tenantLoading && !onboardingComplete && !onboardingAlreadyForced) {
+    if (onboardingForcedKey) localStorage.setItem(onboardingForcedKey, '1');
     return (
       <Routes>
         <Route path="/onboarding" element={<Onboarding />} />

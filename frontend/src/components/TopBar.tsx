@@ -13,6 +13,17 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { CartModal } from './CartModal';
+
+function WholllioAppMark() {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
+        <span className="text-white font-bold text-base leading-none">W</span>
+      </div>
+      <span className="text-xl font-bold text-gray-900 tracking-tight">Whollio</span>
+    </div>
+  );
+}
 import { Wishlist } from './Wishlist';
 import { useBranding } from '../hooks/useBranding';
 
@@ -133,12 +144,16 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
 
             {/* Center: Logo */}
             <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center pointer-events-none">
-              <img
-                src={branding.logoUrl}
-                alt={branding.brandName}
-                style={{ height: '5.5rem' }}
-                className="w-auto object-contain max-w-[150px]"
-              />
+              {branding.hasCustomLogo ? (
+                <img
+                  src={branding.logoUrl}
+                  alt={branding.brandName}
+                  style={{ height: '5.5rem' }}
+                  className="w-auto object-contain max-w-[150px]"
+                />
+              ) : (
+                <WholllioAppMark />
+              )}
             </div>
             
             {/* Right: Mobile Actions Dropdown */}
@@ -270,12 +285,16 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
 
             {/* Center: Logo */}
             <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center pointer-events-none">
-              <img
-                src={branding.logoUrl}
-                alt={branding.brandName}
-                style={{ height: '10rem', paddingTop: '10px' }}
-                className="w-auto object-contain"
-              />
+              {branding.hasCustomLogo ? (
+                <img
+                  src={branding.logoUrl}
+                  alt={branding.brandName}
+                  style={{ height: '10rem', paddingTop: '10px' }}
+                  className="w-auto object-contain"
+                />
+              ) : (
+                <WholllioAppMark />
+              )}
             </div>
 
             {/* Right: Actions */}

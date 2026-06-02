@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { memo, useMemo, useCallback, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranding } from '../hooks/useBranding';
+import { useTenant } from '../contexts/TenantContext';
 import {
   BarChart3,
   Package,
@@ -22,6 +23,7 @@ import {
   Briefcase,
   Cog,
   CreditCard,
+  Rocket,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -36,6 +38,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
   const navigate = useNavigate();
   const { hasPermission, isAdmin, user, permissions } = useAuth();
   const branding = useBranding();
+  const { onboardingComplete } = useTenant();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['management', 'system']));
 
   const navigationStructure = useMemo(() => {
@@ -48,6 +51,18 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
     console.log('hasPermission test (catalogue, view):', hasPermission('catalogue', 'view'));
     
     const structure: any[] = [];
+
+    // Complete Setup — shown to admins when onboarding is still pending
+    if (isAdmin && !onboardingComplete) {
+      structure.push({
+        type: 'item',
+        id: 'onboarding',
+        label: 'Complete Setup',
+        icon: Rocket,
+        path: '/onboarding',
+        highlight: true,
+      });
+    }
 
     // Catalogue - visible only if user has catalogue view permission
     if (hasPermission('catalogue', 'view')) {
@@ -198,7 +213,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
     );
 
     return structure;
-  }, [hasPermission]);
+  }, [hasPermission, isAdmin, onboardingComplete]);
 
   const handleNavigate = useCallback((path: string) => {
     navigate(path);
@@ -247,9 +262,17 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
         {/* Sidebar Header */}
         <div className="h-20 flex items-center justify-between px-6 border-b border-slate-700/50 bg-slate-900/50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center shadow-lg">
-              <ShoppingBag className="w-6 h-6 text-white" />
-            </div>
+            {branding.hasCustomLogo ? (
+              <img
+                src={branding.logoUrl}
+                alt={branding.brandName}
+                className="h-9 w-auto object-contain rounded"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                <span className="text-white font-bold text-lg leading-none">W</span>
+              </div>
+            )}
             <div>
               <h2 className="font-bold text-lg text-white truncate max-w-[140px]">
                 {branding.brandName}
@@ -286,6 +309,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
               if (item.type === 'item') {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
+                const isHighlight = item.highlight && !isActive;
 
                 return (
                   <button
@@ -294,16 +318,23 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                       isActive
                         ? 'bg-primary text-white shadow-lg shadow-black/20'
+                        : isHighlight
+                        ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border border-amber-500/30'
                         : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
                     }`}
                   >
                     <Icon
                       size={20}
                       className={`transition-transform group-hover:scale-110 ${
-                        isActive ? 'text-white' : 'text-slate-400'
+                        isActive ? 'text-white' : isHighlight ? 'text-amber-400' : 'text-slate-400'
                       }`}
                     />
                     <span className="font-medium">{item.label}</span>
+                    {isHighlight && (
+                      <span className="ml-auto text-[10px] font-semibold bg-amber-500/30 text-amber-300 px-1.5 py-0.5 rounded-full">
+                        Pending
+                      </span>
+                    )}
                     {isActive && (
                       <div className="ml-auto w-2 h-2 rounded-full bg-white animate-pulse" />
                     )}

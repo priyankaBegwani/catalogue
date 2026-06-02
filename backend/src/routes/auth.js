@@ -102,12 +102,31 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Username/Email and password are required' });
     }
 
-    // Check if input is email or username
+    // Determine login method: email (has @), phone (digits/+), or username
     const isEmail = email.includes('@');
+    const normalizedInput = email.replace(/[\s\-\(\)\.]/g, '');
+    const isPhone = !isEmail && /^\+?\d{7,15}$/.test(normalizedInput);
     let loginEmail = email;
 
-    // If username provided, look up the email
-    if (!isEmail) {
+    if (isPhone) {
+      // Try exact match then normalized (strips spaces/dashes)
+      const phoneCandidates = [...new Set([email.trim(), normalizedInput])];
+      let phoneProfile = null;
+      for (const candidate of phoneCandidates) {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('email')
+          .eq('phone_number', candidate)
+          .maybeSingle();
+        if (data?.email) { phoneProfile = data; break; }
+      }
+      if (!phoneProfile) {
+        recordLoginAttempt(req, null, 'failed');
+        return res.status(401).json({ error: 'Invalid phone number or password' });
+      }
+      loginEmail = phoneProfile.email;
+    } else if (!isEmail) {
+      // If username provided, look up the email
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('email')
