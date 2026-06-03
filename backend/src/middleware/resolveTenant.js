@@ -11,9 +11,11 @@ export const resolveTenant = async (req, res, next) => {
       return next();
     }
 
-    // 2. Dev-only: ?tenant=slug query param — lets the demo registration page
-    //    redirect to the app without needing real subdomain DNS
-    if (process.env.NODE_ENV === 'development' && req.query.tenant) {
+    // 2. ?tenant=slug query param — used when the API is on a separate domain
+    //    from the frontend (e.g. catalogue-be.onrender.com) and there is no
+    //    subdomain to infer the tenant from. Safe: authenticated routes still
+    //    verify the user belongs to the resolved tenant.
+    if (req.query.tenant) {
       const slug = req.query.tenant;
       const cacheKey = `tenant_slug:${slug}`;
       let tenantId = cache.get(cacheKey);
