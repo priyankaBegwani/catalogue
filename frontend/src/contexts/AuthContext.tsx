@@ -110,7 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.login({ email, password });
     setUser(data.profile);
-  }, []);
+    retryTenant();
+  }, [retryTenant]);
 
   const logout = useCallback(async () => {
     try {

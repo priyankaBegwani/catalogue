@@ -528,8 +528,9 @@ class ApiClient {
     }
 
     const data = await response.json();
-    console.log('[login] profile.user_roles:', data.profile?.user_roles ?? null);
-    console.log('[login] profile.tenant_id:', data.profile?.tenant_id ?? null);
+    if (data.profile?.tenant_id) {
+      sessionStorage.setItem('tenant_id', data.profile.tenant_id);
+    }
     localStorage.setItem('access_token', data.session.access_token);
     localStorage.setItem('refresh_token', data.session.refresh_token);
     return data;

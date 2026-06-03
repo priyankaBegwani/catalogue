@@ -116,13 +116,17 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<TenantState>(defaultState);
 
   const doFetch = useCallback(() => {
-    const slug = sessionStorage.getItem('tenant_slug') ?? '';
+    const slug     = sessionStorage.getItem('tenant_slug') ?? '';
+    const tenantId = sessionStorage.getItem('tenant_id')   ?? '';
 
     const resolveUrl = slug
       ? `${API_URL}/api/tenant/resolve?tenant=${encodeURIComponent(slug)}`
       : `${API_URL}/api/tenant/resolve`;
 
-    fetch(resolveUrl)
+    const resolveHeaders: Record<string, string> = {};
+    if (!slug && tenantId) resolveHeaders['X-Tenant-ID'] = tenantId;
+
+    fetch(resolveUrl, { headers: resolveHeaders })
       .then(r => r.json())
       .then(({ data }) => {
         if (!data) {
