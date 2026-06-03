@@ -34,6 +34,7 @@ import { PreviewCatalogue } from './pages/PreviewCatalogue';
 import { Sidebar, TopBar, TawkToChat } from './components';
 import { SubscriptionBanner } from './components/SubscriptionBanner';
 import { useTenant } from './contexts/TenantContext';
+import { OnboardingProvider } from './onboarding/OnboardingContext';
 
 function AppContent() {
   const { user, loading, isAdmin, isSuperAdmin, hasPermission } = useAuth();
@@ -89,21 +90,22 @@ function AppContent() {
     );
   }
 
-  // On first-time registration login, force the admin straight into the onboarding wizard.
-  // We track this with a per-tenant localStorage flag so that subsequent logins (with
-  // onboarding still incomplete) land on the normal app — where the sidebar shows the
-  // "Complete Setup" link instead of blocking access entirely.
-  const tenantId = sessionStorage.getItem('tenant_id');
-  const onboardingForcedKey = tenantId ? `onboarding_forced_${tenantId}` : null;
-  const onboardingAlreadyForced = onboardingForcedKey ? !!localStorage.getItem(onboardingForcedKey) : false;
+  // OnboardingProvider is shared by both the forced-onboarding view and the normal app
+  // so the sidebar and the onboarding page read/write the same progress state.
+  const needsOnboarding = isAdmin && !isSuperAdmin && !onboardingComplete;
 
-  if (isAdmin && !isSuperAdmin && !tenantLoading && !onboardingComplete && !onboardingAlreadyForced) {
-    if (onboardingForcedKey) localStorage.setItem(onboardingForcedKey, '1');
+  // Always redirect admins to the onboarding wizard until setup is complete.
+  // On re-login with incomplete onboarding the wizard reappears so they can
+  // continue from where they left off.  Once onboarding_complete = true (set
+  // by completeOnboarding()) the block below is never entered again.
+  if (needsOnboarding && !tenantLoading) {
     return (
-      <Routes>
-        <Route path="/onboarding" element={<Onboarding />} />
-        <Route path="*" element={<Onboarding />} />
-      </Routes>
+      <OnboardingProvider>
+        <Routes>
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="*" element={<Onboarding />} />
+        </Routes>
+      </OnboardingProvider>
     );
   }
 
@@ -118,7 +120,7 @@ function AppContent() {
     );
   }
 
-  return (
+  const appShell = (
     <div className="min-h-screen bg-gray-50">
       <Sidebar
         isOpen={sidebarOpen}
@@ -187,6 +189,8 @@ function AppContent() {
       <SubscriptionBanner />
     </div>
   );
+
+  return appShell;
 }
 
 function App() {

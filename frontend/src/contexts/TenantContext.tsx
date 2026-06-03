@@ -44,6 +44,7 @@ type TenantContextValue = TenantState & {
   updateBranding: (patch: Partial<TenantBranding>) => void;
   updateSettings: (patch: Partial<TenantSettings>) => void;
   updateSlug: (slug: string) => void;
+  retryTenant: () => void;
 };
 
 const defaultBranding: TenantBranding = {
@@ -81,6 +82,7 @@ export const TenantContext = createContext<TenantContextValue>({
   updateBranding: () => {},
   updateSettings: () => {},
   updateSlug: () => {},
+  retryTenant: () => {},
 });
 
 function applyBranding(branding: TenantBranding, businessName: string | null) {
@@ -113,11 +115,8 @@ function syncPricingCache(settings: TenantSettings) {
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<TenantState>(defaultState);
 
-  useEffect(() => {
-    // Persist ?tenant=slug from the URL so it survives navigation / login redirects
-    const urlSlug = new URLSearchParams(window.location.search).get('tenant');
-    if (urlSlug) sessionStorage.setItem('tenant_slug', urlSlug);
-    const slug = urlSlug ?? sessionStorage.getItem('tenant_slug') ?? '';
+  const doFetch = useCallback(() => {
+    const slug = sessionStorage.getItem('tenant_slug') ?? '';
 
     const resolveUrl = slug
       ? `${API_URL}/api/tenant/resolve?tenant=${encodeURIComponent(slug)}`
@@ -131,7 +130,6 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Store UUID so api.ts can attach X-Tenant-ID header on every request
         sessionStorage.setItem('tenant_id', data.id);
 
         const branding: TenantBranding = { ...defaultBranding, ...(data.tenant_branding ?? {}) };
@@ -147,12 +145,6 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         const effectiveEnd = data.subscription_status === 'trial' ? trialEnd : periodEnd;
         const graceEnd = effectiveEnd ? new Date(effectiveEnd.getTime() + 3 * 86400000) : null;
 
-        const isExpired = effectiveEnd ? effectiveEnd < now && (!graceEnd || graceEnd < now) : false;
-        const inGracePeriod = effectiveEnd ? effectiveEnd < now && graceEnd != null && graceEnd > now : false;
-        const daysRemaining = effectiveEnd && effectiveEnd > now
-          ? Math.ceil((effectiveEnd.getTime() - now.getTime()) / 86400000)
-          : null;
-
         setState({
           tenantId: data.id,
           slug: data.slug,
@@ -161,17 +153,33 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           settings,
           features: data.plans?.features ?? null,
           subscriptionStatus: data.subscription_status,
-          isExpired,
-          inGracePeriod,
-          daysRemaining,
-          isTrialExpired: isExpired && data.subscription_status === 'trial',
-          onboardingComplete: data.onboarding_complete ?? true,
+          isExpired:       effectiveEnd ? effectiveEnd < now && (!graceEnd || graceEnd < now) : false,
+          inGracePeriod:   effectiveEnd ? effectiveEnd < now && graceEnd != null && graceEnd > now : false,
+          daysRemaining:   effectiveEnd && effectiveEnd > now
+            ? Math.ceil((effectiveEnd.getTime() - now.getTime()) / 86400000)
+            : null,
+          isTrialExpired:      (effectiveEnd ? effectiveEnd < now && (!graceEnd || graceEnd < now) : false)
+                            && data.subscription_status === 'trial',
+          onboardingComplete: data.onboarding_complete ?? false,
           isLoading: false,
           error: null,
         });
       })
       .catch(() => setState(s => ({ ...s, isLoading: false, error: 'Failed to load tenant' })));
   }, []);
+
+  useEffect(() => {
+    // Persist ?tenant=slug from the URL into sessionStorage so it survives navigation
+    const urlSlug = new URLSearchParams(window.location.search).get('tenant');
+    if (urlSlug) sessionStorage.setItem('tenant_slug', urlSlug);
+    doFetch();
+  }, [doFetch]);
+
+  // Called by AuthContext after OTT exchange sets sessionStorage.tenant_slug
+  const retryTenant = useCallback(() => {
+    setState(s => ({ ...s, isLoading: true, error: null }));
+    doFetch();
+  }, [doFetch]);
 
   const updateBranding = useCallback((patch: Partial<TenantBranding>) => {
     setState(s => {
@@ -195,7 +203,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <TenantContext.Provider value={{ ...state, updateBranding, updateSettings, updateSlug }}>
+    <TenantContext.Provider value={{ ...state, updateBranding, updateSettings, updateSlug, retryTenant }}>
       {children}
     </TenantContext.Provider>
   );

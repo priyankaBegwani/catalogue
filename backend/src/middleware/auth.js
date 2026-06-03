@@ -1,15 +1,42 @@
-import { supabase } from '../config.js';
+import { supabase, supabaseAdmin, config } from '../config.js';
 import { cache } from '../utils/cache.js';
 import { AppError } from '../utils/errorHandler.js';
+import { verifyHS256JWT } from '../utils/jwt.js';
 
 /**
- * Get user profile with caching
+ * Resolve a Bearer token to { userId, userEmail }.
+ *
+ * Fast path  — if SUPABASE_JWT_SECRET is set, verify the HS256 signature locally.
+ *              No network call to Supabase.  ~0.3 ms vs. ~80-200 ms for the API.
+ * Slow path  — fall back to supabase.auth.getUser(token) when the secret is not
+ *              configured or the token uses a different algorithm (e.g. RS256).
  */
-const getUserProfile = async (userId, token) => {
+async function resolveToken(token) {
+  if (config.supabaseJwtSecret) {
+    try {
+      const claims = verifyHS256JWT(token, config.supabaseJwtSecret);
+      return { userId: claims.sub, userEmail: claims.email ?? null };
+    } catch {
+      // Local verification failed — do NOT fall back; reject immediately.
+      // If the secret is configured we trust it fully.
+      throw new AppError('Invalid or expired token', 401);
+    }
+  }
+
+  // No secret configured → call Supabase API (original behaviour)
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) throw new AppError('Invalid or expired token', 401);
+  return { userId: user.id, userEmail: user.email ?? null };
+}
+
+/**
+ * Fetch user profile + roles with a 5-minute cache.
+ * Uses supabaseAdmin to bypass RLS — safe because this is server-side only.
+ */
+const getUserProfile = async (userId) => {
   const cacheKey = `user_profile:${userId}`;
-  
   return cache.getOrSet(cacheKey, async () => {
-    const { data: profile, error } = await supabase
+    const { data: profile, error } = await supabaseAdmin
       .from('user_profiles')
       .select('*, user_roles(*)')
       .eq('id', userId)
@@ -19,31 +46,21 @@ const getUserProfile = async (userId, token) => {
     if (error || !profile) {
       throw new AppError('User profile not found or inactive', 403);
     }
-
     return profile;
-  }, 300); // Cache for 5 minutes
+  }, 300);
 };
 
 export const authenticateUser = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
     }
 
     const token = authHeader.replace('Bearer ', '');
+    const { userId, userEmail } = await resolveToken(token);
+    const profile = await getUserProfile(userId);
 
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-
-    const profile = await getUserProfile(user.id, token);
-
-    // Tenant isolation check — skip for superadmins (cross-tenant), unset tenantId,
-    // or dev default-tenant fallback.
     const DEFAULT_TENANT = '00000000-0000-0000-0000-000000000001';
     const isDevDefaultFallback =
       process.env.NODE_ENV === 'development' && req.tenantId === DEFAULT_TENANT;
@@ -52,7 +69,7 @@ export const authenticateUser = async (req, res, next) => {
       return res.status(403).json({ error: 'User does not belong to this tenant' });
     }
 
-    req.user = user;
+    req.user    = { id: userId, email: userEmail, created_at: profile.created_at };
     req.profile = profile;
     next();
   } catch (error) {
@@ -65,19 +82,12 @@ export const authenticateUser = async (req, res, next) => {
 };
 
 export const requireAdmin = (req, res, next) => {
-  // Check new role system only (old role field has been removed)
-  const isAdmin = req.profile?.user_roles?.role_name === 'Admin';
-
-  if (!isAdmin) {
+  if (req.profile?.user_roles?.role_name !== 'Admin') {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
 };
 
-/**
- * Superadmin guard — cross-tenant internal tools only.
- * Must be used after authenticateUser. Does NOT require a tenant context.
- */
 export const requireSuperAdmin = (req, res, next) => {
   if (!req.profile?.is_superadmin) {
     return res.status(403).json({ error: 'Superadmin access required' });
@@ -85,90 +95,42 @@ export const requireSuperAdmin = (req, res, next) => {
   next();
 };
 
-/**
- * Check if user has specific permission
- * @param {string} module - Module name (e.g., 'parties', 'orders')
- * @param {string} action - Action name (e.g., 'view', 'create', 'edit')
- */
-export const requirePermission = (module, action) => {
-  return (req, res, next) => {
-    const userRoles = req.profile?.user_roles;
-    
-    if (!userRoles || !userRoles.permissions) {
-      return res.status(403).json({ error: 'Access denied: No permissions found' });
-    }
-
-    const modulePermissions = userRoles.permissions[module];
-    
-    if (!modulePermissions || !modulePermissions[action]) {
-      return res.status(403).json({ 
-        error: `Access denied: Missing ${action} permission for ${module}` 
-      });
-    }
-
-    next();
-  };
+export const requirePermission = (module, action) => (req, res, next) => {
+  const perms = req.profile?.user_roles?.permissions;
+  if (!perms?.[module]?.[action]) {
+    return res.status(403).json({ error: `Access denied: Missing ${action} permission for ${module}` });
+  }
+  next();
 };
 
-/**
- * Check if user has any of the specified permissions
- * @param {Array} permissions - Array of {module, action} objects
- */
-export const requireAnyPermission = (permissions) => {
-  return (req, res, next) => {
-    const userRoles = req.profile?.user_roles;
-    
-    if (!userRoles || !userRoles.permissions) {
-      return res.status(403).json({ error: 'Access denied: No permissions found' });
-    }
-
-    const hasPermission = permissions.some(({ module, action }) => {
-      const modulePermissions = userRoles.permissions[module];
-      return modulePermissions && modulePermissions[action];
-    });
-
-    if (!hasPermission) {
-      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
-    }
-
-    next();
-  };
+export const requireAnyPermission = (permissions) => (req, res, next) => {
+  const perms = req.profile?.user_roles?.permissions;
+  if (!perms) return res.status(403).json({ error: 'Access denied: No permissions found' });
+  const ok = permissions.some(({ module, action }) => perms[module]?.[action]);
+  if (!ok) return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
+  next();
 };
 
 export const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      req.user = null;
-      req.profile = null;
+      req.user = null; req.profile = null;
       return next();
     }
 
     const token = authHeader.replace('Bearer ', '');
-
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      req.user = null;
-      req.profile = null;
-      return next();
-    }
-
     try {
-      const profile = await getUserProfile(user.id, token);
-      req.user = user;
+      const { userId, userEmail } = await resolveToken(token);
+      const profile = await getUserProfile(userId);
+      req.user    = { id: userId, email: userEmail, created_at: profile.created_at };
       req.profile = profile;
-    } catch (profileError) {
-      req.user = null;
-      req.profile = null;
+    } catch {
+      req.user = null; req.profile = null;
     }
-    
     next();
-  } catch (error) {
-    console.error('Optional authentication error:', error);
-    req.user = null;
-    req.profile = null;
+  } catch {
+    req.user = null; req.profile = null;
     next();
   }
 };

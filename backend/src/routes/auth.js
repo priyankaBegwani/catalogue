@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { config, supabase, supabaseAdmin } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { exchangeOTT } from '../utils/ott.js';
+import { decodeJWTPayload } from '../utils/jwt.js';
 
 const router = express.Router();
 
@@ -359,21 +360,37 @@ router.post('/verify-reset-token', async (req, res) => {
 router.post('/exchange-ott', async (req, res) => {
   try {
     const { ott } = req.body;
-
     if (!ott || typeof ott !== 'string') {
       return res.status(400).json({ error: 'ott is required' });
     }
 
-    const { accessToken, refreshToken } = exchangeOTT(ott);
+    const { accessToken, refreshToken, slug } = exchangeOTT(ott);
+
+    // Extract user ID from the access token so we can return the profile in
+    // this same response — the frontend can skip the separate /api/auth/me call.
+    let profile = null;
+    try {
+      const claims = decodeJWTPayload(accessToken);
+      if (claims.sub) {
+        const { data } = await supabaseAdmin
+          .from('user_profiles')
+          .select('*, user_roles(*)')
+          .eq('id', claims.sub)
+          .eq('is_active', true)
+          .maybeSingle();
+        profile = data ?? null;
+      }
+    } catch (profileErr) {
+      // Non-fatal — frontend falls back to /api/auth/me
+      console.warn('[exchange-ott] profile fetch failed:', profileErr.message);
+    }
 
     res.json({
-      session: {
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      },
+      session: { access_token: accessToken, refresh_token: refreshToken },
+      slug,
+      profile,
     });
   } catch (err) {
-    // exchangeOTT throws for expired, tampered, or malformed tokens
     console.error('[exchange-ott] failed:', err.message);
     res.status(401).json({ error: err.message || 'Invalid or expired token' });
   }

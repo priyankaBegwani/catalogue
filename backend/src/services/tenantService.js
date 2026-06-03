@@ -51,6 +51,7 @@ export async function registerTenant({ businessName, slug, ownerName, email, pas
       owner_phone: phone,
       subscription_status: 'trial',
       trial_ends_at: trialEnd.toISOString(),
+      onboarding_complete: false,
     })
     .select('id, slug')
     .single();
@@ -109,16 +110,21 @@ export async function registerTenant({ businessName, slug, ownerName, email, pas
 
   const userId = authData.user.id;
 
-  // 8. Update the auto-created profile with role_id, phone, and ensure is_active = true
-  await supabaseAdmin
+  // 8. Update the auto-created profile with role_id, phone, and ensure is_active = true.
+  //    Normalize phone to digits-only + leading + so lookups are format-independent.
+  const normalizedPhone = phone ? phone.replace(/[\s\-\(\)\.]/g, '') : phone;
+  const { error: profileUpdateError } = await supabaseAdmin
     .from('user_profiles')
     .update({
       role_id: adminRole.id,
-      phone_number: phone,
+      phone_number: normalizedPhone,
       tenant_id: tenantId,
       is_active: true,               // required — auth middleware checks this
     })
     .eq('id', userId);
+  if (profileUpdateError) {
+    console.error('[registerTenant] profile update failed:', profileUpdateError.message);
+  }
 
   // 9. Build the app URL for redirect
   const appUrl = `https://${slug}.${process.env.APP_DOMAIN}`;
@@ -134,7 +140,7 @@ export async function registerTenant({ businessName, slug, ownerName, email, pas
     if (signInError) {
       console.error('[registerTenant] auto sign-in failed:', signInError.message);
     } else if (signInData?.session) {
-      ott = createOTT(signInData.session.access_token, signInData.session.refresh_token);
+      ott = createOTT(signInData.session.access_token, signInData.session.refresh_token, slug);
     }
   } catch (err) {
     console.error('[registerTenant] OTT creation failed:', err.message);

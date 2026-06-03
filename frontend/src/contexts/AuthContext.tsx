@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { api, UserProfile, RolePermissions } from '../lib/api';
 import { hasPermission, isAdmin as checkIsAdmin } from '../utils/permissions';
+import { useTenant } from './TenantContext';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const { retryTenant } = useTenant();
 
   const refreshUser = useCallback(async () => {
     const token = localStorage.getItem('access_token');
@@ -39,25 +41,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const query = new URLSearchParams(window.location.search);
 
       // ── OTT exchange (new secure flow from marketing site) ────────────────
-      // The marketing site redirects to ?ott=<encrypted_envelope> after registration.
-      // We exchange it here for real tokens before anything else happens.
       const ott = query.get('ott');
       if (ott) {
+        let ottDone = false;
         try {
-          const { session } = await api.exchangeOTT(ott);
+          const { session, slug, profile } = await api.exchangeOTT(ott);
           localStorage.setItem('access_token', session.access_token);
           localStorage.setItem('refresh_token', session.refresh_token);
+
+          if (slug) {
+            sessionStorage.setItem('tenant_slug', slug);
+            retryTenant();
+          }
+
+          // Server returned the profile inline — set user immediately, no extra round-trip
+          if (profile && isMounted) {
+            setUser(profile);
+            ottDone = true;
+          }
         } catch (err) {
           console.error('OTT exchange failed:', err);
-          // Token expired or invalid — user will see the login page
         } finally {
-          // Always strip ?ott= from URL regardless of success/failure
           query.delete('ott');
           const remaining = query.toString();
-          window.history.replaceState(
-            null, '',
-            window.location.pathname + (remaining ? `?${remaining}` : '')
-          );
+          window.history.replaceState(null, '', window.location.pathname + (remaining ? `?${remaining}` : ''));
+        }
+
+        // Profile already set — skip the separate /api/auth/me call
+        if (ottDone) {
+          if (isMounted) setLoading(false);
+          return;
         }
       }
 
@@ -65,15 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         if (!tokenAtStart) {
-          if (isMounted) {
-            setLoading(false);
-          }
+          if (isMounted) setLoading(false);
           return;
         }
 
-        // Add a small delay to prevent blocking initial render
-        await new Promise(resolve => setTimeout(resolve, 0));
-        
         const data = await api.getCurrentUser();
         if (isMounted) {
           setUser(data.profile);

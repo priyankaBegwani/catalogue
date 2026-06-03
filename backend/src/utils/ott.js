@@ -27,10 +27,11 @@ function getKey() {
  * Encrypt access_token + refresh_token into a short-lived URL-safe token.
  * @returns {string} base64url-encoded ciphertext
  */
-export function createOTT(accessToken, refreshToken) {
+export function createOTT(accessToken, refreshToken, slug) {
   const payload = JSON.stringify({
     a: accessToken,
     r: refreshToken,
+    s: slug,          // tenant slug — so the frontend can resolve the tenant on arrival
     exp: Date.now() + TTL_MS,
   });
 
@@ -95,5 +96,5 @@ export function exchangeOTT(ott) {
     throw new Error('OTT expired');
   }
 
-  return { accessToken: payload.a, refreshToken: payload.r };
+  return { accessToken: payload.a, refreshToken: payload.r, slug: payload.s ?? null };
 }

@@ -13,6 +13,7 @@ export const config = {
   supabaseUrl: process.env.VITE_SUPABASE_URL,
   supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY,
   supabaseServiceKey: process.env.VITE_SUPABASE_SERVICE_KEY,
+  supabaseJwtSecret: process.env.SUPABASE_JWT_SECRET ?? null,
   port: process.env.PORT || 3001
 };
 

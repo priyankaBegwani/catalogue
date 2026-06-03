@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { OnboardingProvider, useOnboarding } from '../onboarding/OnboardingContext';
+import { useOnboarding } from '../onboarding/OnboardingContext';
 import { Step3StartMethod }  from '../onboarding/steps/Step3StartMethod';
 import { Step4DesignImport } from '../onboarding/steps/Step4DesignImport';
 import { Step5PartyImport }  from '../onboarding/steps/Step5PartyImport';
@@ -42,12 +42,9 @@ function OnboardingRouter() {
   }
 }
 
+// OnboardingProvider is supplied by App.tsx so sidebar and this page share state.
 export function Onboarding() {
-  return (
-    <OnboardingProvider>
-      <OnboardingRouter />
-    </OnboardingProvider>
-  );
+  return <OnboardingRouter />;
 }
 
 export default Onboarding;

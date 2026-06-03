@@ -565,7 +565,7 @@ class ApiClient {
     return this.request('/api/auth/verify-reset-token', { method: 'POST', body: { access_token }, auth: false, errorMsg: 'Invalid or expired token' });
   }
 
-  async exchangeOTT(ott: string): Promise<{ session: { access_token: string; refresh_token: string } }> {
+  async exchangeOTT(ott: string): Promise<{ session: { access_token: string; refresh_token: string }; slug: string | null; profile: UserProfile | null }> {
     return this.request('/api/auth/exchange-ott', { method: 'POST', body: { ott }, auth: false, errorMsg: 'Invalid or expired login token' });
   }
 

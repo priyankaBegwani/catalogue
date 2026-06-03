@@ -3,6 +3,7 @@ import { memo, useMemo, useCallback, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranding } from '../hooks/useBranding';
 import { useTenant } from '../contexts/TenantContext';
+import { useOnboarding } from '../onboarding/OnboardingContext';
 import {
   BarChart3,
   Package,
@@ -24,6 +25,8 @@ import {
   Cog,
   CreditCard,
   Rocket,
+  CheckCircle2,
+  Circle,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -39,7 +42,8 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
   const { hasPermission, isAdmin, user, permissions } = useAuth();
   const branding = useBranding();
   const { onboardingComplete } = useTenant();
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['management', 'system']));
+  const onboarding = useOnboarding(); // null when OnboardingProvider not in tree
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['management', 'system', 'onboarding']));
 
   const navigationStructure = useMemo(() => {
     // Debug logging
@@ -52,16 +56,9 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
     
     const structure: any[] = [];
 
-    // Complete Setup — shown to admins when onboarding is still pending
+    // Onboarding section — shown to admins until setup is complete
     if (isAdmin && !onboardingComplete) {
-      structure.push({
-        type: 'item',
-        id: 'onboarding',
-        label: 'Complete Setup',
-        icon: Rocket,
-        path: '/onboarding',
-        highlight: true,
-      });
+      structure.push({ type: 'onboarding' });
     }
 
     // Catalogue - visible only if user has catalogue view permission
@@ -306,10 +303,78 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
         <nav className="flex-1 overflow-y-auto scrollbar-hide py-6 px-4">
           <div className="space-y-1">
             {navigationStructure.map((item) => {
+
+              // ── Onboarding steps section ────────────────────────────────
+              if (item.type === 'onboarding') {
+                const steps = [
+                  { step: 3, label: 'Choose setup method' },
+                  { step: 4, label: 'Import designs',    skipFor: ['fresh', 'assisted'] as const },
+                  { step: 5, label: 'Import parties',    skipFor: ['fresh', 'assisted'] as const },
+                  { step: 6, label: 'Invite your team' },
+                  { step: 7, label: 'Connect WhatsApp' },
+                ];
+
+                const startMethod = onboarding?.startMethod ?? null;
+                const completedSteps = onboarding?.completedSteps ?? [];
+                const currentStep = onboarding?.currentStep ?? 3;
+
+                const visibleSteps = steps.filter(s =>
+                  !s.skipFor || !startMethod || !s.skipFor.includes(startMethod as any)
+                );
+                const doneCount = visibleSteps.filter(s => completedSteps.includes(s.step)).length;
+                const isExpanded = expandedSections.has('onboarding');
+
+                return (
+                  <div key="onboarding" className="mb-2">
+                    {/* Section header */}
+                    <button
+                      onClick={() => toggleSection('onboarding')}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 transition-all duration-200"
+                    >
+                      <Rocket size={18} className="text-amber-400 shrink-0" />
+                      <span className="font-semibold flex-1 text-left text-sm">Complete Setup</span>
+                      <span className="text-[10px] font-bold bg-amber-500/30 text-amber-200 px-1.5 py-0.5 rounded-full">
+                        {doneCount}/{visibleSteps.length}
+                      </span>
+                      {isExpanded
+                        ? <ChevronDown size={14} className="text-amber-400 shrink-0" />
+                        : <ChevronRight size={14} className="text-amber-400 shrink-0" />}
+                    </button>
+
+                    {/* Step list */}
+                    {isExpanded && (
+                      <div className="mt-1 ml-4 pl-3 border-l-2 border-amber-500/30 space-y-0.5">
+                        {visibleSteps.map(({ step, label }) => {
+                          const done = completedSteps.includes(step);
+                          const active = step === currentStep && !done;
+                          return (
+                            <button
+                              key={step}
+                              onClick={() => handleNavigate('/onboarding')}
+                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 group ${
+                                active
+                                  ? 'bg-amber-500/20 text-amber-200'
+                                  : done
+                                  ? 'text-slate-400 hover:text-slate-300'
+                                  : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+                              }`}
+                            >
+                              {done
+                                ? <CheckCircle2 size={15} className="text-green-400 shrink-0" />
+                                : <Circle size={15} className={`shrink-0 ${active ? 'text-amber-400' : 'text-slate-500'}`} />}
+                              <span className={done ? 'line-through' : ''}>{label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               if (item.type === 'item') {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
-                const isHighlight = item.highlight && !isActive;
 
                 return (
                   <button
@@ -318,23 +383,16 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                       isActive
                         ? 'bg-primary text-white shadow-lg shadow-black/20'
-                        : isHighlight
-                        ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border border-amber-500/30'
                         : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
                     }`}
                   >
                     <Icon
                       size={20}
                       className={`transition-transform group-hover:scale-110 ${
-                        isActive ? 'text-white' : isHighlight ? 'text-amber-400' : 'text-slate-400'
+                        isActive ? 'text-white' : 'text-slate-400'
                       }`}
                     />
                     <span className="font-medium">{item.label}</span>
-                    {isHighlight && (
-                      <span className="ml-auto text-[10px] font-semibold bg-amber-500/30 text-amber-300 px-1.5 py-0.5 rounded-full">
-                        Pending
-                      </span>
-                    )}
                     {isActive && (
                       <div className="ml-auto w-2 h-2 rounded-full bg-white animate-pulse" />
                     )}
