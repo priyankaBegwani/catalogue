@@ -94,6 +94,16 @@ function AppContent() {
   // so the sidebar and the onboarding page read/write the same progress state.
   const needsOnboarding = isAdmin && !isSuperAdmin && !onboardingComplete;
 
+  console.log('[App] onboarding check →', {
+    isAdmin,
+    isSuperAdmin,
+    onboardingComplete,
+    tenantLoading,
+    needsOnboarding,
+    userRoleName: (user as any)?.user_roles?.role_name ?? null,
+    userId: user?.id ?? null,
+  });
+
   // Always redirect admins to the onboarding wizard until setup is complete.
   // On re-login with incomplete onboarding the wizard reappears so they can
   // continue from where they left off.  Once onboarding_complete = true (set
