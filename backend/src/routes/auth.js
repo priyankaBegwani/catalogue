@@ -110,11 +110,11 @@ router.post('/login', async (req, res) => {
     let loginEmail = email;
 
     if (isPhone) {
-      // Try exact match then normalized (strips spaces/dashes)
+      // Use supabaseAdmin to bypass RLS — lookup happens before the user is authenticated
       const phoneCandidates = [...new Set([email.trim(), normalizedInput])];
       let phoneProfile = null;
       for (const candidate of phoneCandidates) {
-        const { data } = await supabase
+        const { data } = await supabaseAdmin
           .from('user_profiles')
           .select('email')
           .eq('phone_number', candidate)
@@ -127,8 +127,8 @@ router.post('/login', async (req, res) => {
       }
       loginEmail = phoneProfile.email;
     } else if (!isEmail) {
-      // If username provided, look up the email
-      const { data: profile, error: profileError } = await supabase
+      // Use supabaseAdmin to bypass RLS — lookup happens before the user is authenticated
+      const { data: profile, error: profileError } = await supabaseAdmin
         .from('user_profiles')
         .select('email')
         .eq('username', email)

@@ -61,6 +61,17 @@ function AppContent() {
     );
   }
 
+  // Wait for TenantContext to finish before rendering authenticated pages.
+  // Components make API calls on mount — if sessionStorage.tenant_id isn't set yet
+  // (because TenantContext hasn't resolved) every tenant-scoped request fails.
+  if (user && tenantLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
   if (showSetup) {
     return <Setup />;
   }
