@@ -85,10 +85,12 @@ router.post('/',
       user_metadata: {
         username,
         full_name,
+        tenant_id: req.tenantId,
         role_id,
         party_id: party_id || null,
         can_order_individual_sizes: can_order_individual_sizes ?? false
-      }
+      },
+      app_metadata: { tenant_id: req.tenantId },
     });
 
     if (authError) {
@@ -102,6 +104,7 @@ router.post('/',
         username,
         email,
         full_name,
+        tenant_id: req.tenantId,
         role_id,
         party_id: party_id || null,
         can_order_individual_sizes: can_order_individual_sizes ?? false,
