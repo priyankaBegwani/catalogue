@@ -2,6 +2,7 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { config, supabase, supabaseAdmin } from '../config.js';
 import { authenticateUser } from '../middleware/auth.js';
+import { exchangeOTT } from '../utils/ott.js';
 
 const router = express.Router();
 
@@ -348,6 +349,33 @@ router.post('/verify-reset-token', async (req, res) => {
   } catch (error) {
     console.error('Verify token error:', error);
     res.status(500).json({ error: 'Failed to verify token' });
+  }
+});
+
+// POST /api/auth/exchange-ott
+// Called by the frontend immediately after the marketing-site registration redirect.
+// Decrypts the OTT envelope and returns the real Supabase session tokens.
+// No auth required — this IS the login step.
+router.post('/exchange-ott', async (req, res) => {
+  try {
+    const { ott } = req.body;
+
+    if (!ott || typeof ott !== 'string') {
+      return res.status(400).json({ error: 'ott is required' });
+    }
+
+    const { accessToken, refreshToken } = exchangeOTT(ott);
+
+    res.json({
+      session: {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      },
+    });
+  } catch (err) {
+    // exchangeOTT throws for expired, tampered, or malformed tokens
+    console.error('[exchange-ott] failed:', err.message);
+    res.status(401).json({ error: err.message || 'Invalid or expired token' });
   }
 });
 

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin, config } from '../config.js';
+import { createOTT } from '../utils/ott.js';
 import { cache } from '../utils/cache.js';
 import { AppError } from '../utils/errorHandler.js';
 
@@ -122,9 +123,9 @@ export async function registerTenant({ businessName, slug, ownerName, email, pas
   // 9. Build the app URL for redirect
   const appUrl = `https://${slug}.${process.env.APP_DOMAIN}`;
 
-  // 10. Sign in as the new owner to obtain session tokens for the auto-login redirect.
-  //     Use an ephemeral client so we don't disturb the shared singleton's session state.
-  let session = null;
+  // 10. Sign in as the new owner to get session tokens, then wrap them in a
+  //     short-lived encrypted OTT so raw tokens never appear in the redirect URL.
+  let ott = null;
   try {
     const anonClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -132,14 +133,14 @@ export async function registerTenant({ businessName, slug, ownerName, email, pas
     const { data: signInData, error: signInError } = await anonClient.auth.signInWithPassword({ email, password });
     if (signInError) {
       console.error('[registerTenant] auto sign-in failed:', signInError.message);
-    } else {
-      session = signInData?.session ?? null;
+    } else if (signInData?.session) {
+      ott = createOTT(signInData.session.access_token, signInData.session.refresh_token);
     }
   } catch (err) {
-    console.error('[registerTenant] unexpected sign-in error:', err.message);
+    console.error('[registerTenant] OTT creation failed:', err.message);
   }
 
-  return { tenantId, slug, appUrl, session };
+  return { tenantId, slug, appUrl, ott };
 }
 
 /**

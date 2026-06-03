@@ -36,32 +36,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     const checkAuth = async () => {
-      // Auto-login after registration: accept tokens from URL hash OR query params.
-      // Hash is used by the in-app BrandRegister redirect; query params cover
-      // external marketing site redirects that can't set hash fragments server-side.
-      const hash = new URLSearchParams(window.location.hash.slice(1));
       const query = new URLSearchParams(window.location.search);
 
-      const autoToken = hash.get('access_token') || query.get('access_token');
-      const autoRefresh = hash.get('refresh_token') || query.get('refresh_token');
-      const autoType = hash.get('type') || query.get('type');
-
-      if (autoToken && autoType === 'register') {
-        localStorage.setItem('access_token', autoToken);
-        if (autoRefresh) localStorage.setItem('refresh_token', autoRefresh);
-
-        if (hash.get('access_token')) {
-          // Tokens were in hash — clear the hash, keep the query string intact
-          window.history.replaceState(null, '', window.location.pathname + window.location.search);
-        } else {
-          // Tokens were in query params — strip only the auth params, preserve others (e.g. ?tenant=)
-          query.delete('access_token');
-          query.delete('refresh_token');
-          query.delete('type');
+      // ── OTT exchange (new secure flow from marketing site) ────────────────
+      // The marketing site redirects to ?ott=<encrypted_envelope> after registration.
+      // We exchange it here for real tokens before anything else happens.
+      const ott = query.get('ott');
+      if (ott) {
+        try {
+          const { session } = await api.exchangeOTT(ott);
+          localStorage.setItem('access_token', session.access_token);
+          localStorage.setItem('refresh_token', session.refresh_token);
+        } catch (err) {
+          console.error('OTT exchange failed:', err);
+          // Token expired or invalid — user will see the login page
+        } finally {
+          // Always strip ?ott= from URL regardless of success/failure
+          query.delete('ott');
           const remaining = query.toString();
-          window.history.replaceState(null, '', window.location.pathname + (remaining ? `?${remaining}` : ''));
+          window.history.replaceState(
+            null, '',
+            window.location.pathname + (remaining ? `?${remaining}` : '')
+          );
         }
-        // Fall through to normal checkAuth — tokens are now in localStorage
       }
 
       const tokenAtStart = localStorage.getItem('access_token');

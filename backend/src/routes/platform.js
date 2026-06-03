@@ -35,8 +35,7 @@ router.post('/register', async (req, res) => {
         tenant_id: result.tenantId,
         slug: result.slug,
         app_url: result.appUrl,
-        access_token: result.session?.access_token ?? null,
-        refresh_token: result.session?.refresh_token ?? null,
+        ott: result.ott ?? null,
       },
       message: 'Account created successfully',
     });
