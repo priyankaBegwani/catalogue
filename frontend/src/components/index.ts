@@ -15,3 +15,5 @@ export { ErrorAlert } from './ErrorAlert';
 export { ForgotPasswordModal } from './ForgotPasswordModal';
 export { Breadcrumb } from './Breadcrumb';
 export { TransformDataModal } from './TransformDataModal';
+export { WholllioLogo } from './WholllioLogo';
+export type { LogoSize } from './WholllioLogo';

@@ -14,18 +14,9 @@ import {
 import { api } from '../lib/api';
 import { CartModal } from './CartModal';
 
-function WholllioAppMark() {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
-        <span className="text-white font-bold text-base leading-none">W</span>
-      </div>
-      <span className="text-xl font-bold text-gray-900 tracking-tight">Whollio</span>
-    </div>
-  );
-}
 import { Wishlist } from './Wishlist';
 import { useBranding } from '../hooks/useBranding';
+import { WholllioLogo } from './WholllioLogo';
 
 interface TopBarProps {
   onToggleSidebar: () => void;
@@ -148,11 +139,10 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                 <img
                   src={branding.logoUrl}
                   alt={branding.brandName}
-                  style={{ height: '5.5rem' }}
-                  className="w-auto object-contain max-w-[150px]"
+                  className="h-9 w-auto object-contain max-w-[140px]"
                 />
               ) : (
-                <WholllioAppMark />
+                <WholllioLogo variant="dark" size="md" showTagline={false} />
               )}
             </div>
             
@@ -289,11 +279,10 @@ export const TopBar = memo(function TopBar({ onToggleSidebar, isSidebarOpen }: T
                 <img
                   src={branding.logoUrl}
                   alt={branding.brandName}
-                  style={{ height: '10rem', paddingTop: '10px' }}
-                  className="w-auto object-contain"
+                  className="h-11 w-auto object-contain max-w-[180px]"
                 />
               ) : (
-                <WholllioAppMark />
+                <WholllioLogo variant="dark" size="md" showTagline={false} />
               )}
             </div>
 

@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { CartModal } from './CartModal';
 import { Wishlist } from './Wishlist';
 import { useBranding } from '../hooks/useBranding';
+import { WholllioLogo } from './WholllioLogo';
 
 export function Navbar() {
   const location = useLocation();
@@ -83,15 +84,19 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
         <div className="flex justify-between items-center py-2 sm:py-3">
           <div className="flex items-center space-x-4 lg:space-x-8">
-            <button 
+            <button
               onClick={() => goTo('/catalogue')}
-              className="flex items-center group transition-transform hover:scale-105"
+              className="flex items-center transition-transform hover:scale-105"
             >
-              <img
-                src={branding.logoUrl}
-                alt={branding.brandName}
-                className="h-14 sm:h-16 lg:h-18 w-auto object-contain transition-all"
-              />
+              {branding.hasCustomLogo ? (
+                <img
+                  src={branding.logoUrl}
+                  alt={branding.brandName}
+                  className="h-10 sm:h-11 w-auto object-contain"
+                />
+              ) : (
+                <WholllioLogo variant="dark" size="md" showTagline={false} />
+              )}
             </button>
 
             <div className="hidden md:flex items-center space-x-6">
