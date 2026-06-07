@@ -760,7 +760,31 @@ router.post('/bulk', authenticateUser, asyncHandler(async (req, res) => {
   }
 
   const results = { inserted: 0, updated: 0, skipped: 0, errors: [] };
-  const BATCH_SIZE = 100; // Process in smaller chunks for upsert logic
+  const BATCH_SIZE = 100;
+
+  // Pre-fetch name→ID lookup maps so text names from CSV resolve to UUIDs
+  const [{ data: catData }, { data: fabData }, { data: brnData }, { data: styData }] = await Promise.all([
+    supabase.from('design_categories').select('id, name').eq('is_active', true),
+    supabase.from('fabric_types').select('id, name').eq('is_active', true),
+    supabase.from('brands').select('id, name'),
+    supabase.from('design_styles').select('id, name').eq('is_active', true),
+  ]);
+  const catByName = new Map((catData  || []).map(r => [r.name.toLowerCase(), r.id]));
+  const fabByName = new Map((fabData  || []).map(r => [r.name.toLowerCase(), r.id]));
+  const brnByName = new Map((brnData  || []).map(r => [r.name.toLowerCase(), r.id]));
+  const styByName = new Map((styData  || []).map(r => [r.name.toLowerCase(), r.id]));
+
+  const resolveName = (id, name, map) =>
+    id || (name ? map.get(String(name).toLowerCase()) || null : null);
+
+  // Accept YYYY-MM or YYYY-MM-DD for design_month_year
+  const parseMonthYear = (value) => {
+    if (!value) return null;
+    const s = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{4})-(\d{2})$/);
+    return m ? `${m[1]}-${m[2]}-01` : null;
+  };
 
   // Get all existing design numbers for quick lookup
   const { data: existingDesigns } = await supabase
@@ -769,9 +793,7 @@ router.post('/bulk', authenticateUser, asyncHandler(async (req, res) => {
 
   const existingByDesignNo = new Map();
   existingDesigns?.forEach(d => {
-    if (d.design_no) {
-      existingByDesignNo.set(d.design_no.toLowerCase(), d.id);
-    }
+    if (d.design_no) existingByDesignNo.set(d.design_no.toLowerCase(), d.id);
   });
 
   // Process in batches
@@ -780,38 +802,44 @@ router.post('/bulk', authenticateUser, asyncHandler(async (req, res) => {
 
     const designsToInsert = [];
     const designsToUpdate = [];
+    // colors only inserted for new designs to avoid duplicates on re-import
+    const colorsByDesignNo = new Map();
 
     for (const designData of batch) {
       try {
-        // Validate required fields
         if (!designData.design_no || !designData.name) {
           results.errors.push(`Design missing design_no or name: ${JSON.stringify(designData)}`);
           results.skipped++;
           continue;
         }
 
-        // Normalize data
         const normalized = {
-          design_no: String(designData.design_no).trim(),
-          name: String(designData.name).trim(),
-          description: designData.description ? String(designData.description) : '',
-          department: designData.department || null,
-          tags: Array.isArray(designData.tags) ? designData.tags : 
-                (designData.tags ? String(designData.tags).split(',').map(s => s.trim()) : []),
-          work_type: designData.work_type || null,
-          occasion: designData.occasion || null,
-          collection: designData.collection || null,
-          design_month_year: designData.design_month_year || null,
-          category_id: designData.category_id || null,
-          style_id: designData.style_id || null,
-          fabric_type_id: designData.fabric_type_id || null,
-          brand_id: designData.brand_id || null,
+          design_no:      String(designData.design_no).trim(),
+          name:           String(designData.name).trim(),
+          description:    designData.description ? String(designData.description) : '',
+          department:     designData.department || null,
+          tags:           Array.isArray(designData.tags) ? designData.tags :
+                          (designData.tags ? String(designData.tags).split(',').map(s => s.trim()).filter(Boolean) : []),
+          work_type:      designData.work_type || null,
+          occasion:       designData.occasion || null,
+          collection:     designData.collection || null,
+          design_month_year: parseMonthYear(designData.design_month_year),
+          category_id:    resolveName(designData.category_id, designData.category, catByName),
+          style_id:       resolveName(designData.style_id,    designData.style,    styByName),
+          fabric_type_id: resolveName(designData.fabric_type_id, designData.fabric_type, fabByName),
+          brand_id:       resolveName(designData.brand_id,    designData.brand,    brnByName),
           available_sizes: Array.isArray(designData.available_sizes) ? designData.available_sizes :
-                          (designData.available_sizes ? String(designData.available_sizes).split(',').map(s => s.trim()) : []),
-          price: Number(designData.price) || 0,
-          created_by: req.user.id,
-          updated_by: req.user.id,
+                          (designData.available_sizes ? String(designData.available_sizes).split(',').map(s => s.trim()).filter(Boolean) : []),
+          price:          Number(designData.price) || 0,
+          created_by:     req.user.id,
         };
+
+        // Collect colors keyed by design_no (aggregate across multiple rows for same design)
+        const colorsRaw = Array.isArray(designData.colors) ? designData.colors : [];
+        if (colorsRaw.length > 0) {
+          const prev = colorsByDesignNo.get(normalized.design_no) || [];
+          colorsByDesignNo.set(normalized.design_no, [...prev, ...colorsRaw]);
+        }
 
         const existingId = existingByDesignNo.get(normalized.design_no.toLowerCase());
         if (existingId) {
@@ -837,33 +865,51 @@ router.post('/bulk', authenticateUser, asyncHandler(async (req, res) => {
         results.skipped += designsToInsert.length;
       } else {
         results.inserted += inserted.length;
-        // Update lookup map with newly inserted
-        inserted.forEach(d => {
-          existingByDesignNo.set(d.design_no.toLowerCase(), d.id);
-        });
+        inserted.forEach(d => existingByDesignNo.set(d.design_no.toLowerCase(), d.id));
+
+        // Insert colors for newly created designs
+        const allColors = [];
+        for (const d of inserted) {
+          const colors = colorsByDesignNo.get(d.design_no) || [];
+          for (const c of colors) {
+            if (!c.color_name) continue;
+            allColors.push({
+              design_id:      d.id,
+              color_name:     String(c.color_name),
+              color_code:     c.color_code || null,
+              in_stock:       c.in_stock ?? (Number(c.stock_quantity) > 0),
+              stock_quantity: Number(c.stock_quantity) || 0,
+              size_quantities: c.size_quantities || { S: 0, M: 0, L: 0, XL: 0, XXL: 0, XXXL: 0 },
+              image_urls:     [],
+            });
+          }
+        }
+        if (allColors.length > 0) {
+          const { error: colorErr } = await supabase.from('design_colors').insert(allColors);
+          if (colorErr) results.errors.push(`Color insert failed: ${colorErr.message}`);
+        }
       }
     }
 
-    // Bulk update existing designs (one by one for updates, or use a batch approach)
+    // Update existing designs
     for (const design of designsToUpdate) {
       const { error: updateError } = await supabase
         .from('designs')
         .update({
-          name: design.name,
-          description: design.description,
-          department: design.department,
-          tags: design.tags,
-          work_type: design.work_type,
-          occasion: design.occasion,
-          collection: design.collection,
+          name:           design.name,
+          description:    design.description,
+          department:     design.department,
+          tags:           design.tags,
+          work_type:      design.work_type,
+          occasion:       design.occasion,
+          collection:     design.collection,
           design_month_year: design.design_month_year,
-          category_id: design.category_id,
-          style_id: design.style_id,
+          category_id:    design.category_id,
+          style_id:       design.style_id,
           fabric_type_id: design.fabric_type_id,
-          brand_id: design.brand_id,
+          brand_id:       design.brand_id,
           available_sizes: design.available_sizes,
-          price: design.price,
-          updated_by: req.user.id,
+          price:          design.price,
         })
         .eq('id', design.id);
 

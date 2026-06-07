@@ -177,6 +177,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useOnboarding() {
-  return useContext(OnboardingContext);
+export function useOnboarding(): OnboardingContextValue {
+  const ctx = useContext(OnboardingContext);
+  if (!ctx) throw new Error('useOnboarding must be used inside OnboardingProvider');
+  return ctx;
 }

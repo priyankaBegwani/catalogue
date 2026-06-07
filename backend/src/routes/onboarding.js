@@ -427,4 +427,133 @@ router.post('/preview/:token/verify-payment', async (req, res) => {
   }
 });
 
+// ─── POST /setup-request ─────────────────────────────────────────────────────
+// Save a new setup request (from the "We Setup For You" form with payment info)
+router.post('/setup-request', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const {
+      name, whatsapp, best_time, catalog_size, data_description,
+      links, files_uploaded, ai_enrichment, amount, payment_status,
+    } = req.body;
+
+    if (!name || !whatsapp || !catalog_size) {
+      return res.status(400).json({ success: false, message: 'name, whatsapp, and catalog_size are required' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('setup_requests')
+      .insert({
+        brand_id:         req.tenantId,
+        name:             name             || null,
+        whatsapp:         whatsapp         || null,
+        best_time:        best_time        || null,
+        catalog_size:     catalog_size     || null,
+        data_description: data_description || null,
+        links:            Array.isArray(links)          ? links          : [],
+        files_uploaded:   Array.isArray(files_uploaded) ? files_uploaded : [],
+        ai_enrichment:    ai_enrichment === true,
+        amount:           Number(amount)  || 0,
+        payment_status:   payment_status  || 'pending_payment',
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ success: false, message: error.message });
+
+    sendWhatsApp(
+      whatsapp,
+      `Hi ${(name || '').split(' ')[0] || 'there'}! 🙏 We received your catalog setup request. Our team will contact you within a few hours. Meanwhile, you can explore your dashboard: ${(process.env.FRONTEND_URL || '').split(',')[0].trim()}`
+    );
+
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ─── POST /setup-request/:id/create-order ────────────────────────────────────
+// Create a Razorpay order for the saved setup request
+router.post('/setup-request/:id/create-order', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const { data: request, error: fetchErr } = await supabaseAdmin
+      .from('setup_requests')
+      .select('id, amount, payment_status, brand_id')
+      .eq('id', req.params.id)
+      .eq('brand_id', req.tenantId)
+      .maybeSingle();
+
+    if (fetchErr || !request) {
+      return res.status(404).json({ success: false, message: 'Setup request not found' });
+    }
+    if (request.payment_status === 'paid') {
+      return res.status(400).json({ success: false, message: 'This request has already been paid' });
+    }
+
+    const keyId     = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keyId || !keySecret) {
+      return res.status(500).json({ success: false, message: 'Payment gateway not configured' });
+    }
+
+    const razorpay   = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    const amountPaise = Math.round(Number(request.amount) * 100);
+    const order      = await razorpay.orders.create({
+      amount:   amountPaise,
+      currency: 'INR',
+      notes:    { setup_request_id: request.id, type: 'setup_request' },
+    });
+
+    await supabaseAdmin
+      .from('setup_requests')
+      .update({ payment_status: 'pending_payment' })
+      .eq('id', request.id);
+
+    res.json({
+      success: true,
+      data: {
+        order_id:    order.id,
+        amount_paise: amountPaise,
+        currency:    'INR',
+        key_id:      keyId,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ─── POST /setup-request/:id/verify-payment ──────────────────────────────────
+// Verify Razorpay signature and mark setup request as paid
+router.post('/setup-request/:id/verify-payment', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keySecret) {
+      return res.status(500).json({ success: false, message: 'Payment gateway not configured' });
+    }
+
+    const expected = crypto
+      .createHmac('sha256', keySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (expected !== razorpay_signature) {
+      return res.status(400).json({ success: false, message: 'Payment verification failed — signature mismatch' });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('setup_requests')
+      .update({ payment_status: 'paid' })
+      .eq('id', req.params.id)
+      .eq('brand_id', req.tenantId);
+
+    if (error) return res.status(500).json({ success: false, message: error.message });
+
+    res.json({ success: true, data: { paid: true } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 export default router;

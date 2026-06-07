@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { FileSpreadsheet, Headphones, Zap, ChevronRight, Upload, Link, X, Paperclip } from 'lucide-react';
+import { FileSpreadsheet, Headphones, Zap, ChevronRight, Upload, Link, X, Paperclip, Sparkles, PlayCircle, CheckCircle } from 'lucide-react';
 import { OnboardingLayout } from '../OnboardingLayout';
 import { useOnboarding, StartMethod } from '../OnboardingContext';
 import { API_URL } from '../../config/backend';
@@ -50,21 +50,57 @@ const CATALOG_SIZES = [
   { value: 'enterprise', label: '2,000+ designs',        hint: 'Enterprise' },
 ];
 
+// Setup fee per catalog tier (₹)
+const SETUP_BASE_PRICE: Record<string, number> = {
+  small:      999,
+  medium:     1999,
+  large:      3999,
+  enterprise: 0,
+};
+
+// AI enrichment add-on per catalog tier (₹)
+const AI_ENRICHMENT_PRICE: Record<string, number> = {
+  small:      700,
+  medium:     1499,
+  large:      2999,
+  enterprise: 0,
+};
+
+function calcTotal(size: string, withAI: boolean): number {
+  return SETUP_BASE_PRICE[size] + (withAI ? AI_ENRICHMENT_PRICE[size] : 0);
+}
+
+function loadRazorpayScript(): Promise<boolean> {
+  if (window.Razorpay) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload  = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.body.appendChild(s);
+  });
+}
+
 export function Step3StartMethod() {
   const { setStartMethod, completeStep, completeOnboarding } = useOnboarding();
   const [selected, setSelected] = useState<StartMethod | null>(null);
 
   // Assisted form state
-  const [contactName, setContactName]   = useState('');
-  const [waNum,       setWaNum]         = useState('');
-  const [callTime,    setCallTime]      = useState('');
-  const [catalogSize, setCatalogSize]   = useState('');
-  const [notes,       setNotes]         = useState('');
-  const [links,       setLinks]         = useState<string[]>(['']);
-  const [files,       setFiles]         = useState<File[]>([]);
-  const [submitting,  setSubmitting]    = useState(false);
-  const [submitted,   setSubmitted]     = useState(false);
-  const [submitError, setSubmitError]   = useState('');
+  const [contactName,   setContactName]   = useState('');
+  const [waNum,         setWaNum]         = useState('');
+  const [callTime,      setCallTime]      = useState('');
+  const [catalogSize,   setCatalogSize]   = useState('');
+  const [notes,         setNotes]         = useState('');
+  const [links,         setLinks]         = useState<string[]>(['']);
+  const [files,         setFiles]         = useState<File[]>([]);
+  const [submitted,     setSubmitted]     = useState(false);
+  const [submitError,   setSubmitError]   = useState('');
+
+  // New: AI enrichment + modals
+  const [aiEnrichment,  setAiEnrichment]  = useState<boolean | null>(null);
+  const [showConfirm,   setShowConfirm]   = useState(false);
+  const [showVideo,     setShowVideo]     = useState(false);
+  const [payLoading,    setPayLoading]    = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,51 +125,110 @@ export function Step3StartMethod() {
   };
   const removeFile = (i: number) => setFiles(f => f.filter((_, idx) => idx !== i));
 
-  const handleSubmitAssist = async () => {
-    if (!contactName || !waNum || !catalogSize) return;
-    setSubmitting(true);
+  // Upload files + save setup_request record; returns the new record id
+  const saveRequest = async (paymentStatus: string, amount: number): Promise<string> => {
+    const uploadedUrls: string[] = [];
+    for (const file of files) {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('designNo', 'onboarding');
+      fd.append('colorName', 'assist');
+      const r = await fetch(`${API_URL}/api/storage/upload`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: fd,
+      });
+      if (r.ok) {
+        const j = await r.json();
+        if (j.publicUrl) uploadedUrls.push(j.publicUrl);
+      }
+    }
+
+    const r = await fetch(`${API_URL}/api/onboarding/setup-request`, {
+      method:  'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        name:             contactName,
+        whatsapp:         waNum,
+        best_time:        callTime,
+        catalog_size:     catalogSize,
+        data_description: notes,
+        links:            links.filter(Boolean),
+        files_uploaded:   uploadedUrls,
+        ai_enrichment:    aiEnrichment === true,
+        amount,
+        payment_status:   paymentStatus,
+      }),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.message ?? 'Failed to save request');
+    return j.data.id as string;
+  };
+
+  // "I'll pay later on call" path
+  const handlePayLater = async () => {
+    setPayLoading(true);
     setSubmitError('');
     try {
-      // Upload any attached files first
-      const uploadedUrls: string[] = [];
-      for (const file of files) {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('designNo', 'onboarding');
-        fd.append('colorName', 'assist');
-        const r = await fetch(`${API_URL}/api/storage/upload`, {
-          method: 'POST',
-          headers: authHeaders(),
-          body: fd,
-        });
-        if (r.ok) {
-          const j = await r.json();
-          if (j.publicUrl) uploadedUrls.push(j.publicUrl);
-        }
-      }
-
-      await fetch(`${API_URL}/api/onboarding/assistance`, {
-        method:  'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          contact_name:      contactName,
-          whatsapp_number:   waNum,
-          call_time:         callTime,
-          catalog_size:      catalogSize,
-          notes,
-          data_links:        links.filter(Boolean),
-          uploaded_file_urls: uploadedUrls,
-        }),
-      });
+      const isEnterprise = catalogSize === 'enterprise';
+      const total  = isEnterprise ? 0 : calcTotal(catalogSize, aiEnrichment === true);
+      const status = isEnterprise ? 'custom_quote' : 'pending_payment';
+      await saveRequest(status, total);
+      setShowConfirm(false);
       setSubmitted(true);
-    } catch {
-      setSubmitError('Failed to send request. Please try again.');
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to send request. Please try again.');
     } finally {
-      setSubmitting(false);
+      setPayLoading(false);
     }
   };
 
-  const assistFormValid = contactName.trim() && waNum.trim() && catalogSize;
+  // "Pay & Confirm" path — Razorpay
+  const handlePayAndConfirm = async () => {
+    setPayLoading(true);
+    setSubmitError('');
+    try {
+      const total  = calcTotal(catalogSize, aiEnrichment === true);
+      const id     = await saveRequest('pending_payment', total);
+
+      const loaded = await loadRazorpayScript();
+      if (!loaded) throw new Error('Failed to load payment gateway. Check your connection and try again.');
+
+      const orderRes = await fetch(`${API_URL}/api/onboarding/setup-request/${id}/create-order`, {
+        method:  'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      });
+      const orderJson = await orderRes.json();
+      if (!orderJson.success) throw new Error(orderJson.message ?? 'Failed to create payment order');
+
+      const rzp = new window.Razorpay({
+        key:      orderJson.data.key_id,
+        amount:   orderJson.data.amount_paise,
+        currency: 'INR',
+        order_id: orderJson.data.order_id,
+        name:     'Catalog Setup',
+        description: `${CATALOG_SIZES.find(s => s.value === catalogSize)?.label ?? catalogSize}${aiEnrichment ? ' + AI Enrichment' : ''}`,
+        prefill:  { name: contactName, contact: waNum },
+        theme:    { color: '#4F46E5' },
+        handler:  async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+          await fetch(`${API_URL}/api/onboarding/setup-request/${id}/verify-payment`, {
+            method:  'POST',
+            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+            body:    JSON.stringify(response),
+          });
+          setShowConfirm(false);
+          setSubmitted(true);
+        },
+      });
+      rzp.open();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
+    } finally {
+      setPayLoading(false);
+    }
+  };
+
+  const assistFormValid = contactName.trim() && waNum.trim() && catalogSize && aiEnrichment !== null;
 
   return (
     <OnboardingLayout
@@ -310,16 +405,80 @@ export function Step3StartMethod() {
               </div>
             </div>
 
+            {/* AI enrichment upsell */}
+            <div className="border border-gray-100 rounded-2xl p-4 space-y-3 bg-gray-50/50">
+              <div className="flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-900">AI Catalog Enrichment</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Auto-fill missing descriptions, tags, occasion & collection metadata using AI — saves hours of manual work.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowVideo(true)}
+                  className="flex-shrink-0 flex items-center gap-1 text-[11px] text-primary border border-primary/30 px-2.5 py-1 rounded-lg hover:bg-primary/5 transition-colors"
+                >
+                  <PlayCircle className="w-3.5 h-3.5" />
+                  Watch Demo
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {/* Yes option */}
+                <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  aiEnrichment === true
+                    ? 'border-primary bg-primary/5'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}>
+                  <input
+                    type="radio"
+                    name="ai_enrichment"
+                    checked={aiEnrichment === true}
+                    onChange={() => setAiEnrichment(true)}
+                    className="accent-primary"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-gray-900">Yes, include AI catalog enrichment</span>
+                  </div>
+                  {catalogSize && catalogSize !== 'enterprise' ? (
+                    <span className="text-sm font-bold text-primary flex-shrink-0">
+                      +₹{AI_ENRICHMENT_PRICE[catalogSize].toLocaleString('en-IN')}
+                    </span>
+                  ) : catalogSize === 'enterprise' ? (
+                    <span className="text-xs text-gray-400 flex-shrink-0">Included in quote</span>
+                  ) : (
+                    <span className="text-xs text-gray-400 flex-shrink-0">Select catalog size above</span>
+                  )}
+                </label>
+
+                {/* No option */}
+                <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  aiEnrichment === false
+                    ? 'border-primary bg-primary/5'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}>
+                  <input
+                    type="radio"
+                    name="ai_enrichment"
+                    checked={aiEnrichment === false}
+                    onChange={() => setAiEnrichment(false)}
+                    className="accent-primary"
+                  />
+                  <span className="text-sm text-gray-700">No thanks</span>
+                </label>
+              </div>
+            </div>
+
             {submitError && (
               <p className="text-xs text-red-500">{submitError}</p>
             )}
 
             <button
-              onClick={handleSubmitAssist}
-              disabled={submitting || !assistFormValid}
+              onClick={() => setShowConfirm(true)}
+              disabled={!assistFormValid}
               className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
             >
-              {submitting ? 'Sending…' : 'Send Setup Request'}
+              Send Setup Request
             </button>
           </div>
         )}
@@ -372,6 +531,138 @@ export function Step3StartMethod() {
           </div>
         )}
       </div>
+
+      {/* ── Confirmation modal ──────────────────────────────────────────── */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="p-6 space-y-5">
+              {catalogSize === 'enterprise' ? (
+                /* Enterprise: custom quote, no payment */
+                <>
+                  <div className="text-center space-y-2">
+                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                      <Headphones className="w-6 h-6 text-primary" />
+                    </div>
+                    <h3 className="text-base font-bold text-gray-900">We'll contact you with a custom quote</h3>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Your catalog size requires a tailored plan. Our team will reach out on WhatsApp within 24 hours with a custom proposal.
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-xs text-gray-600">
+                    <div className="flex justify-between"><span>Name</span><span className="font-medium text-gray-900">{contactName}</span></div>
+                    <div className="flex justify-between"><span>WhatsApp</span><span className="font-medium text-gray-900">{waNum}</span></div>
+                    <div className="flex justify-between"><span>Catalog size</span><span className="font-medium text-gray-900">2,000+ designs</span></div>
+                    <div className="flex justify-between"><span>AI enrichment</span><span className="font-medium text-gray-900">{aiEnrichment ? 'Yes' : 'No'}</span></div>
+                  </div>
+
+                  {submitError && <p className="text-xs text-red-500">{submitError}</p>}
+
+                  <button
+                    onClick={handlePayLater}
+                    disabled={payLoading}
+                    className="w-full px-5 py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
+                  >
+                    {payLoading ? 'Submitting…' : 'Submit Request'}
+                  </button>
+                </>
+              ) : (
+                /* Standard: show pricing + two payment options */
+                <>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">Confirm your setup request</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">Review the summary before proceeding to payment.</p>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-xs text-gray-600">
+                    <div className="flex justify-between"><span>Name</span><span className="font-medium text-gray-900">{contactName}</span></div>
+                    <div className="flex justify-between"><span>WhatsApp</span><span className="font-medium text-gray-900">{waNum}</span></div>
+                    {callTime && <div className="flex justify-between"><span>Best time</span><span className="font-medium text-gray-900">{callTime}</span></div>}
+                    <div className="flex justify-between"><span>Catalog size</span><span className="font-medium text-gray-900">{CATALOG_SIZES.find(s => s.value === catalogSize)?.label}</span></div>
+                    <div className="flex justify-between"><span>AI enrichment</span><span className="font-medium text-gray-900">{aiEnrichment ? 'Yes' : 'No'}</span></div>
+                  </div>
+
+                  {/* Price breakdown */}
+                  <div className="border border-gray-100 rounded-xl p-4 space-y-2 text-sm">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Setup fee</span>
+                      <span>₹{SETUP_BASE_PRICE[catalogSize].toLocaleString('en-IN')}</span>
+                    </div>
+                    {aiEnrichment && (
+                      <div className="flex justify-between text-gray-600">
+                        <span>AI enrichment</span>
+                        <span>+₹{AI_ENRICHMENT_PRICE[catalogSize].toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-gray-100 pt-2 flex justify-between font-bold text-gray-900">
+                      <span>Total</span>
+                      <span>₹{calcTotal(catalogSize, aiEnrichment === true).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  {submitError && <p className="text-xs text-red-500">{submitError}</p>}
+
+                  <div className="space-y-2">
+                    <button
+                      onClick={handlePayAndConfirm}
+                      disabled={payLoading}
+                      className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
+                    >
+                      {payLoading ? 'Processing…' : `Pay ₹${calcTotal(catalogSize, aiEnrichment === true).toLocaleString('en-IN')} & Confirm`}
+                    </button>
+                    <button
+                      onClick={handlePayLater}
+                      disabled={payLoading}
+                      className="w-full px-5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-all"
+                    >
+                      I'll pay later on call
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="px-6 pb-5">
+              <button
+                onClick={() => { setShowConfirm(false); setSubmitError(''); }}
+                className="w-full text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Video demo modal ────────────────────────────────────────────── */}
+      {showVideo && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">AI Catalog Enrichment — Demo</h3>
+                <p className="text-xs text-gray-400 mt-0.5">See how AI fills your catalog metadata automatically</p>
+              </div>
+              <button
+                onClick={() => setShowVideo(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {/* Video placeholder — src to be added later */}
+            <div className="bg-gray-900 aspect-video flex flex-col items-center justify-center gap-3">
+              <PlayCircle className="w-14 h-14 text-white/30" />
+              <p className="text-xs text-white/40">Demo video coming soon</p>
+            </div>
+            <div className="px-5 py-4 bg-gray-50 text-xs text-gray-500 leading-relaxed">
+              AI enrichment automatically generates product descriptions, tags, occasion, collection and work-type metadata for every design in your catalog.
+            </div>
+          </div>
+        </div>
+      )}
     </OnboardingLayout>
   );
 }

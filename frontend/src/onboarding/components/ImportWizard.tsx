@@ -1,12 +1,22 @@
 /**
  * Reusable ImportWizard
  * Steps: Upload → Map Columns → Preview & Validate → Import → Summary
+ *
+ * Mapping direction (correct):
+ *   Left  = OUR fixed system fields (static)
+ *   Right = dropdown of the user's uploaded column headers
+ *
+ * Auto-selection uses fuse.js fuzzy matching with confidence thresholds:
+ *   ≥ 0.75 → auto-select, green ✅ confirmed
+ *   0.4–0.75 → auto-select, yellow ⚠️ "Please confirm"
+ *   < 0.4  → blank — user must pick manually
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
+import Fuse from 'fuse.js';
 import * as XLSX from 'xlsx';
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft, AlertTriangle,
-  CheckCircle, X, RefreshCw, Download, Info
+  CheckCircle, X, RefreshCw, Download, Info, Check,
 } from 'lucide-react';
 import { API_URL } from '../../config/backend';
 
@@ -23,51 +33,91 @@ export type FieldDef = {
 export type ImportSchema = {
   entityType: 'designs' | 'parties' | 'transport';
   fields:     FieldDef[];
-  /**
-   * Transform the mapped row object into the payload expected by the API.
-   * Called before sending each batch.
-   */
   transformRow: (row: Record<string, unknown>) => Record<string, unknown>;
-  /** API endpoint that accepts a batch payload */
   batchEndpoint: string;
-  /** Key used in the request body, e.g. "designs" | "parties" | "transporters" */
   batchKey: string;
   sampleRows: Record<string, string>[];
 };
 
-// ── Fuzzy column matching ─────────────────────────────────────────────────────
+// ── Mapping types ─────────────────────────────────────────────────────────────
 
-function normalize(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+type FieldMapping = {
+  userHeader: string | null; // which user column is mapped to this system field
+  confidence: number;        // 0–1; set to 1 on manual selection
+};
+
+type ConfidenceStatus = 'confirmed' | 'warn' | 'blank';
+
+function mappingStatus(m: FieldMapping): ConfidenceStatus {
+  if (!m.userHeader) return 'blank';
+  if (m.confidence >= 0.75) return 'confirmed';
+  if (m.confidence >= 0.4)  return 'warn';
+  return 'blank';
 }
 
-function bestMatch(header: string, fields: FieldDef[]): string | null {
-  const h = normalize(header);
-  for (const f of fields) {
-    if (normalize(f.key) === h) return f.key;
-    if (f.aliases.some(a => normalize(a) === h)) return f.key;
-  }
-  // Partial match
-  for (const f of fields) {
-    if (normalize(f.key).includes(h) || h.includes(normalize(f.key))) return f.key;
-    if (f.aliases.some(a => normalize(a).includes(h) || h.includes(normalize(a)))) return f.key;
-  }
-  return null;
-}
+// ── Fuse.js auto-mapping ──────────────────────────────────────────────────────
 
-function autoMap(headers: string[], fields: FieldDef[]): Record<string, string> {
-  const mapping: Record<string, string> = {};
-  const used = new Set<string>();
-  for (const h of headers) {
-    const match = bestMatch(h, fields);
-    if (match && !used.has(match)) {
-      mapping[h] = match;
-      used.add(match);
-    } else {
-      mapping[h] = '__skip__';
+function autoMapWithFuse(
+  userHeaders: string[],
+  fields: FieldDef[],
+): Record<string, FieldMapping> {
+  if (!userHeaders.length) {
+    return Object.fromEntries(fields.map(f => [f.key, { userHeader: null, confidence: 0 }]));
+  }
+
+  const fuse = new Fuse(userHeaders, {
+    includeScore: true,
+    threshold: 0.6,
+    ignoreLocation: true,
+    minMatchCharLength: 2,
+  });
+
+  // For each field compute the best-matching user header and confidence
+  type Candidate = { fieldKey: string; userHeader: string; confidence: number };
+  const candidates: Candidate[] = [];
+
+  for (const field of fields) {
+    const searchTerms = [
+      field.label,
+      field.key.replace(/_/g, ' '),
+      ...field.aliases,
+    ];
+
+    let bestHeader: string | null = null;
+    let bestScore = 1; // Fuse score: 0 = perfect, 1 = no match
+
+    for (const term of searchTerms) {
+      const results = fuse.search(term);
+      if (results.length > 0) {
+        const score = results[0].score ?? 1;
+        if (score < bestScore) {
+          bestScore = score;
+          bestHeader = results[0].item;
+        }
+      }
+    }
+
+    const confidence = 1 - bestScore;
+    if (bestHeader !== null && confidence >= 0.4) {
+      candidates.push({ fieldKey: field.key, userHeader: bestHeader, confidence });
     }
   }
-  return mapping;
+
+  // Assign greedily by confidence desc so no user header is used twice
+  candidates.sort((a, b) => b.confidence - a.confidence);
+  const assigned = new Set<string>();
+  const result: Record<string, FieldMapping> = Object.fromEntries(
+    fields.map(f => [f.key, { userHeader: null, confidence: 0 }])
+  );
+
+  for (const c of candidates) {
+    if (!assigned.has(c.userHeader)) {
+      assigned.add(c.userHeader);
+      result[c.fieldKey] = { userHeader: c.userHeader, confidence: c.confidence };
+    }
+  }
+
+  return result;
 }
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -88,8 +138,8 @@ function validateRow(row: Record<string, string>, fields: FieldDef[]): Validatio
 // ── Download sample ───────────────────────────────────────────────────────────
 
 function downloadSample(schema: ImportSchema) {
-  const ws   = XLSX.utils.json_to_sheet(schema.sampleRows);
-  const wb   = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(schema.sampleRows);
+  const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sample');
   XLSX.writeFile(wb, `${schema.entityType}_sample.xlsx`);
 }
@@ -124,27 +174,27 @@ type ImportResult = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 type Props = {
-  schema:   ImportSchema;
-  onDone:   (result: ImportResult) => void;
-  onSkip:   () => void;
+  schema: ImportSchema;
+  onDone: (result: ImportResult) => void;
+  onSkip: () => void;
 };
 
-const BATCH_SIZE = 100;
+const BATCH_SIZE   = 100;
 const PREVIEW_ROWS = 20;
 
 export function ImportWizard({ schema, onDone, onSkip }: Props) {
-  const [step,       setStep]       = useState<WizardStep>('upload');
-  const [file,       setFile]       = useState<File | null>(null);
-  const [rawRows,    setRawRows]    = useState<ParsedRow[]>([]);
-  const [headers,    setHeaders]    = useState<string[]>([]);
-  const [mapping,    setMapping]    = useState<Record<string, string>>({});
-  const [mappedRows, setMappedRows] = useState<MappedRow[]>([]);
-  const [progress,   setProgress]   = useState(0); // 0-100
-  const [result,     setResult]     = useState<ImportResult | null>(null);
-  const [dragOver,   setDragOver]   = useState(false);
+  const [step,          setStep]          = useState<WizardStep>('upload');
+  const [file,          setFile]          = useState<File | null>(null);
+  const [rawRows,       setRawRows]       = useState<ParsedRow[]>([]);
+  const [headers,       setHeaders]       = useState<string[]>([]);
+  const [fieldMappings, setFieldMappings] = useState<Record<string, FieldMapping>>({});
+  const [mappedRows,    setMappedRows]    = useState<MappedRow[]>([]);
+  const [progress,      setProgress]      = useState(0);
+  const [result,        setResult]        = useState<ImportResult | null>(null);
+  const [dragOver,      setDragOver]      = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Parse file → rawRows
+  // Parse file → rawRows + headers, then auto-map
   const parseFile = useCallback((f: File) => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -162,7 +212,7 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
       );
       setHeaders(hdrs);
       setRawRows(rows);
-      setMapping(autoMap(hdrs, schema.fields));
+      setFieldMappings(autoMapWithFuse(hdrs, schema.fields));
       setFile(f);
       setStep('map');
     };
@@ -182,25 +232,22 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
     }
   };
 
-  // Build mappedRows from rawRows + mapping
-  const buildMappedRows = useCallback(() => {
+  // Build mappedRows: for each row, pick values keyed by our field names
+  const buildMappedRows = useCallback((): MappedRow[] => {
     return rawRows.map((row, idx): MappedRow => {
       const mapped: Record<string, unknown> = {};
-      for (const [header, fieldKey] of Object.entries(mapping)) {
-        if (fieldKey === '__skip__') continue;
-        const fieldDef = schema.fields.find(f => f.key === fieldKey);
-        let val: unknown = row[header] ?? '';
-        if (fieldDef?.type === 'number') val = parseFloat(String(val)) || 0;
-        if (fieldDef?.type === 'boolean') val = ['true', 'yes', '1', 'y'].includes(String(val).toLowerCase());
-        mapped[fieldKey] = val;
+      for (const field of schema.fields) {
+        const m = fieldMappings[field.key];
+        if (!m?.userHeader) continue;
+        let val: unknown = row[m.userHeader] ?? '';
+        if (field.type === 'number')  val = parseFloat(String(val)) || 0;
+        if (field.type === 'boolean') val = ['true', 'yes', '1', 'y'].includes(String(val).toLowerCase());
+        mapped[field.key] = val;
       }
-      const { errors } = validateRow(
-        mapped as Record<string, string>,
-        schema.fields
-      );
-      return { ...mapped, __rowIndex: idx + 2, __errors: errors }; // +2 for header + 1-based
+      const { errors } = validateRow(mapped as Record<string, string>, schema.fields);
+      return { ...mapped, __rowIndex: idx + 2, __errors: errors };
     });
-  }, [rawRows, mapping, schema.fields]);
+  }, [rawRows, fieldMappings, schema.fields]);
 
   const goToPreview = useCallback(() => {
     setMappedRows(buildMappedRows());
@@ -212,24 +259,21 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
     setStep('importing');
     setProgress(0);
 
-    const validRows   = mappedRows.filter(r => r.__errors.length === 0);
+    const validRows    = mappedRows.filter(r => r.__errors.length === 0);
     const allFailures: { row: number; error: string }[] = [];
-    const skippedRows = mappedRows.filter(r => r.__errors.length > 0);
+    const skippedRows  = mappedRows.filter(r => r.__errors.length > 0);
 
-    // Add pre-validation failures
     skippedRows.forEach(r => {
       allFailures.push({ row: r.__rowIndex as number, error: r.__errors.join('; ') });
     });
 
     let inserted = 0;
     let updated  = 0;
-
-    const total   = Math.ceil(validRows.length / BATCH_SIZE) || 1;
-    let   batches = 0;
+    const total  = Math.ceil(validRows.length / BATCH_SIZE) || 1;
+    let batches  = 0;
 
     for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
       const chunk = validRows.slice(i, i + BATCH_SIZE).map(r => {
-        // Strip internal keys
         const { __rowIndex, __errors, ...rest } = r;
         return schema.transformRow(rest as Record<string, unknown>);
       });
@@ -254,7 +298,7 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
             allFailures.push({ row: i + ci + 2, error: json.message ?? 'Unknown error' })
           );
         }
-      } catch (err) {
+      } catch {
         chunk.forEach((_, ci) =>
           allFailures.push({ row: i + ci + 2, error: 'Network error' })
         );
@@ -264,32 +308,31 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
       setProgress(Math.round((batches / total) * 100));
     }
 
-    const finalResult: ImportResult = {
-      inserted,
-      updated,
-      failed: allFailures.length,
-      errors: allFailures,
-    };
+    const finalResult: ImportResult = { inserted, updated, failed: allFailures.length, errors: allFailures };
     setResult(finalResult);
     setStep('done');
     onDone(finalResult);
   }, [mappedRows, schema, onDone]);
 
-  const requiredFields = schema.fields.filter(f => f.required);
-  const mappedRequiredCount = requiredFields.filter(f =>
-    Object.values(mapping).includes(f.key)
-  ).length;
-  const canProceedFromMap = mappedRequiredCount === requiredFields.length;
+  // ── Derived counts for map step ───────────────────────────────────────────
+
+  const requiredFields  = schema.fields.filter(f => f.required);
+  const optionalFields  = schema.fields.filter(f => !f.required);
+
+  const mappedRequired  = requiredFields.filter(f => fieldMappings[f.key]?.userHeader).length;
+  const mappedOptional  = optionalFields.filter(f => fieldMappings[f.key]?.userHeader).length;
+  const skippedOptional = optionalFields.length - mappedOptional;
+
+  const canProceedFromMap = mappedRequired === requiredFields.length;
 
   const validCount   = mappedRows.filter(r => r.__errors.length === 0).length;
   const invalidCount = mappedRows.filter(r => r.__errors.length > 0).length;
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Upload step ───────────────────────────────────────────────────────────
 
   if (step === 'upload') {
     return (
       <div className="space-y-4">
-        {/* Drop zone */}
         <div
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
@@ -331,8 +374,8 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
           <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div>
-            <strong>Required columns:</strong>{' '}
-            {schema.fields.filter(f => f.required).map(f => f.label).join(', ')}.
+            <strong>Required fields:</strong>{' '}
+            {requiredFields.map(f => f.label).join(', ')}.
             Column names don't need to be exact — we'll try to match them automatically.
           </div>
         </div>
@@ -340,13 +383,15 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
     );
   }
 
+  // ── Map step ──────────────────────────────────────────────────────────────
+
   if (step === 'map') {
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-600">
-            <strong>{rawRows.length}</strong> rows found in <span className="font-medium">{file?.name}</span>.
-            Map your columns below.
+            <strong>{rawRows.length}</strong> rows in <span className="font-medium">{file?.name}</span>.
+            Tell us which of your columns maps to each field.
           </p>
           <button
             onClick={() => { setStep('upload'); setFile(null); setRawRows([]); }}
@@ -356,41 +401,97 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
           </button>
         </div>
 
-        {/* Column mapping table */}
+        {/* Mapping table */}
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="grid grid-cols-2 text-xs font-semibold uppercase tracking-wide text-gray-500 bg-gray-50 px-4 py-2 border-b border-gray-100">
+          {/* Header row */}
+          <div className="grid grid-cols-[1fr_28px_1fr] gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 bg-gray-50 px-4 py-2 border-b border-gray-100">
+            <span>Our field</span>
+            <span />
             <span>Your column</span>
-            <span>Maps to field</span>
           </div>
-          <div className="divide-y divide-gray-50 max-h-72 overflow-y-auto">
-            {headers.map(h => {
-              const mapped     = mapping[h] ?? '__skip__';
-              const isRequired = schema.fields.find(f => f.key === mapped)?.required;
+
+          <div className="divide-y divide-gray-50 max-h-[340px] overflow-y-auto">
+            {schema.fields.map(field => {
+              const m      = fieldMappings[field.key] ?? { userHeader: null, confidence: 0 };
+              const status = mappingStatus(m);
+
               return (
-                <div key={h} className="grid grid-cols-2 items-center px-4 py-2.5 gap-3">
-                  <span className="text-sm text-gray-700 font-mono truncate" title={h}>{h}</span>
-                  <select
-                    value={mapped}
-                    onChange={e => setMapping(m => ({ ...m, [h]: e.target.value }))}
-                    className={`text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary ${
-                      isRequired ? 'border-primary/40 bg-primary/5' : 'border-gray-200'
-                    }`}
-                  >
-                    <option value="__skip__">— Skip this column —</option>
-                    {schema.fields.map(f => (
-                      <option key={f.key} value={f.key}>
-                        {f.label}{f.required ? ' *' : ''}
-                      </option>
-                    ))}
-                  </select>
+                <div key={field.key} className="grid grid-cols-[1fr_28px_1fr] items-center gap-2 px-4 py-2.5">
+                  {/* Left: our system field */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm text-gray-800 font-medium truncate">{field.label}</span>
+                    {field.required && (
+                      <span className="flex-shrink-0 text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                        required
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Middle: confidence indicator */}
+                  <div className="flex items-center justify-center">
+                    {status === 'confirmed' && (
+                      <span title={`Auto-matched (${Math.round(m.confidence * 100)}% confidence)`}>
+                        <Check className="w-4 h-4 text-green-500" />
+                      </span>
+                    )}
+                    {status === 'warn' && (
+                      <span title={`Low confidence (${Math.round(m.confidence * 100)}%) — please confirm`}>
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Right: user's column headers dropdown */}
+                  <div>
+                    <select
+                      value={m.userHeader ?? ''}
+                      onChange={e => setFieldMappings(prev => ({
+                        ...prev,
+                        [field.key]: {
+                          userHeader: e.target.value || null,
+                          confidence: 1, // manual = fully confirmed
+                        },
+                      }))}
+                      className={`w-full text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary ${
+                        field.required && !m.userHeader
+                          ? 'border-red-300 bg-red-50'
+                          : status === 'warn'
+                          ? 'border-amber-300 bg-amber-50'
+                          : status === 'confirmed'
+                          ? 'border-green-200 bg-green-50'
+                          : 'border-gray-200'
+                      }`}
+                    >
+                      <option value="">— Not mapped —</option>
+                      {headers.map(h => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    {status === 'warn' && (
+                      <p className="text-[10px] text-amber-600 mt-0.5 pl-0.5">Please confirm this match</p>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
         </div>
 
+        {/* Summary row */}
+        <div className="flex items-center gap-4 text-xs text-gray-500 px-1">
+          <span className={mappedRequired < requiredFields.length ? 'text-red-600 font-medium' : 'text-green-700 font-medium'}>
+            {mappedRequired} / {requiredFields.length} required fields mapped
+          </span>
+          <span className="text-gray-300">·</span>
+          <span>
+            {skippedOptional > 0
+              ? `${skippedOptional} optional field${skippedOptional !== 1 ? 's' : ''} will be skipped`
+              : 'All optional fields mapped'}
+          </span>
+        </div>
+
         {!canProceedFromMap && (
-          <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             Map all required fields ({requiredFields.map(f => f.label).join(', ')}) to continue.
           </div>
@@ -420,11 +521,11 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
     );
   }
 
+  // ── Preview step ──────────────────────────────────────────────────────────
+
   if (step === 'preview') {
-    const previewRows  = mappedRows.slice(0, PREVIEW_ROWS);
-    const visibleFields = schema.fields.filter(f =>
-      Object.values(mapping).includes(f.key)
-    );
+    const previewRows   = mappedRows.slice(0, PREVIEW_ROWS);
+    const visibleFields = schema.fields.filter(f => fieldMappings[f.key]?.userHeader);
 
     return (
       <div className="space-y-5">
@@ -512,6 +613,8 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
     );
   }
 
+  // ── Importing step ────────────────────────────────────────────────────────
+
   if (step === 'importing') {
     return (
       <div className="flex flex-col items-center gap-6 py-12">
@@ -538,7 +641,8 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
     );
   }
 
-  // done
+  // ── Done step ─────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border border-gray-100 p-6">
@@ -554,9 +658,9 @@ export function ImportWizard({ schema, onDone, onSkip }: Props) {
 
         <div className="grid grid-cols-3 gap-4 mb-4">
           {[
-            { label: 'Inserted',  value: result?.inserted ?? 0, color: 'text-green-700 bg-green-50' },
-            { label: 'Updated',   value: result?.updated  ?? 0, color: 'text-blue-700 bg-blue-50' },
-            { label: 'Skipped',   value: result?.failed   ?? 0, color: 'text-red-700 bg-red-50' },
+            { label: 'Inserted', value: result?.inserted ?? 0, color: 'text-green-700 bg-green-50' },
+            { label: 'Updated',  value: result?.updated  ?? 0, color: 'text-blue-700 bg-blue-50'  },
+            { label: 'Skipped',  value: result?.failed   ?? 0, color: 'text-red-700 bg-red-50'    },
           ].map(({ label, value, color }) => (
             <div key={label} className={`rounded-xl p-4 text-center ${color}`}>
               <p className="text-2xl font-bold">{value}</p>
