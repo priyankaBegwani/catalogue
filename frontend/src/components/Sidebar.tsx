@@ -39,7 +39,7 @@ interface SidebarProps {
 export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogglePin }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { hasPermission, isAdmin, user, permissions } = useAuth();
+  const { hasPermission, isAdmin, isSuperAdmin, user, permissions } = useAuth();
   const branding = useBranding();
   const { onboardingComplete } = useTenant();
   const onboarding = useOnboarding(); // null when OnboardingProvider not in tree
@@ -56,8 +56,8 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
     
     const structure: any[] = [];
 
-    // Onboarding section — shown to admins until setup is complete
-    if (isAdmin && !onboardingComplete) {
+    // Onboarding section — shown to admins (not superadmin) until setup is complete
+    if (isAdmin && !isSuperAdmin && !onboardingComplete) {
       structure.push({ type: 'onboarding' });
     }
 
@@ -210,7 +210,7 @@ export const Sidebar = memo(function Sidebar({ isOpen, isPinned, onClose, onTogg
     );
 
     return structure;
-  }, [hasPermission, isAdmin, onboardingComplete]);
+  }, [hasPermission, isAdmin, isSuperAdmin, onboardingComplete]);
 
   const handleNavigate = useCallback((path: string) => {
     navigate(path);

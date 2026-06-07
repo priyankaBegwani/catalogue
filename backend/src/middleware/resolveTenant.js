@@ -47,11 +47,10 @@ export const resolveTenant = async (req, res, next) => {
       if (tenantId) cache.set(cacheKey, tenantId, 300);
     }
 
-    if (!tenantId) {
-      return res.status(404).json({ success: false, message: 'Tenant not found' });
-    }
-
-    req.tenantId = tenantId;
+    // No tenant resolved — pass through with null so superadmin can still use the app.
+    // Route handlers and authenticateUser already scope data by tenant_id where needed.
+    // Regular users always hit a branded subdomain so they always resolve a tenant.
+    req.tenantId = tenantId ?? null;
     next();
   } catch (err) {
     next(err);

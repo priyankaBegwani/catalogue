@@ -130,7 +130,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       .then(r => r.json())
       .then(({ data }) => {
         if (!data) {
-          setState(s => ({ ...s, isLoading: false, error: 'Tenant not found' }));
+          // No tenant for this host — superadmin mode. App renders with null tenant context.
+          setState(s => ({ ...s, isLoading: false, error: null }));
           return;
         }
 

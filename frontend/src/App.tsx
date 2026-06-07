@@ -196,7 +196,7 @@ function AppContent() {
     </div>
   );
 
-  return appShell;
+  return <OnboardingProvider>{appShell}</OnboardingProvider>;
 }
 
 function App() {
