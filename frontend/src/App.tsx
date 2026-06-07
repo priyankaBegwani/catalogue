@@ -30,6 +30,7 @@ import CartWishlistAnalytics from './pages/CartWishlistAnalytics';
 import { ImageRestructure } from './pages/internal/ImageRestructure';
 import { DesignCompletion } from './pages/internal/DesignCompletion';
 import { AssistanceRequests } from './pages/internal/AssistanceRequests';
+import { ImportPipeline } from './pages/internal/ImportPipeline';
 import { PreviewCatalogue } from './pages/PreviewCatalogue';
 import { Sidebar, TopBar, TawkToChat } from './components';
 import { SubscriptionBanner } from './components/SubscriptionBanner';
@@ -180,9 +181,10 @@ function AppContent() {
           element={hasPermission('pricing', 'view') ? <PricingTiers /> : <Navigate to="/catalogue" replace />}
         />
         {/* Internal superadmin tools — no sidebar chrome needed (InternalLayout handles it) */}
-        <Route path="/internal/assistance"         element={isSuperAdmin ? <AssistanceRequests /> : <Navigate to="/catalogue" replace />} />
-        <Route path="/internal/image-restructure"  element={isSuperAdmin ? <ImageRestructure />   : <Navigate to="/catalogue" replace />} />
-        <Route path="/internal/design-completion"  element={isSuperAdmin ? <DesignCompletion />   : <Navigate to="/catalogue" replace />} />
+        <Route path="/internal/assistance"              element={isSuperAdmin ? <AssistanceRequests /> : <Navigate to="/catalogue" replace />} />
+        <Route path="/internal/image-restructure"     element={isSuperAdmin ? <ImageRestructure />   : <Navigate to="/catalogue" replace />} />
+        <Route path="/internal/design-completion"     element={isSuperAdmin ? <DesignCompletion />   : <Navigate to="/catalogue" replace />} />
+        <Route path="/internal/import/:setupRequestId" element={isSuperAdmin ? <ImportPipeline />    : <Navigate to="/catalogue" replace />} />
         {/* Preview accessible when logged in too */}
         <Route path="/preview/:token" element={<PreviewCatalogue />} />
         <Route path="*" element={<Navigate to="/catalogue" replace />} />

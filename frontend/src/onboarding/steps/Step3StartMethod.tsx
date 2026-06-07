@@ -125,6 +125,12 @@ export function Step3StartMethod() {
   };
   const removeFile = (i: number) => setFiles(f => f.filter((_, idx) => idx !== i));
 
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
   // Upload files + save setup_request record; returns the new record id
   const saveRequest = async (paymentStatus: string, amount: number): Promise<string> => {
     const uploadedUrls: string[] = [];
@@ -342,27 +348,36 @@ export function Step3StartMethod() {
               />
             </div>
 
-            {/* File upload */}
+            {/* Data files — Excel, CSV, PDF */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">Upload your data files (optional)</label>
-              <p className="text-[11px] text-gray-400 mb-2">CSVs, Excel files, ZIP of photos — anything you have. Max 10 MB per file.</p>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Upload catalog data files (optional)</label>
+              <p className="text-[11px] text-gray-400 mb-2">Excel, CSV, PDF — your product list or price list. Max 10 MB per file.</p>
               <div
-                className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-primary/40 transition-colors"
+                className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <Upload className="w-5 h-5 text-gray-300 mx-auto mb-1" />
-                <p className="text-xs text-gray-400">Click to attach files</p>
-                <input ref={fileInputRef} type="file" multiple accept=".csv,.xlsx,.xls,.zip,.pdf" className="hidden" onChange={handleFiles} />
+                <FileSpreadsheet className="w-5 h-5 text-gray-300 mx-auto mb-1" />
+                <p className="text-xs font-medium text-gray-500">Click to attach Excel / CSV / PDF</p>
+                <p className="text-[10px] text-gray-300 mt-0.5">.xlsx · .xls · .csv · .pdf · .zip</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".csv,.xlsx,.xls,.zip,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/pdf"
+                  className="hidden"
+                  onChange={handleFiles}
+                />
               </div>
               {files.length > 0 && (
-                <ul className="mt-2 space-y-1">
+                <ul className="mt-2 space-y-1.5">
                   {files.map((f, i) => (
-                    <li key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-1.5 text-xs">
-                      <span className="flex items-center gap-1.5 text-gray-700">
-                        <Paperclip className="w-3 h-3 text-gray-400" />
-                        {f.name}
+                    <li key={i} className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <Paperclip className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                        <span className="text-xs font-medium text-gray-800 truncate">{f.name}</span>
+                        <span className="text-[10px] text-gray-400 flex-shrink-0">{formatBytes(f.size)}</span>
                       </span>
-                      <button onClick={() => removeFile(i)} className="text-gray-400 hover:text-red-500">
+                      <button onClick={() => removeFile(i)} className="ml-2 flex-shrink-0 text-gray-300 hover:text-red-500 transition-colors">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </li>
@@ -371,14 +386,14 @@ export function Step3StartMethod() {
               )}
             </div>
 
-            {/* Links */}
+            {/* Cloud links — Google Drive, Dropbox, etc. */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">Share any links (optional)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Share cloud links (optional)</label>
               <p className="text-[11px] text-gray-400 mb-2">Google Drive, Dropbox, WhatsApp catalog links, etc.</p>
               <div className="space-y-2">
                 {links.map((link, i) => (
                   <div key={i} className="flex gap-2 items-center">
-                    <div className="flex-1 flex items-center border border-gray-200 rounded-xl px-3 py-2 gap-2">
+                    <div className="flex-1 flex items-center border border-gray-200 rounded-xl px-3 py-2 gap-2 focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
                       <Link className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
                       <input
                         type="url"
@@ -389,7 +404,7 @@ export function Step3StartMethod() {
                       />
                     </div>
                     {links.length > 1 && (
-                      <button onClick={() => removeLink(i)} className="text-gray-300 hover:text-red-400">
+                      <button onClick={() => removeLink(i)} className="text-gray-300 hover:text-red-400 transition-colors">
                         <X className="w-4 h-4" />
                       </button>
                     )}

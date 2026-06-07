@@ -224,4 +224,46 @@ router.post('/:id/publish', authenticateUser, requireSuperAdmin, asyncHandler(as
   res.json({ success: true, data: { designs_published: count ?? 0 } });
 }));
 
+// ─── GET /setup-requests — list all new-form setup requests ──────────────────
+router.get('/setup-requests', authenticateUser, requireSuperAdmin, asyncHandler(async (req, res) => {
+  const { status, limit = 100, offset = 0 } = req.query;
+
+  let query = supabaseAdmin
+    .from('setup_requests')
+    .select(`
+      *,
+      tenant:tenants!setup_requests_brand_id_fkey(id, name, slug)
+    `)
+    .order('created_at', { ascending: false })
+    .range(Number(offset), Number(offset) + Number(limit) - 1);
+
+  if (status) query = query.eq('payment_status', status);
+
+  const { data, error } = await query;
+  if (error) throw new AppError(error.message, 500);
+
+  // Attach import job status per request (if any)
+  const ids = (data ?? []).map(r => r.id);
+  let jobsByRequestId = {};
+  if (ids.length > 0) {
+    const { data: jobs } = await supabaseAdmin
+      .from('import_jobs')
+      .select('id, setup_request_id, status, created_at')
+      .in('setup_request_id', ids)
+      .order('created_at', { ascending: false });
+    (jobs ?? []).forEach(j => {
+      if (!jobsByRequestId[j.setup_request_id]) {
+        jobsByRequestId[j.setup_request_id] = j;
+      }
+    });
+  }
+
+  const enriched = (data ?? []).map(r => ({
+    ...r,
+    import_job: jobsByRequestId[r.id] ?? null,
+  }));
+
+  res.json({ success: true, data: enriched });
+}));
+
 export default router;

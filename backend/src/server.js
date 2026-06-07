@@ -34,6 +34,7 @@ import imageRestructureRoutes from './routes/internal/imageRestructure.js';
 import designCompletionRoutes from './routes/internal/designCompletion.js';
 import assistanceRequestsRoutes from './routes/internal/assistanceRequests.js';
 import exportDataRoutes from './routes/internal/exportData.js';
+import importPipelineRoutes from './routes/internal/importPipeline.js';
 
 const app = express();
 
@@ -153,6 +154,7 @@ app.use('/api/internal/image-restructure', imageRestructureRoutes);
 app.use('/api/internal/design-completion', designCompletionRoutes);
 app.use('/api/internal/assistance',        assistanceRequestsRoutes);
 app.use('/api/internal/export',            exportDataRoutes);
+app.use('/api/internal/import',            importPipelineRoutes);
 
 // Public onboarding preview (token-based, no auth) — must bypass resolveTenant + checkSubscription
 // These are already handled inside the onboarding router via the /preview/* paths
